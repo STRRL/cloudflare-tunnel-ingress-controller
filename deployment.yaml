@@ -24,18 +24,31 @@ metadata:
   labels:
     app: cloudflare-tunnel-ingress-controller
 rules:
-  - verbs:
+  - apiGroups:
+      - ""
+    resources:
+      - services
+      - endpoints
+      - secrets
+    verbs:
       - get
       - list
       - watch
-      - update
-    apiGroups:
-      - "networking.k8s.io"
+  - apiGroups:
+      - networking.k8s.io
     resources:
       - ingresses
-      - ingresses/status
       - ingressclasses
-      - ingressclasses/status
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses/status
+    verbs:
+      - update
 ---
 apiVersion: v1
 kind: ServiceAccount
