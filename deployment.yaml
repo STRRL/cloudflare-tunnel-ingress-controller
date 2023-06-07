@@ -1,10 +1,5 @@
 ---
 apiVersion: v1
-kind: Namespace
-metadata:
-  name: cloudflare-tunnel-ingress-controller-dev
----
-apiVersion: v1
 kind: Service
 metadata:
   name: cloudflare-tunnel-ingress-controller
@@ -15,7 +10,6 @@ spec:
   clusterIP: None
   selector:
     app: cloudflare-tunnel-ingress-controller
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -91,7 +85,41 @@ spec:
       labels:
         app: cloudflare-tunnel-ingress-controller
     spec:
+      volumes:
+        - name: cloudflare-api-token
+          secret:
+            secretName: cloudflare-api
       containers:
         - name: cloudflare-tunnel-ingress-controller
           image: ghcr.io/strrl/cloudflare-tunnel-ingress-controller
+          command:
+            - cloudflare-tunnel-ingress-controller
+            - -v=10
+            - --ingress-class=cloudflare-tunnel
+            - --controller-class=strrl.dev/cloudflare-tunnel-ingress-controller
+            - --cloudflare-api-token=$(CLOUDFLARE_API_TOKEN)
+            - --cloudflare-account-id=$(CLOUDFLARE_ACCOUNT_ID)
+            - --cloudflare-tunnel-id=$(CLOUDFLARE_TUNNEL_ID)
+            - --cloudflare-tunnel-name=$(CLOUDFLARE_TUNNEL_NAME)
+          env:
+            - name: CLOUDFLARE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-api
+                  key: api-token
+            - name: CLOUDFLARE_ACCOUNT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-api
+                  key: cloudflare-account-id
+            - name: CLOUDFLARE_TUNNEL_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-api
+                  key: cloudflare-tunnel-id
+            - name: CLOUDFLARE_TUNNEL_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-api
+                  key: cloudflare-tunnel-name
       serviceAccountName: cloudflare-tunnel-ingress-controller

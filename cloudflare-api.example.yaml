@@ -1,0 +1,11 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflare-api
+data:
+  # use base64 encoded values
+  api-token: ""
+  cloudflare-account-id: ""
+  cloudflare-tunnel-id: ""
+  cloudflare-tunnel-name: ""

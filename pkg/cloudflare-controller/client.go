@@ -4,17 +4,19 @@ import (
 	"context"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 )
 
-func NewTunnelClient(cfClient *cloudflare.API, accountId string, tunnelId string) *TunnelClient {
-	return &TunnelClient{cfClient: cfClient, accountId: accountId, tunnelId: tunnelId}
-}
-
 type TunnelClient struct {
+	logger    logr.Logger
 	cfClient  *cloudflare.API
 	accountId string
 	tunnelId  string
+}
+
+func NewTunnelClient(logger logr.Logger, cfClient *cloudflare.API, accountId string, tunnelId string) *TunnelClient {
+	return &TunnelClient{logger: logger, cfClient: cfClient, accountId: accountId, tunnelId: tunnelId}
 }
 
 func (t *TunnelClient) PutExposures(ctx context.Context, exposures []exposure.Exposure) error {

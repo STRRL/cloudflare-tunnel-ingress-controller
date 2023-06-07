@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/go \
 FROM gcr.io/distroless/static:nonroot
 LABEL org.opencontainers.image.source=https://github.com/STRRL/cloudflare-tunnel-ingress-controller
 WORKDIR /
-COPY --from=builder /workspace/cloudflare-tunnel-ingress-controller .
+COPY --from=builder /workspace/cloudflare-tunnel-ingress-controller /usr/bin/cloudflare-tunnel-ingress-controller
 USER nonroot:nonroot
 
-ENTRYPOINT ["/cloudflare-tunnel-ingress-controller"]
+ENTRYPOINT ["cloudflare-tunnel-ingress-controller"]

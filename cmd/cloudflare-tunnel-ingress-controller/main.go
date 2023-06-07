@@ -7,7 +7,6 @@ import (
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"log"
 	"os"
@@ -21,13 +20,12 @@ type rootCmdFlags struct {
 	// for annotation on Ingress
 	ingressClass string
 	// for IngressClass.spec.controller
-	controllerClass        string
-	domainSuffix           []string
-	logLevel               int
-	cloudflareAPITokenPath string
-	cloudflareAccountId    string
-	cloudflareTunnelId     string
-	cloudflareTunnelName   string
+	controllerClass      string
+	logLevel             int
+	cloudflareAPIToken   string
+	cloudflareAccountId  string
+	cloudflareTunnelId   string
+	cloudflareTunnelName string
 }
 
 func main() {
@@ -37,7 +35,6 @@ func main() {
 		logger:          rootLogger.WithName("main"),
 		ingressClass:    "cloudflare-tunnel",
 		controllerClass: "strrl.dev/cloudflare-tunnel-ingress-controller",
-		domainSuffix:    []string{"example.domain"},
 		logLevel:        0,
 	}
 
@@ -49,40 +46,42 @@ func main() {
 			ctx := context.Background()
 			stdr.SetVerbosity(options.logLevel)
 			logger := options.logger
-
-			cfg, err := config.GetConfig()
-			if err != nil {
-				logger.Error(err, "unable to get kubeconfig")
-				os.Exit(1)
-			}
+			logger.Info("logging verbosity", "level", options.logLevel)
 
 			if options.cloudflareTunnelName != "" && options.cloudflareTunnelId != "" {
-				logger.Info("flag cloudflare-tunnel-id and cloudflare-tunnel-name are exclusive, please specify only one")
+				logger.Info("flag cloudflare-tunnel-id and cloudflare-tunnel-name are exclusive, please specify only one",
+					"cloudflare-tunnel-name", options.cloudflareTunnelName,
+					"cloudflare-tunnel-id", options.cloudflareTunnelId,
+				)
 				os.Exit(1)
 			}
 
-			cloudflareAPIToken, err := loadCloudflareAPIToken(options.cloudflareAPITokenPath)
-			if err != nil {
-				logger.Error(err, "load cloudflare api token")
-			}
-
-			cloudflareClient, err := cloudflare.New(cloudflareAPIToken, "")
+			logger.V(3).Info("build cloudflare client with API Token", "api-token", options.cloudflareAPIToken)
+			cloudflareClient, err := cloudflare.NewWithAPIToken(options.cloudflareAPIToken)
 			if err != nil {
 				logger.Error(err, "create cloudflare client")
+				os.Exit(1)
 			}
 
 			var tunnelClient *cloudflarecontroller.TunnelClient
 			if options.cloudflareAccountId == "" {
-				tunnelClient = cloudflarecontroller.NewTunnelClient(cloudflareClient, options.cloudflareAccountId, options.cloudflareTunnelId)
+				logger.V(3).Info("bootstrap tunnel client with tunnel id", "account-id", options.cloudflareAccountId, "tunnel-id", options.cloudflareTunnelId)
+				tunnelClient = cloudflarecontroller.NewTunnelClient(logger.WithName("tunnel-client"), cloudflareClient, options.cloudflareAccountId, options.cloudflareTunnelId)
 			} else {
+				logger.V(3).Info("bootstrap tunnel client with tunnel name", "account-id", options.cloudflareAccountId, "tunnel-name", options.cloudflareTunnelName)
 				var err error
-				tunnelClient, err = cloudflarecontroller.BootstrapTunnelClientWithTunnelName(ctx, cloudflareClient, options.cloudflareAccountId, options.cloudflareTunnelName)
+				tunnelClient, err = cloudflarecontroller.BootstrapTunnelClientWithTunnelName(ctx, logger.WithName("tunnel-client"), cloudflareClient, options.cloudflareAccountId, options.cloudflareTunnelName)
 				if err != nil {
 					logger.Error(err, "bootstrap tunnel client with tunnel name")
 					os.Exit(1)
 				}
 			}
 
+			cfg, err := config.GetConfig()
+			if err != nil {
+				logger.Error(err, "unable to get kubeconfig")
+				os.Exit(1)
+			}
 			mgr, err := manager.New(cfg, manager.Options{})
 			if err != nil {
 				logger.Error(err, "unable to set up manager")
@@ -107,9 +106,8 @@ func main() {
 
 	rootCommand.PersistentFlags().StringVar(&options.ingressClass, "ingress-class", options.ingressClass, "ingress class name")
 	rootCommand.PersistentFlags().StringVar(&options.controllerClass, "controller-class", options.controllerClass, "controller class name")
-	rootCommand.PersistentFlags().StringSliceVar(&options.domainSuffix, "domain-suffix", options.domainSuffix, "controlled domain suffix on cloudflare")
 	rootCommand.PersistentFlags().IntVarP(&options.logLevel, "log-level", "v", options.logLevel, "numeric log level")
-	rootCommand.PersistentFlags().StringVar(&options.cloudflareAPITokenPath, "cloudflare-api-token-path", options.cloudflareAPITokenPath, "path to cloudflare api token")
+	rootCommand.PersistentFlags().StringVar(&options.cloudflareAPIToken, "cloudflare-api-token", options.cloudflareAPIToken, "cloudflare api token")
 	rootCommand.PersistentFlags().StringVar(&options.cloudflareAccountId, "cloudflare-account-id", options.cloudflareAccountId, "cloudflare account id")
 	rootCommand.PersistentFlags().StringVar(&options.cloudflareTunnelId, "cloudflare-tunnel-id", options.cloudflareTunnelId, "cloudflare tunnel id, exclusive with cloudflare-tunnel-name")
 	rootCommand.PersistentFlags().StringVar(&options.cloudflareTunnelName, "cloudflare-tunnel-name", options.cloudflareTunnelName, "cloudflare tunnel name, exclusive with cloudflare-tunnel-id")
@@ -118,12 +116,4 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-}
-
-func loadCloudflareAPIToken(filepath string) (string, error) {
-	content, err := os.ReadFile(filepath)
-	if err != nil {
-		return "", errors.Wrapf(err, "read content from file %s", filepath)
-	}
-	return string(content), nil
 }
