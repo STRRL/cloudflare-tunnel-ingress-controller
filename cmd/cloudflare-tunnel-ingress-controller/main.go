@@ -13,21 +13,25 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-type rootOptions struct {
+type rootCmdFlags struct {
 	logger logr.Logger
 	// for annotation on Ingress
 	ingressClass string
 	// for IngressClass.spec.controller
 	controllerClass string
+	domainSuffix    []string
+	logLevel        int
 }
 
 func main() {
 	var rootLogger = stdr.NewWithOptions(log.New(os.Stderr, "", log.LstdFlags), stdr.Options{LogCaller: stdr.All})
 
-	options := rootOptions{
+	options := rootCmdFlags{
 		logger:          rootLogger.WithName("main"),
-		ingressClass:    "strrl.dev/cloudflare-tunnel",
+		ingressClass:    "cloudflare-tunnel",
 		controllerClass: "strrl.dev/cloudflare-tunnel-ingress-controller",
+		domainSuffix:    []string{"example.domain"},
+		logLevel:        0,
 	}
 
 	crlog.SetLogger(rootLogger.WithName("controller-runtime"))
@@ -35,6 +39,7 @@ func main() {
 	rootCommand := cobra.Command{
 		Use: "tunnel-controller",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			stdr.SetVerbosity(options.logLevel)
 			logger := options.logger
 
 			cfg, err := config.GetConfig()
@@ -50,7 +55,12 @@ func main() {
 			}
 
 			logger.Info("cloudflare-tunnel-ingress-controller start serving")
-			err = controller.RegisterIngressController(logger, mgr)
+			err = controller.RegisterIngressController(logger, mgr,
+				controller.IngressControllerOptions{
+					IngressClassName:    options.ingressClass,
+					ControllerClassName: options.controllerClass,
+				})
+
 			if err != nil {
 				return err
 			}
@@ -58,6 +68,12 @@ func main() {
 			return mgr.Start(context.Background())
 		},
 	}
+
+	rootCommand.PersistentFlags().StringVar(&options.ingressClass, "ingress-class", options.ingressClass, "ingress class name")
+	rootCommand.PersistentFlags().StringVar(&options.controllerClass, "controller-class", options.controllerClass, "controller class name")
+	rootCommand.PersistentFlags().StringSliceVar(&options.domainSuffix, "domain-suffix", options.domainSuffix, "controlled domain suffix on cloudflare")
+	rootCommand.PersistentFlags().IntVarP(&options.logLevel, "log-level", "v", options.logLevel, "numeric log level")
+
 	err := rootCommand.Execute()
 	if err != nil {
 		panic(err)

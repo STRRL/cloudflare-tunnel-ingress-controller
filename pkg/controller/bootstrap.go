@@ -7,26 +7,25 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-func RegisterIngressController(logger logr.Logger, mgr manager.Manager) error {
-	logger = logger.WithName("register-controller")
+type IngressControllerOptions struct {
+	IngressClassName    string
+	ControllerClassName string
+}
 
+func RegisterIngressController(logger logr.Logger, mgr manager.Manager, options IngressControllerOptions) error {
+	controller := NewIngressController(logger.WithName("ingress-controller"), mgr.GetClient(), options.IngressClassName, options.ControllerClassName)
 	err := builder.
 		ControllerManagedBy(mgr).
 		For(&networkingv1.Ingress{}).
-		Complete(&IngressController{})
+		Complete(controller)
 
 	if err != nil {
-		logger.Error(err, "could not register ingress controller")
+		logger.WithName("register-controller").Error(err, "could not register ingress controller")
 		return err
 	}
 
-	err = builder.
-		ControllerManagedBy(mgr).          // Create the ControllerManagedBy
-		For(&networkingv1.IngressClass{}). // ReplicaSet is the Application API
-		Complete(&IngressClassController{})
-
 	if err != nil {
-		logger.Error(err, "could not register ingress class controller")
+		logger.WithName("register-controller").Error(err, "could not register ingress class controller")
 		return err
 	}
 
