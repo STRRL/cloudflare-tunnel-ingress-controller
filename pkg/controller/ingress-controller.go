@@ -25,8 +25,8 @@ type IngressController struct {
 	tunnelClient        *cloudflarecontroller.TunnelClient
 }
 
-func NewIngressController(logger logr.Logger, kubeClient client.Client, ingressClassName string, controllerClassName string) *IngressController {
-	return &IngressController{logger: logger, kubeClient: kubeClient, ingressClassName: ingressClassName, controllerClassName: controllerClassName}
+func NewIngressController(logger logr.Logger, kubeClient client.Client, ingressClassName string, controllerClassName string, tunnelClient *cloudflarecontroller.TunnelClient) *IngressController {
+	return &IngressController{logger: logger, kubeClient: kubeClient, ingressClassName: ingressClassName, controllerClassName: controllerClassName, tunnelClient: tunnelClient}
 }
 
 func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
