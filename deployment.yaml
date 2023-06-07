@@ -1,0 +1,84 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudflare-tunnel-ingress-controller-dev
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudflare-tunnel-ingress-controller
+  namespace: cloudflare-tunnel-ingress-controller-dev
+  labels:
+    app: cloudflare-tunnel-ingress-controller
+spec:
+  clusterIP: None
+  selector:
+    app: cloudflare-tunnel-ingress-controller
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cloudflare-tunnel-ingress-controller
+  labels:
+    app: cloudflare-tunnel-ingress-controller
+rules:
+  - verbs:
+      - get
+      - list
+      - watch
+      - update
+    apiGroups:
+      - "networking.k8s.io"
+    resources:
+      - ingresses
+      - ingresses/status
+      - ingressclasses
+      - ingressclasses/status
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudflare-tunnel-ingress-controller
+  namespace: cloudflare-tunnel-ingress-controller-dev
+  labels:
+    app: cloudflare-tunnel-ingress-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloudflare-tunnel-ingress-controller
+  labels:
+    app: cloudflare-tunnel-ingress-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cloudflare-tunnel-ingress-controller
+subjects:
+  - name: cloudflare-tunnel-ingress-controller
+    kind: ServiceAccount
+    # hardcoded namespace for dev
+    namespace: cloudflare-tunnel-ingress-controller-dev
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflare-tunnel-ingress-controller
+  namespace: cloudflare-tunnel-ingress-controller-dev
+  labels:
+    app: cloudflare-tunnel-ingress-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflare-tunnel-ingress-controller
+  template:
+    metadata:
+      labels:
+        app: cloudflare-tunnel-ingress-controller
+    spec:
+      containers:
+        - name: cloudflare-tunnel-ingress-controller
+          image: ghcr.io/strrl/cloudflare-tunnel-ingress-controller
+      serviceAccountName: cloudflare-tunnel-ingress-controller

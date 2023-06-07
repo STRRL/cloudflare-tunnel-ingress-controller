@@ -1,0 +1,17 @@
+apiVersion: skaffold/v4beta5
+kind: Config
+metadata:
+  name: cloudflare-tunnel-ingress-controller
+build:
+  artifacts:
+    - image: ghcr.io/strrl/cloudflare-tunnel-ingress-controller
+      docker:
+        dockerfile: image/cloudflare-tunnel-ingress-controller/Dockerfile
+        noCache: false
+        pullParent: false
+        squash: false
+  local:
+    useBuildkit: true
+manifests:
+  rawYaml:
+    - deployment.yaml
