@@ -8,4 +8,6 @@ type Exposure struct {
 	ServiceTarget string
 	// PathPrefix is the path prefix to expose the service, eg. /hello
 	PathPrefix string
+	// IsDeleted is the flag to indicate if the exposure is deleted.
+	IsDeleted bool
 }

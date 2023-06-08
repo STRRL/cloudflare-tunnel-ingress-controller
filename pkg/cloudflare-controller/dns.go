@@ -26,10 +26,17 @@ type DNSOperationDelete struct {
 }
 
 func syncDNSRecord(exposures []exposure.Exposure, existedRecords []cloudflare.DNSRecord, tunnelId string) ([]DNSOperationCreate, []DNSOperationUpdate, []DNSOperationDelete, error) {
+	var effectiveExposures []exposure.Exposure
+	for _, item := range exposures {
+		if !item.IsDeleted {
+			effectiveExposures = append(effectiveExposures, item)
+		}
+	}
+
 	var toCreate []DNSOperationCreate
 	var toUpdate []DNSOperationUpdate
 
-	for _, item := range exposures {
+	for _, item := range effectiveExposures {
 		contains, old := dnsRecordsContainsHostname(existedRecords, item.Hostname)
 
 		if contains {
@@ -51,7 +58,7 @@ func syncDNSRecord(exposures []exposure.Exposure, existedRecords []cloudflare.DN
 
 	var toDelete []DNSOperationDelete
 	for _, item := range existedRecords {
-		contains, _ := exposureContainsHostname(exposures, item.Name)
+		contains, _ := exposureContainsHostname(effectiveExposures, item.Name)
 		if !contains {
 			toDelete = append(toDelete, DNSOperationDelete{
 				OldRecord: item,

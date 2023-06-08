@@ -36,12 +36,19 @@ func (t *TunnelClient) PutExposures(ctx context.Context, exposures []exposure.Ex
 func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures []exposure.Exposure) error {
 	var ingressRules []cloudflare.UnvalidatedIngressRule
 
+	var effectiveExposures []exposure.Exposure
 	for _, item := range exposures {
+		if !item.IsDeleted {
+			effectiveExposures = append(effectiveExposures, item)
+		}
+	}
+
+	for _, item := range effectiveExposures {
 		ingress, err := fromExposureToCloudflareIngress(ctx, item)
 		if err != nil {
 			return errors.Wrapf(err, "transform to cloudflare ingress")
 		}
-		ingressRules = append(ingressRules, ingress)
+		ingressRules = append(ingressRules, *ingress)
 	}
 
 	// at last, append a default 404 service as default route
@@ -89,6 +96,7 @@ func (t *TunnelClient) updateDNSCNAMERecord(ctx context.Context, exposures []exp
 			return errors.Errorf("hostname %s not belong to any zone", item.Hostname)
 		}
 	}
+
 	for zoneName, items := range exposuresByZone {
 		ok, zone := findZoneByName(zoneName, zones)
 		if !ok {
@@ -116,8 +124,9 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 	t.logger.V(3).Info("sync DNS records", "to-create", toCreate, "to-update", toUpdate, "to-delete", toDelete)
 
 	for _, item := range toCreate {
+		t.logger.Info("create DNS record", "type", item.Type, "hostname", item.Hostname, "content", item.Content)
 		_, err := t.cfClient.CreateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.CreateDNSRecordParams{
-			Type:    "CNAME",
+			Type:    item.Type,
 			Name:    item.Hostname,
 			Content: item.Content,
 			Proxied: cloudflare.BoolPtr(true),
@@ -130,9 +139,11 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 	}
 
 	for _, item := range toUpdate {
+		t.logger.Info("update DNS record", "id", item.OldRecord.ID, "type", item.Type, "hostname", item.OldRecord.Name, "content", item.Content)
+
 		_, err := t.cfClient.UpdateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.UpdateDNSRecordParams{
 			ID:      item.OldRecord.ID,
-			Type:    "CNAME",
+			Type:    item.Type,
 			Name:    item.OldRecord.Name,
 			Content: item.Content,
 			Proxied: cloudflare.BoolPtr(true),
@@ -145,6 +156,7 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 	}
 
 	for _, item := range toDelete {
+		t.logger.Info("delete DNS record", "id", item.OldRecord.ID, "type", item.OldRecord.Type, "hostname", item.OldRecord.Name, "content", item.OldRecord.Content)
 		err := t.cfClient.DeleteDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), item.OldRecord.ID)
 		if err != nil {
 			return errors.Wrapf(err, "delete DNS record for zone %s, hostname %s", zone.Name, item.OldRecord.Name)

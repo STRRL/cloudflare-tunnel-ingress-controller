@@ -11,6 +11,11 @@ import (
 )
 
 func (i *IngressController) fromIngressToExposure(ctx context.Context, ingress networkingv1.Ingress) ([]exposure.Exposure, error) {
+	isDeleted := false
+
+	if ingress.DeletionTimestamp != nil {
+		isDeleted = true
+	}
 
 	var tlsHosts []string
 	for _, tls := range ingress.Spec.TLS {
@@ -72,6 +77,7 @@ func (i *IngressController) fromIngressToExposure(ctx context.Context, ingress n
 				Hostname:      hostname,
 				ServiceTarget: fmt.Sprintf("%s://%s:%d", scheme, host, port),
 				PathPrefix:    pathPrefix,
+				IsDeleted:     isDeleted,
 			})
 		}
 	}
