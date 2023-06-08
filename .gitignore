@@ -21,4 +21,4 @@
 go.work
 
 cloudflare-tunnel-ingress-controller
-cloudflare-api.yaml
+hack/dev/cloudflare-api.yaml

@@ -37,12 +37,23 @@ rules:
       - get
       - list
       - watch
+      - update
   - apiGroups:
       - networking.k8s.io
     resources:
       - ingresses/status
     verbs:
       - update
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - create
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -101,6 +112,7 @@ spec:
             - --cloudflare-account-id=$(CLOUDFLARE_ACCOUNT_ID)
             - --cloudflare-tunnel-id=$(CLOUDFLARE_TUNNEL_ID)
             - --cloudflare-tunnel-name=$(CLOUDFLARE_TUNNEL_NAME)
+            - --namespace=$(NAMESPACE)
           env:
             - name: CLOUDFLARE_API_TOKEN
               valueFrom:
@@ -122,4 +134,8 @@ spec:
                 secretKeyRef:
                   name: cloudflare-api
                   key: cloudflare-tunnel-name
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
       serviceAccountName: cloudflare-tunnel-ingress-controller

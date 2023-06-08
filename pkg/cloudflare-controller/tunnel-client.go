@@ -183,3 +183,7 @@ func findZoneByName(zoneName string, zones []cloudflare.Zone) (bool, cloudflare.
 	}
 	return false, cloudflare.Zone{}
 }
+
+func (t *TunnelClient) FetchTunnelToken(ctx context.Context) (string, error) {
+	return t.cfClient.GetTunnelToken(ctx, cloudflare.ResourceIdentifier(t.accountId), t.tunnelId)
+}

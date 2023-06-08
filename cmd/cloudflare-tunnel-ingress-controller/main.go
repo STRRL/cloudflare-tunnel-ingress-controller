@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"time"
 )
 
 type rootCmdFlags struct {
@@ -26,6 +27,7 @@ type rootCmdFlags struct {
 	cloudflareAccountId  string
 	cloudflareTunnelId   string
 	cloudflareTunnelName string
+	namespace            string
 }
 
 func main() {
@@ -36,6 +38,7 @@ func main() {
 		ingressClass:    "cloudflare-tunnel",
 		controllerClass: "strrl.dev/cloudflare-tunnel-ingress-controller",
 		logLevel:        0,
+		namespace:       "default",
 	}
 
 	crlog.SetLogger(rootLogger.WithName("controller-runtime"))
@@ -82,6 +85,7 @@ func main() {
 				logger.Error(err, "unable to get kubeconfig")
 				os.Exit(1)
 			}
+
 			mgr, err := manager.New(cfg, manager.Options{})
 			if err != nil {
 				logger.Error(err, "unable to set up manager")
@@ -95,10 +99,28 @@ func main() {
 					ControllerClassName: options.controllerClass,
 					CFTunnelClient:      tunnelClient,
 				})
-
 			if err != nil {
 				return err
 			}
+
+			ticker := time.NewTicker(10 * time.Second)
+			done := make(chan struct{})
+			defer close(done)
+
+			go func() {
+				for {
+					select {
+					case <-done:
+						return
+					case _ = <-ticker.C:
+						err := controller.CreateControlledCloudflaredIfNotExist(ctx, mgr.GetClient(), tunnelClient, options.namespace)
+						if err != nil {
+							logger.WithName("controlled-cloudflared").Error(err, "create controlled cloudflared")
+						}
+					}
+				}
+			}()
+
 			// controller-runtime manager would graceful shutdown with signal by itself, no need to provide context
 			return mgr.Start(context.Background())
 		},
@@ -111,6 +133,7 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.cloudflareAccountId, "cloudflare-account-id", options.cloudflareAccountId, "cloudflare account id")
 	rootCommand.PersistentFlags().StringVar(&options.cloudflareTunnelId, "cloudflare-tunnel-id", options.cloudflareTunnelId, "cloudflare tunnel id, exclusive with cloudflare-tunnel-name")
 	rootCommand.PersistentFlags().StringVar(&options.cloudflareTunnelName, "cloudflare-tunnel-name", options.cloudflareTunnelName, "cloudflare tunnel name, exclusive with cloudflare-tunnel-id")
+	rootCommand.PersistentFlags().StringVar(&options.namespace, "namespace", options.namespace, "namespace to execute cloudflared connector")
 
 	err := rootCommand.Execute()
 	if err != nil {

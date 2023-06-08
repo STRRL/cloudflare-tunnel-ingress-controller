@@ -14,7 +14,7 @@ build:
     useBuildkit: true
 manifests:
   rawYaml:
-    - ns.yaml
-    - cloudflare-api.yaml
-    - deployment.yaml
+    - hack/dev/ns.yaml
+    - hack/dev/cloudflare-api.yaml
+    - hack/dev/deployment.yaml
 
