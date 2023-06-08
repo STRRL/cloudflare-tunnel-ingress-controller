@@ -19,6 +19,10 @@ func (i *IngressController) fromIngressToExposure(ctx context.Context, ingress n
 
 	var result []exposure.Exposure
 	for _, rule := range ingress.Spec.Rules {
+		if rule.Host == "" {
+			return nil, errors.Errorf("host in ingress %s/%s is empty", ingress.GetNamespace(), ingress.GetName())
+		}
+
 		hostname := rule.Host
 
 		scheme := "http"

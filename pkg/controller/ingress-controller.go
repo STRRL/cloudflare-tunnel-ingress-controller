@@ -58,6 +58,8 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 		"controlled-controller-class", i.controllerClassName,
 	)
 
+	i.logger.Info("update cloudflare tunnel config", "triggered-by", request.NamespacedName)
+
 	// TODO: trigger the regeneration of the ingress
 	ingresses, err := i.listControlledIngresses(ctx)
 	if err != nil {
@@ -71,12 +73,14 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 		}
 		allExposures = append(allExposures, exposures...)
 	}
+	i.logger.V(3).Info("all exposures", "exposures", allExposures)
 
 	err = i.tunnelClient.PutExposures(ctx, allExposures)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "put exposures")
 	}
 
+	i.logger.V(3).Info("reconcile completed", "triggered-by", request.NamespacedName)
 	return reconcile.Result{}, nil
 }
 
