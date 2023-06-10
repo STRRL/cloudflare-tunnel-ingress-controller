@@ -20,5 +20,5 @@
 # Go workspace file
 go.work
 
-cloudflare-tunnel-ingress-controller
+./cloudflare-tunnel-ingress-controller
 hack/dev/cloudflare-api.yaml
