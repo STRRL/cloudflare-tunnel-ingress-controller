@@ -110,7 +110,6 @@ spec:
             - --controller-class=strrl.dev/cloudflare-tunnel-ingress-controller
             - --cloudflare-api-token=$(CLOUDFLARE_API_TOKEN)
             - --cloudflare-account-id=$(CLOUDFLARE_ACCOUNT_ID)
-            - --cloudflare-tunnel-id=$(CLOUDFLARE_TUNNEL_ID)
             - --cloudflare-tunnel-name=$(CLOUDFLARE_TUNNEL_NAME)
             - --namespace=$(NAMESPACE)
           env:
@@ -124,11 +123,6 @@ spec:
                 secretKeyRef:
                   name: cloudflare-api
                   key: cloudflare-account-id
-            - name: CLOUDFLARE_TUNNEL_ID
-              valueFrom:
-                secretKeyRef:
-                  name: cloudflare-api
-                  key: cloudflare-tunnel-id
             - name: CLOUDFLARE_TUNNEL_NAME
               valueFrom:
                 secretKeyRef:

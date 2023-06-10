@@ -7,5 +7,4 @@ data:
   # use base64 encoded values
   api-token: ""
   cloudflare-account-id: ""
-  cloudflare-tunnel-id: ""
   cloudflare-tunnel-name: ""

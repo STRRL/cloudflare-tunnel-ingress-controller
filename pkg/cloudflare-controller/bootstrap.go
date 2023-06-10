@@ -2,6 +2,8 @@ package cloudflarecontroller
 
 import (
 	"context"
+	"crypto/rand"
+	"fmt"
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -37,7 +39,26 @@ func GetTunnelIdFromTunnelName(ctx context.Context, logger logr.Logger, cfClient
 			return tunnel.ID, nil
 		}
 	}
-	return "", errors.Errorf("tunnel %s not found", tunnelName)
+
+	// create tunnel if not found
+	logger.V(3).Info("tunnel not found, create tunnel", "account-id", accountId, "tunnel-name", tunnelName)
+	randomSecret := make([]byte, 64)
+	_, err = rand.Read(randomSecret)
+	if err != nil {
+		return "", errors.Wrap(err, "generate random secret")
+	}
+
+	hexSecret := fmt.Sprintf("%x", randomSecret)
+	newTunnel, err := cfClient.CreateTunnel(ctx, cloudflare.ResourceIdentifier(accountId), cloudflare.TunnelCreateParams{
+		Name:      tunnelName,
+		Secret:    hexSecret,
+		ConfigSrc: "cloudflare",
+	})
+	if err != nil {
+		return "", errors.Wrapf(err, "create tunnel %s", tunnelName)
+	}
+
+	return newTunnel.ID, nil
 }
 
 func boolPointer(b bool) *bool {
