@@ -4,7 +4,7 @@ metadata:
   name: cloudflare-tunnel-ingress-controller
 build:
   artifacts:
-    - image: ghcr.io/strrl/cloudflare-tunnel-ingress-controller
+    - image: cloudflare-tunnel-ingress-controller
       docker:
         dockerfile: image/cloudflare-tunnel-ingress-controller/Dockerfile
         noCache: false
@@ -17,4 +17,3 @@ manifests:
     - hack/dev/ns.yaml
     - hack/dev/cloudflare-api.yaml
     - hack/dev/deployment.yaml
-

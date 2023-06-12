@@ -102,7 +102,7 @@ spec:
             secretName: cloudflare-api
       containers:
         - name: cloudflare-tunnel-ingress-controller
-          image: ghcr.io/strrl/cloudflare-tunnel-ingress-controller
+          image: cloudflare-tunnel-ingress-controller
           command:
             - cloudflare-tunnel-ingress-controller
             - -v=10
