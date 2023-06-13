@@ -16,11 +16,11 @@ TLDR; This project simplifies exposing Kubernetes services to the internet easil
 minikube start
 ```
 
-- Clone this project:
+- Add Helm Repository;
 
 ```bash
-git clone https://github.com/STRRL/cloudflare-tunnel-ingress-controller && \
-  cd cloudflare-tunnel-ingress-controller
+helm repo add strrl.dev https://helm.strrl.dev
+helm repo update
 ```
 
 - Install with Helm:
@@ -29,7 +29,7 @@ git clone https://github.com/STRRL/cloudflare-tunnel-ingress-controller && \
 helm upgrade --install --wait \
   -n cloudflare-tunnel-ingress-controller --create-namespace \
   cloudflare-tunnel-ingress-controller \
-  ./helm/cloudflare-tunnel-ingress-controller \
+  strrl.dev/cloudflare-tunnel-ingress-controller \
   --set=cloudflare.apiToken="<cloudflare-api-token>",cloudflare.accountId="<cloudflare-account-id>",cloudflare.tunnelName="<your-favorite-tunnel-name>" 
 ```
 
