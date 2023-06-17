@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -48,6 +49,10 @@ func (i *IngressController) fromIngressToExposure(ctx context.Context, ingress n
 
 			if service.Spec.ClusterIP == "" {
 				return nil, errors.Errorf("service %s has no cluster ip", namespacedName)
+			}
+
+			if service.Spec.ClusterIP == "None" {
+				return nil, errors.Errorf("service %s has None for cluster ip, headless service is not supported", namespacedName)
 			}
 
 			host := service.Spec.ClusterIP
