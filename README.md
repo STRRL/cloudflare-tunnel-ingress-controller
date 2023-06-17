@@ -4,6 +4,8 @@ TLDR; This project simplifies exposing Kubernetes services to the internet easil
 
 ## Get Started
 
+The following instructions would help your bootstrap a minikube Kubernetes Cluster, then expose the Kubernetes Dashboard to the internet via Cloudflare Tunnel Ingress Controller.
+
 - You should have a Cloudflare account and a domain configured on Cloudflare.
 - Create a Cloudflare API token with the following:
   - `Zone:Zone:Read`
