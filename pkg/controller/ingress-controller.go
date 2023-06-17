@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"fmt"
+
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/go-logr/logr"
@@ -73,11 +75,13 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "list controlled ingresses")
 	}
+
 	var allExposures []exposure.Exposure
 	for _, ingress := range ingresses {
+		// best effort to extract exposures from all ingresses
 		exposures, err := i.fromIngressToExposure(ctx, ingress)
 		if err != nil {
-			return reconcile.Result{}, errors.Wrapf(err, "extract exposures from ingress %s", ingress.Name)
+			i.logger.Info("extract exposures from ingress, skipped", "triggered-by", request.NamespacedName, "ingress", fmt.Sprintf("%s/%s", ingress.Namespace, ingress.Name), "error", err)
 		}
 		allExposures = append(allExposures, exposures...)
 	}
