@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/pkg/errors"
@@ -11,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-func (i *IngressController) fromIngressToExposure(ctx context.Context, ingress networkingv1.Ingress) ([]exposure.Exposure, error) {
+func FromIngressToExposure(ctx context.Context, kubeClient client.Client, ingress networkingv1.Ingress) ([]exposure.Exposure, error) {
 	isDeleted := false
 
 	if ingress.DeletionTimestamp != nil {
@@ -42,7 +43,7 @@ func (i *IngressController) fromIngressToExposure(ctx context.Context, ingress n
 				Name:      path.Backend.Service.Name,
 			}
 			service := v1.Service{}
-			err := i.kubeClient.Get(ctx, namespacedName, &service)
+			err := kubeClient.Get(ctx, namespacedName, &service)
 			if err != nil {
 				return nil, errors.Wrapf(err, "fetch service %s", namespacedName)
 			}
@@ -73,7 +74,7 @@ func (i *IngressController) fromIngressToExposure(ctx context.Context, ingress n
 				return nil, errors.Errorf("path type in ingress %s/%s is nil", ingress.GetNamespace(), ingress.GetName())
 			}
 			if *path.PathType != networkingv1.PathTypePrefix {
-				return nil, errors.Errorf("path type in ingress %s/%s is %s, which is not supported", ingress.GetNamespace(), ingress.GetName(), path.PathType)
+				return nil, errors.Errorf("path type in ingress %s/%s is %s, which is not supported", ingress.GetNamespace(), ingress.GetName(), *path.PathType)
 			}
 
 			pathPrefix := path.Path

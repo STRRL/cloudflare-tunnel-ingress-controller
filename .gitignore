@@ -22,3 +22,6 @@ go.work
 
 ./cloudflare-tunnel-ingress-controller
 hack/dev/cloudflare-api.yaml
+
+# go test coverage report
+cover.out
