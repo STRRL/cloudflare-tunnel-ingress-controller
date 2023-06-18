@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const ManagedCNAMERecordCommentMark = "managed by cloudflare-tunnel-ingress-controller"
+
 type DNSOperationCreate struct {
 	Hostname string
 	Type     string
@@ -25,7 +27,7 @@ type DNSOperationDelete struct {
 	OldRecord cloudflare.DNSRecord
 }
 
-func syncDNSRecord(exposures []exposure.Exposure, existedRecords []cloudflare.DNSRecord, tunnelId string) ([]DNSOperationCreate, []DNSOperationUpdate, []DNSOperationDelete, error) {
+func syncDNSRecord(exposures []exposure.Exposure, existedCNAMERecords []cloudflare.DNSRecord, tunnelId string) ([]DNSOperationCreate, []DNSOperationUpdate, []DNSOperationDelete, error) {
 	var effectiveExposures []exposure.Exposure
 	for _, item := range exposures {
 		if !item.IsDeleted {
@@ -37,32 +39,34 @@ func syncDNSRecord(exposures []exposure.Exposure, existedRecords []cloudflare.DN
 	var toUpdate []DNSOperationUpdate
 
 	for _, item := range effectiveExposures {
-		contains, old := dnsRecordsContainsHostname(existedRecords, item.Hostname)
+		contains, old := dnsRecordsContainsHostname(existedCNAMERecords, item.Hostname)
 
 		if contains {
 			toUpdate = append(toUpdate, DNSOperationUpdate{
 				OldRecord: old,
 				Type:      "CNAME",
 				Content:   tunnelDomain(tunnelId),
-				Comment:   "managed by cloudflare-tunnel-ingress-controller",
+				Comment:   ManagedCNAMERecordCommentMark,
 			})
 		} else {
 			toCreate = append(toCreate, DNSOperationCreate{
 				Hostname: item.Hostname,
 				Type:     "CNAME",
 				Content:  tunnelDomain(tunnelId),
-				Comment:  "managed by cloudflare-tunnel-ingress-controller",
+				Comment:  ManagedCNAMERecordCommentMark,
 			})
 		}
 	}
 
 	var toDelete []DNSOperationDelete
-	for _, item := range existedRecords {
+	for _, item := range existedCNAMERecords {
 		contains, _ := exposureContainsHostname(effectiveExposures, item.Name)
 		if !contains {
-			toDelete = append(toDelete, DNSOperationDelete{
-				OldRecord: item,
-			})
+			if item.Comment == ManagedCNAMERecordCommentMark {
+				toDelete = append(toDelete, DNSOperationDelete{
+					OldRecord: item,
+				})
+			}
 		}
 	}
 
