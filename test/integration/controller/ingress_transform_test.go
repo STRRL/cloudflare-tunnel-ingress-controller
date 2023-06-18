@@ -340,6 +340,84 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
 	})
 
+	It("fail fast if no port found by port name", func() {
+		// prepare
+		By("preparing namespace")
+		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(IntegrationTestNamespace, kubeClient)
+		ns, err := namespaceFixtures.Start(ctx)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		defer func() {
+			By("cleaning up namespace")
+			err := namespaceFixtures.Stop(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+		}()
+
+		By("preparing service")
+		service := v1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:    ns,
+				GenerateName: "test-service-",
+			},
+			Spec: v1.ServiceSpec{
+				ClusterIP: "10.0.0.28",
+				Ports: []v1.ServicePort{
+					{
+						Name:     "http",
+						Protocol: v1.ProtocolTCP,
+						Port:     2333,
+						TargetPort: intstr.IntOrString{
+							Type:   intstr.Int,
+							IntVal: 8080,
+						},
+					},
+				},
+			},
+		}
+		err = kubeClient.Create(ctx, &service)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		By("preparing ingress")
+		ingress := networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:    ns,
+				GenerateName: "test-ingress-",
+			},
+			Spec: networkingv1.IngressSpec{
+				Rules: []networkingv1.IngressRule{
+					{
+						Host: "test.example.com",
+						IngressRuleValue: networkingv1.IngressRuleValue{
+							HTTP: &networkingv1.HTTPIngressRuleValue{
+								Paths: []networkingv1.HTTPIngressPath{
+									{
+										Path:     "/",
+										PathType: &pathTypePrefix,
+										Backend: networkingv1.IngressBackend{
+											Service: &networkingv1.IngressServiceBackend{
+												Name: service.Name,
+												Port: networkingv1.ServiceBackendPort{
+													Name: "whatever-name",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		err = kubeClient.Create(ctx, &ingress)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		By("transforming ingress to exposure")
+		exposure, err := controller.FromIngressToExposure(ctx, kubeClient, ingress)
+		Expect(err).Should(HaveOccurred())
+		Expect(exposure).Should(BeNil())
+	})
+
 	It("should fail fast with headless service", func() {
 		// prepare
 		By("preparing namespace")
