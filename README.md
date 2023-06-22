@@ -2,6 +2,14 @@
 
 TLDR; This project simplifies exposing Kubernetes services to the internet easily and securely using Cloudflare Tunnel.
 
+## Prerequisites
+
+To use the Cloudflare Tunnel Ingress Controller, you need to have a Cloudflare account and a domain configured on Cloudflare. You also need to create a Cloudflare API token with the following permissions: `Zone:Zone:Read`, `Zone:DNS:Edit`, and `Account:Cloudflare Tunnel:Edit`.
+
+Additionally, you need to fetch the Account ID from the Cloudflare dashboard.
+
+Finally, you need to have a Kubernetes cluster with public Internet access.
+
 ## Get Started
 
 The following instructions would help your bootstrap a minikube Kubernetes Cluster, then expose the Kubernetes Dashboard to the internet via Cloudflare Tunnel Ingress Controller.
@@ -60,3 +68,11 @@ kubectl -n kubernetes-dashboard \
 ![dash.strrl.cloud](./static/dash.strrl.cloud.png)
 
 - Done! Enjoy! 🎉
+
+## Contributing
+
+Contributions are welcome! If you find a bug or have a feature request, please open an issue or submit a pull request.
+
+## License
+
+This project is licensed under the MIT License. See the LICENSE file for details.
