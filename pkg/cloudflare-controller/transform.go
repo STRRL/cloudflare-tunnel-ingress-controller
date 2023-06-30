@@ -22,7 +22,11 @@ func fromExposureToCloudflareIngress(ctx context.Context, exposure exposure.Expo
 
 	if strings.HasPrefix(exposure.ServiceTarget, "https://") {
 		result.OriginRequest = &cloudflare.OriginRequestConfig{}
-		result.OriginRequest.NoTLSVerify = boolPointer(true)
+		if exposure.ProxySSLVerifyEnabled == nil {
+			result.OriginRequest.NoTLSVerify = boolPointer(true)
+		} else {
+			result.OriginRequest.NoTLSVerify = boolPointer(!*exposure.ProxySSLVerifyEnabled)
+		}
 	}
 
 	return &result, nil

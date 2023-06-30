@@ -3,25 +3,26 @@ package controller
 import (
 	"context"
 	"fmt"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
-func FromIngressToExposure(ctx context.Context, kubeClient client.Client, ingress networkingv1.Ingress) ([]exposure.Exposure, error) {
+func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient client.Client, ingress networkingv1.Ingress) ([]exposure.Exposure, error) {
 	isDeleted := false
 
 	if ingress.DeletionTimestamp != nil {
 		isDeleted = true
 	}
 
-	var tlsHosts []string
-	for _, tls := range ingress.Spec.TLS {
-		tlsHosts = append(tlsHosts, tls.Hosts...)
+	if len(ingress.Spec.TLS) > 0 {
+		logger.Info("ingress has tls specified, SSL Passthrough is not supported, it will be ignored.")
 	}
 
 	var result []exposure.Exposure
@@ -33,8 +34,21 @@ func FromIngressToExposure(ctx context.Context, kubeClient client.Client, ingres
 		hostname := rule.Host
 
 		scheme := "http"
-		if stringSliceContains(tlsHosts, rule.Host) {
-			scheme = "https"
+
+		if backendProtocol, ok := getAnnotation(ingress.Annotations, AnnotationProxyBackendProtocol); ok {
+			scheme = backendProtocol
+		}
+
+		var proxySSLVerifyEnabled *bool
+
+		if proxySSLVerify, ok := getAnnotation(ingress.Annotations, AnnotationProxySSLVerify); ok {
+			if proxySSLVerify == "on" {
+				proxySSLVerifyEnabled = boolPointer(true)
+			} else if proxySSLVerify == "off" {
+				proxySSLVerifyEnabled = boolPointer(false)
+			} else {
+				return nil, errors.Errorf("invalid value for annotation %s, available values: \"on\" or \"off\"", AnnotationProxySSLVerify)
+			}
 		}
 
 		for _, path := range rule.HTTP.Paths {
@@ -80,10 +94,11 @@ func FromIngressToExposure(ctx context.Context, kubeClient client.Client, ingres
 			pathPrefix := path.Path
 
 			result = append(result, exposure.Exposure{
-				Hostname:      hostname,
-				ServiceTarget: fmt.Sprintf("%s://%s:%d", scheme, host, port),
-				PathPrefix:    pathPrefix,
-				IsDeleted:     isDeleted,
+				Hostname:              hostname,
+				ServiceTarget:         fmt.Sprintf("%s://%s:%d", scheme, host, port),
+				PathPrefix:            pathPrefix,
+				IsDeleted:             isDeleted,
+				ProxySSLVerifyEnabled: proxySSLVerifyEnabled,
 			})
 		}
 	}
@@ -98,4 +113,13 @@ func getPortWithName(ports []v1.ServicePort, portName string) (bool, int32) {
 		}
 	}
 	return false, 0
+}
+
+func getAnnotation(annotations map[string]string, key string) (string, bool) {
+	value, ok := annotations[key]
+	return value, ok
+}
+
+func boolPointer(b bool) *bool {
+	return &b
 }
