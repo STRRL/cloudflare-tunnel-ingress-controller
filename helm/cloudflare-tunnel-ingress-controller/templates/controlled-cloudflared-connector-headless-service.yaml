@@ -9,8 +9,8 @@ metadata:
 spec:
     ports:
     - name: metrics
-        port: 44483
-        protocol: TCP
+      port: 44483
+      protocol: TCP
     clusterIP: None
     selector:
         "app": "controlled-cloudflared-connector"
