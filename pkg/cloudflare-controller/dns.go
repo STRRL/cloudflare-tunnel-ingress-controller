@@ -2,12 +2,13 @@ package cloudflarecontroller
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
-	"strings"
 )
 
-const ManagedCNAMERecordCommentMark = "managed by cloudflare-tunnel-ingress-controller"
+const ManagedCNAMERecordCommentMarkFormat = "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [%s]"
 
 type DNSOperationCreate struct {
 	Hostname string
@@ -27,7 +28,7 @@ type DNSOperationDelete struct {
 	OldRecord cloudflare.DNSRecord
 }
 
-func syncDNSRecord(exposures []exposure.Exposure, existedCNAMERecords []cloudflare.DNSRecord, tunnelId string) ([]DNSOperationCreate, []DNSOperationUpdate, []DNSOperationDelete, error) {
+func syncDNSRecord(exposures []exposure.Exposure, existedCNAMERecords []cloudflare.DNSRecord, tunnelId string, tunnelName string) ([]DNSOperationCreate, []DNSOperationUpdate, []DNSOperationDelete, error) {
 	var effectiveExposures []exposure.Exposure
 	for _, item := range exposures {
 		if !item.IsDeleted {
@@ -46,14 +47,14 @@ func syncDNSRecord(exposures []exposure.Exposure, existedCNAMERecords []cloudfla
 				OldRecord: old,
 				Type:      "CNAME",
 				Content:   tunnelDomain(tunnelId),
-				Comment:   ManagedCNAMERecordCommentMark,
+				Comment:   renderDNSRecordComment(tunnelName),
 			})
 		} else {
 			toCreate = append(toCreate, DNSOperationCreate{
 				Hostname: item.Hostname,
 				Type:     "CNAME",
 				Content:  tunnelDomain(tunnelId),
-				Comment:  ManagedCNAMERecordCommentMark,
+				Comment:  renderDNSRecordComment(tunnelName),
 			})
 		}
 	}
@@ -62,7 +63,7 @@ func syncDNSRecord(exposures []exposure.Exposure, existedCNAMERecords []cloudfla
 	for _, item := range existedCNAMERecords {
 		contains, _ := exposureContainsHostname(effectiveExposures, item.Name)
 		if !contains {
-			if item.Comment == ManagedCNAMERecordCommentMark {
+			if item.Comment == renderDNSRecordComment(tunnelName) {
 				toDelete = append(toDelete, DNSOperationDelete{
 					OldRecord: item,
 				})
@@ -95,4 +96,9 @@ const WellKnownTunnelDomainFormat = "%s.cfargotunnel.com"
 
 func tunnelDomain(tunnelId string) string {
 	return strings.ToLower(fmt.Sprintf(WellKnownTunnelDomainFormat, tunnelId))
+}
+
+func renderDNSRecordComment(tunnelName string) string {
+	// TODO: comment has a limitation with max 100 char, maybe use TXT record in the future?
+	return fmt.Sprintf(ManagedCNAMERecordCommentMarkFormat, tunnelName)
 }
