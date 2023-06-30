@@ -15,9 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-go@v4
-        with:
-          go-version: '1.20'
       - uses: azure/setup-helm@v3
       - name: Run helm package
         run: |
