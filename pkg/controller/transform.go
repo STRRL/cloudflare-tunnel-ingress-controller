@@ -35,19 +35,24 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 
 		scheme := "http"
 
-		if backendProtocol, ok := getAnnotation(ingress.Annotations, AnnotationProxyBackendProtocol); ok {
+		if backendProtocol, ok := getAnnotation(ingress.Annotations, AnnotationBackendProtocol); ok {
 			scheme = backendProtocol
 		}
 
 		var proxySSLVerifyEnabled *bool
 
 		if proxySSLVerify, ok := getAnnotation(ingress.Annotations, AnnotationProxySSLVerify); ok {
-			if proxySSLVerify == "on" {
+			if proxySSLVerify == AnnotationProxySSLVerifyOn {
 				proxySSLVerifyEnabled = boolPointer(true)
-			} else if proxySSLVerify == "off" {
+			} else if proxySSLVerify == AnnotationProxySSLVerifyOff {
 				proxySSLVerifyEnabled = boolPointer(false)
 			} else {
-				return nil, errors.Errorf("invalid value for annotation %s, available values: \"on\" or \"off\"", AnnotationProxySSLVerify)
+				return nil, errors.Errorf(
+					"invalid value for annotation %s, available values: \"%s\" or \"%s\"",
+					AnnotationProxySSLVerify,
+					AnnotationProxySSLVerifyOn,
+					AnnotationProxySSLVerifyOff,
+				)
 			}
 		}
 
