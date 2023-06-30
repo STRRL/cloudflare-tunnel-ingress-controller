@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -81,6 +82,8 @@ func cloudflaredConnectDeploymentTemplating(token string, namespace string) *app
 								"cloudflared",
 								"--no-autoupdate",
 								"tunnel",
+								"--metrics",
+								"0.0.0.0:44483",
 								"run",
 								"--token",
 								token,

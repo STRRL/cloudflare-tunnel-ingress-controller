@@ -1,0 +1,17 @@
+# a headless service
+appVersion: v1
+kind: Service
+metadata:
+  name: controlled-cloudflared-connector-headless
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "44483"
+spec:
+    ports:
+    - name: metrics
+        port: 44483
+        protocol: TCP
+    clusterIP: None
+    selector:
+        "app": "controlled-cloudflared-connector"
+        "strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector"

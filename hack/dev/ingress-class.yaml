@@ -3,5 +3,7 @@ apiVersion: networking.k8s.io/v1
 kind: IngressClass
 metadata:
   name: cloudflare-tunnel
+  annotations:
+    ingressclass.kubernetes.io/is-default-class: "true"
 spec:
   controller: strrl.dev/cloudflare-tunnel-ingress-controller
