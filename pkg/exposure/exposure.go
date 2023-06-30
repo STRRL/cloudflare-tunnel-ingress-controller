@@ -10,4 +10,6 @@ type Exposure struct {
 	PathPrefix string
 	// IsDeleted is the flag to indicate if the exposure is deleted.
 	IsDeleted bool
+	// ProxySSLVerifyEnabled is the flag to indicate if the exposure should skip TLS verification.
+	ProxySSLVerifyEnabled *bool
 }

@@ -79,7 +79,7 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 	var allExposures []exposure.Exposure
 	for _, ingress := range ingresses {
 		// best effort to extract exposures from all ingresses
-		exposures, err := FromIngressToExposure(ctx, i.kubeClient, ingress)
+		exposures, err := FromIngressToExposure(ctx, i.logger, i.kubeClient, ingress)
 		if err != nil {
 			i.logger.Info("extract exposures from ingress, skipped", "triggered-by", request.NamespacedName, "ingress", fmt.Sprintf("%s/%s", ingress.Namespace, ingress.Name), "error", err)
 		}
