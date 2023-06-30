@@ -2,22 +2,24 @@ package cloudflarecontroller
 
 import (
 	"context"
+	"strings"
+
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
-	"strings"
 )
 
 type TunnelClient struct {
-	logger    logr.Logger
-	cfClient  *cloudflare.API
-	accountId string
-	tunnelId  string
+	logger     logr.Logger
+	cfClient   *cloudflare.API
+	accountId  string
+	tunnelId   string
+	tunnelName string
 }
 
-func NewTunnelClient(logger logr.Logger, cfClient *cloudflare.API, accountId string, tunnelId string) *TunnelClient {
-	return &TunnelClient{logger: logger, cfClient: cfClient, accountId: accountId, tunnelId: tunnelId}
+func NewTunnelClient(logger logr.Logger, cfClient *cloudflare.API, accountId string, tunnelId string, tunnelName string) *TunnelClient {
+	return &TunnelClient{logger: logger, cfClient: cfClient, accountId: accountId, tunnelId: tunnelId, tunnelName: tunnelName}
 }
 
 func (t *TunnelClient) PutExposures(ctx context.Context, exposures []exposure.Exposure) error {
@@ -117,7 +119,7 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 	if err != nil {
 		return errors.Wrapf(err, "list DNS records for zone %s", zone.Name)
 	}
-	toCreate, toUpdate, toDelete, err := syncDNSRecord(exposures, cnameDnsRecords, t.tunnelId)
+	toCreate, toUpdate, toDelete, err := syncDNSRecord(exposures, cnameDnsRecords, t.tunnelId, t.tunnelName)
 	if err != nil {
 		return errors.Wrap(err, "sync DNS records")
 	}
@@ -140,7 +142,7 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 
 	for _, item := range toUpdate {
 
-		if item.OldRecord.Comment != ManagedCNAMERecordCommentMark {
+		if item.OldRecord.Comment != renderDNSRecordComment(t.tunnelName) {
 			t.logger.Info("WARNING, the origin DNS record is not managed by this controller, it would be changed to managed record",
 				"origin-record", item.OldRecord,
 			)
