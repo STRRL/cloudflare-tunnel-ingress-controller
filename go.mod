@@ -3,7 +3,7 @@ module github.com/STRRL/cloudflare-tunnel-ingress-controller
 go 1.19
 
 require (
-	github.com/cloudflare/cloudflare-go v0.70.0
+	github.com/cloudflare/cloudflare-go v0.72.0
 	github.com/go-logr/logr v1.2.4
 	github.com/go-logr/stdr v1.2.2
 	github.com/onsi/ginkgo/v2 v2.11.0
