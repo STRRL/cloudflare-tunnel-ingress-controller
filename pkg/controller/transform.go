@@ -14,6 +14,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+var (
+	host string
+)
+
 func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient client.Client, ingress networkingv1.Ingress) ([]exposure.Exposure, error) {
 	isDeleted := false
 
@@ -67,15 +71,20 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 				return nil, errors.Wrapf(err, "fetch service %s", namespacedName)
 			}
 
-			if service.Spec.ClusterIP == "" {
-				return nil, errors.Errorf("service %s has no cluster ip", namespacedName)
-			}
+			// Consider External Service
+			if service.Spec.ExternalName != "" {
+				host = service.Spec.ExternalName
+			} else {
+				if service.Spec.ClusterIP == "" {
+					return nil, errors.Errorf("service %s has no cluster ip", namespacedName)
+				}
 
-			if service.Spec.ClusterIP == "None" {
-				return nil, errors.Errorf("service %s has None for cluster ip, headless service is not supported", namespacedName)
-			}
+				if service.Spec.ClusterIP == "None" {
+					return nil, errors.Errorf("service %s has None for cluster ip, headless service is not supported", namespacedName)
+				}
 
-			host := service.Spec.ClusterIP
+				host = service.Spec.ClusterIP
+			}
 
 			var port int32
 			if path.Backend.Service.Port.Name != "" {
