@@ -4,7 +4,7 @@ dev:
 
 .PHONY: image
 image:
-	DOCKER_BUILDKIT=1 docker build -t ghcr.io/strrl/cloudflare-tunnel-ingress-controller -f ./image/cloudflare-tunnel-ingress-controller/Dockerfile . 
+	DOCKER_BUILDKIT=1 docker build -t ghcr.io/oliverbaehler/cloudflare-tunnel-ingress-controller -f ./image/cloudflare-tunnel-ingress-controller/Dockerfile . 
 
 .PHONY: unit-test
 unit-test:
@@ -17,3 +17,20 @@ integration-test: setup-envtest
 .PHONY: setup-envtest
 setup-envtest:
 	bash ./hack/install-setup-envtest.sh
+
+# Helm
+SRC_ROOT = $(shell git rev-parse --show-toplevel)
+
+helm-docs: HELMDOCS_VERSION := v1.11.0
+helm-docs: docker
+	@docker run -v "$(SRC_ROOT):/helm-docs" jnorwood/helm-docs:$(HELMDOCS_VERSION) --chart-search-root /helm-docs
+
+helm-lint: CT_VERSION := v3.3.1
+helm-lint: docker
+	@docker run -v "$(SRC_ROOT):/workdir" --entrypoint /bin/sh quay.io/helmpack/chart-testing:$(CT_VERSION) -c "cd /workdir; ct lint --config ct.yaml --lint-conf lintconf.yaml --all --debug"
+
+docker:
+	@hash docker 2>/dev/null || {\
+		echo "You need docker" &&\
+		exit 1;\
+	}%

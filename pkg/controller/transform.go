@@ -43,21 +43,9 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 			scheme = backendProtocol
 		}
 
-		var proxySSLVerifyEnabled *bool
-
-		if proxySSLVerify, ok := getAnnotation(ingress.Annotations, AnnotationProxySSLVerify); ok {
-			if proxySSLVerify == AnnotationProxySSLVerifyOn {
-				proxySSLVerifyEnabled = boolPointer(true)
-			} else if proxySSLVerify == AnnotationProxySSLVerifyOff {
-				proxySSLVerifyEnabled = boolPointer(false)
-			} else {
-				return nil, errors.Errorf(
-					"invalid value for annotation %s, available values: \"%s\" or \"%s\"",
-					AnnotationProxySSLVerify,
-					AnnotationProxySSLVerifyOn,
-					AnnotationProxySSLVerifyOff,
-				)
-			}
+		cfg, err := annotationProperties(ingress.Annotations)
+		if err != nil {
+			return nil, errors.Wrap(err, "parse annotation properties")
 		}
 
 		for _, path := range rule.HTTP.Paths {
@@ -108,11 +96,11 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 			pathPrefix := path.Path
 
 			result = append(result, exposure.Exposure{
-				Hostname:              hostname,
-				ServiceTarget:         fmt.Sprintf("%s://%s:%d", scheme, host, port),
-				PathPrefix:            pathPrefix,
-				IsDeleted:             isDeleted,
-				ProxySSLVerifyEnabled: proxySSLVerifyEnabled,
+				Hostname:      hostname,
+				ServiceTarget: fmt.Sprintf("%s://%s:%d", scheme, host, port),
+				PathPrefix:    pathPrefix,
+				IsDeleted:     isDeleted,
+				Config:        *cfg,
 			})
 		}
 	}
@@ -120,20 +108,55 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 	return result, nil
 }
 
-func getPortWithName(ports []v1.ServicePort, portName string) (bool, int32) {
-	for _, port := range ports {
-		if port.Name == portName {
-			return true, port.Port
+func annotationProperties(annotations map[string]string) (*exposure.ExposureConfig, error) {
+	config := &exposure.ExposureConfig{}
+
+	for key, value := range annotations {
+		switch key {
+		case AnnotationProxySSLVerify:
+			enabled, err := evalAnnotationBool(value)
+			if err != nil {
+				return nil, errors.Wrapf(err, "parsing annotation value (%s)", key)
+			}
+			config.ProxySSLVerifyEnabled = enabled
+
+		case AnnotationTLSTimeout:
+			tlsTimeout, err := stringToCloudflareTime(value)
+			if err != nil {
+				return nil, errors.Wrapf(err, "parsing annotation value (%s)", key)
+			}
+			config.TLSTimeout = tlsTimeout
+
+		case AnnotationConnectionTimeount:
+			connectTimeout, err := stringToCloudflareTime(value)
+			if err != nil {
+				return nil, errors.Wrapf(err, "parsing annotation value (%s)", key)
+			}
+			config.ConnectTimeout = connectTimeout
+
+		case AnnotationChunkedEncoding:
+			enabled, err := evalAnnotationBool(value)
+			if err != nil {
+				return nil, errors.Wrapf(err, "parsing annotation value (%s)", key)
+			}
+			config.DisableChunkedEncoding = enabled
+
+		case AnnotationHTTP20Origin:
+			enabled, err := evalAnnotationBool(value)
+			if err != nil {
+				return nil, errors.Wrapf(err, "parsing annotation value (%s)", key)
+			}
+			config.HTTP2Origin = enabled
+
+		case AnnotationTCPKeepAliveTimeout:
+			tunnelDuration, err := stringToCloudflareTime(value)
+			if err != nil {
+				return nil, errors.Wrapf(err, "parsing annotation value (%s)", key)
+			}
+			config.KeepAliveTimeout = tunnelDuration
+
 		}
 	}
-	return false, 0
-}
 
-func getAnnotation(annotations map[string]string, key string) (string, bool) {
-	value, ok := annotations[key]
-	return value, ok
-}
-
-func boolPointer(b bool) *bool {
-	return &b
+	return config, nil
 }

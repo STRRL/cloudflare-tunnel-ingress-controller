@@ -92,11 +92,13 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				exposure: exposure.Exposure{
-					Hostname:              "ingress.example.com",
-					ServiceTarget:         "https://10.0.0.1:443",
-					PathPrefix:            "/",
-					IsDeleted:             false,
-					ProxySSLVerifyEnabled: boolPointer(false),
+					Hostname:      "ingress.example.com",
+					ServiceTarget: "https://10.0.0.1:443",
+					PathPrefix:    "/",
+					IsDeleted:     false,
+					Config: exposure.ExposureConfig{
+						ProxySSLVerifyEnabled: boolPointer(true),
+					},
 				},
 			},
 			want: &cloudflare.UnvalidatedIngressRule{
@@ -112,11 +114,13 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				exposure: exposure.Exposure{
-					Hostname:              "ingress.example.com",
-					ServiceTarget:         "https://10.0.0.1:443",
-					PathPrefix:            "/",
-					IsDeleted:             false,
-					ProxySSLVerifyEnabled: boolPointer(true),
+					Hostname:      "ingress.example.com",
+					ServiceTarget: "https://10.0.0.1:443",
+					PathPrefix:    "/",
+					IsDeleted:     false,
+					Config: exposure.ExposureConfig{
+						ProxySSLVerifyEnabled: boolPointer(true),
+					},
 				},
 			},
 			want: &cloudflare.UnvalidatedIngressRule{

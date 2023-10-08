@@ -1,3 +1,11 @@
+Currently a hardfork of the origin project. Following changes are available:
+
+- [x] Hardened controller and tunnel deployment
+- [x] Support Tunnel configuration via annotations
+- [x] Always set HTTP Host Header for exposed ingresses (security measure)
+- [x] Support externalServices service types
+
+
 # Cloudflare Tunnel Ingress Controller
 
 TLDR; This project simplifies exposing Kubernetes services to the internet easily and securely using Cloudflare Tunnel.

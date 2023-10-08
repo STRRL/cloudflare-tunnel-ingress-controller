@@ -9,8 +9,10 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 )
 
 func CreateControlledCloudflaredIfNotExist(
@@ -30,20 +32,36 @@ func CreateControlledCloudflaredIfNotExist(
 		return errors.Wrapf(err, "list controlled-cloudflared-connector in namespace %s", namespace)
 	}
 
-	if len(list.Items) > 0 {
-		return nil
-	}
-
+	// Template Deployment is always needed
 	token, err := tunnelClient.FetchTunnelToken(ctx)
 	if err != nil {
 		return errors.Wrap(err, "fetch tunnel token")
 	}
 
 	deployment := cloudflaredConnectDeploymentTemplating(token, namespace)
-	err = kubeClient.Create(ctx, deployment)
-	if err != nil {
-		return errors.Wrap(err, "create controlled-cloudflared-connector deployment")
+
+	// When a tunnel is found, compare if the current is deployed
+	if len(list.Items) > 0 {
+		deployment.APIVersion = "apps/v1"
+		deployment.Kind = "Deployment"
+		patchBytes, err := yaml.Marshal(deployment)
+		if err != nil {
+			return errors.Wrap(err, "marshal deployment for patch")
+		}
+
+		err = kubeClient.Patch(ctx, deployment, client.RawPatch(types.ApplyPatchType, patchBytes), &client.PatchOptions{
+			FieldManager: "cloudflare-controller",
+		})
+		if err != nil {
+			return errors.Wrap(err, "patch controlled-cloudflared-connector deployment")
+		}
+	} else {
+		err = kubeClient.Create(ctx, deployment)
+		if err != nil {
+			return errors.Wrap(err, "create controlled-cloudflared-connector deployment")
+		}
 	}
+
 	return nil
 }
 
@@ -73,11 +91,15 @@ func cloudflaredConnectDeploymentTemplating(token string, namespace string) *app
 					},
 				},
 				Spec: v1.PodSpec{
+					SecurityContext: &v1.PodSecurityContext{
+						RunAsNonRoot: pointer.Bool(true),
+						FSGroup:      pointer.Int64(65532),
+					},
 					Containers: []v1.Container{
 						{
 							Name:            appName,
 							Image:           "cloudflare/cloudflared:latest",
-							ImagePullPolicy: v1.PullIfNotPresent,
+							ImagePullPolicy: v1.PullAlways,
 							Command: []string{
 								"cloudflared",
 								"--no-autoupdate",
@@ -87,6 +109,24 @@ func cloudflaredConnectDeploymentTemplating(token string, namespace string) *app
 								"run",
 								"--token",
 								token,
+							},
+							SecurityContext: &v1.SecurityContext{
+								RunAsUser:                pointer.Int64(65532),
+								RunAsGroup:               pointer.Int64(65532),
+								ReadOnlyRootFilesystem:   pointer.Bool(true),
+								AllowPrivilegeEscalation: pointer.Bool(false), // Prevent privilege escalation
+								Capabilities: &v1.Capabilities{
+									Drop: []v1.Capability{
+										"ALL", // Drop all capabilities
+									},
+								},
+							},
+							Ports: []v1.ContainerPort{
+								{
+									Name:          "metrics",
+									ContainerPort: 44483,
+									Protocol:      v1.ProtocolTCP,
+								},
 							},
 						},
 					},

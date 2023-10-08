@@ -2,65 +2,100 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# -- Partial name override
+nameOverride: ""
+# -- Full name override
+fullnameOverride: ""
 
 cloudflare:
-    apiToken: ""
-    accountId: ""
-    tunnelName: ""
+  # -- Cloudflare API Token
+  apiToken: ""
+  # -- Cloudflare Account ID
+  accountId: ""
+  # -- Cloudflare Tunnel Name
+  tunnelName: ""
+
+# -- Use an existing secret (Secret must contain `api-token`, `cloudflare-account-id` and  `cloudflare-tunnel-name` as keys)
+existingSecretName: ""
 
 ingressClass:
+  # -- Ingress class name
   name: cloudflare-tunnel
-  controllerValue: strrl.dev/cloudflare-tunnel-ingress-controller
+  # -- Ingress class controller
+  controllerValue: cloudflare-tunnel-ingress-controller
+  # -- Cluster default ingress class
   isDefaultClass: false
 
+# -- Replicas
 replicaCount: 1
 
 image:
-  repository: ghcr.io/strrl/cloudflare-tunnel-ingress-controller
+  # -- Image repository
+  repository: ghcr.io/oliverbaehler/cloudflare-tunnel-ingress-controller
+  # -- Image pull policy
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
+  # -- Overrides the image tag whose default is the chart appVersion.
   tag: ""
 
+# -- Image pull secrets
 imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
 
 serviceAccount:
-  # Specifies whether a service account should be created
+  # -- Specifies whether a service account should be created
   create: true
-  # Annotations to add to the service account
+  # -- Annotations to add to the service account
   annotations: {}
-  # The name of the service account to use.
+  # -- The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
+# -- Deployment 
+labels: {}
+
+# -- Deployment annotations
+anotations: {}
+
+# -- Additional Pod labels
+podLabels: {}
+
+# -- Additional Pod annotations
 podAnnotations: {}
 
-podSecurityContext: {}
-  # fsGroup: 2000
+# -- Pod Security Context
+podSecurityContext:
+  enabled: true
+  runAsNonRoot: true
+  fsGroup: 65532
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+# -- Container SecurityContext
+securityContext:
+  enabled: true
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  allowPrivilegeEscalation: false
 
+# -- Container resources
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-   limits:
-     cpu: 100m
-     memory: 128Mi
-   requests:
-     cpu: 100m
-     memory: 128Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
 
+# -- Pod Node Selector
 nodeSelector: {}
 
+# -- Pod Tolerations
 tolerations: []
 
+# -- Pod Affinity
 affinity: {}

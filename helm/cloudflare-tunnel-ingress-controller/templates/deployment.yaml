@@ -1,9 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "cloudflare-tunnel-ingress-controller.fullname" . }}
+  name: {{ include "cloudflare-tunnel-ingress-controller.fullname" $ }}
   labels:
     {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
+    {{- with $.Values.labels }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    {{- with $.Values.annotations }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -17,18 +24,25 @@ spec:
       {{- end }}
       labels:
         {{- include "cloudflare-tunnel-ingress-controller.selectorLabels" . | nindent 8 }}
+        {{- with $.Values.podLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "cloudflare-tunnel-ingress-controller.serviceAccountName" . }}
+      {{- if .Values.podSecurityContext.enabled }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml (omit .Values.podSecurityContext "enabled") | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
+          {{- if .Values.securityContext.enabled }}
           securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
+            {{- toYaml (omit .Values.securityContext "enabled") | nindent 12 }}
+          {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
@@ -43,17 +57,17 @@ spec:
             - name: CLOUDFLARE_API_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: cloudflare-api
+                  name: {{ default (include "cloudflare-tunnel-ingress-controller.fullname" $) $.Values.existingSecretName }}
                   key: api-token
             - name: CLOUDFLARE_ACCOUNT_ID
               valueFrom:
                 secretKeyRef:
-                  name: cloudflare-api
+                  name: {{ default (include "cloudflare-tunnel-ingress-controller.fullname" $) $.Values.existingSecretName }}
                   key: cloudflare-account-id
             - name: CLOUDFLARE_TUNNEL_NAME
               valueFrom:
                 secretKeyRef:
-                  name: cloudflare-api
+                  name: {{ default (include "cloudflare-tunnel-ingress-controller.fullname" $) $.Values.existingSecretName }}
                   key: cloudflare-tunnel-name
             - name: NAMESPACE
               valueFrom:
