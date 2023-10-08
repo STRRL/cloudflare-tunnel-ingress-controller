@@ -1,0 +1,63 @@
+name: helm-test
+on:
+  pull_request:
+    branches:
+      - 'master'
+    paths:
+      - 'charts/**'
+      - '.github/workflows/lint-and-test.yaml'
+
+permissions: read-all
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: latest
+
+      - uses: actions/setup-python@v2
+        with:
+          python-version: "3.10"
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.3.1
+
+      - name: Run chart-testing (list-changed)
+        id: list-changed
+        run: |
+          changed=$(ct list-changed --config ct.yaml)
+          if [[ -n "$changed" ]]; then
+            echo "::set-output name=changed::true"
+          fi
+      - name: Run docs-testing (helm-docs)
+        id: helm-docs
+        run: |
+          make helm-docs
+          if [[ $(git diff --stat) != '' ]]; then
+            echo -e '\033[0;31mDocumentation outdated! (Run make helm-docs locally and commit)\033[0m ❌'
+            git diff --color
+            exit 1
+          else
+            echo -e '\033[0;32mDocumentation up to date\033[0m ✔'
+          fi
+        if: steps.list-changed.outputs.changed == 'true'
+
+      - name: Run chart-testing (lint)
+        run: ct lint --config ct.yaml --lint-conf lintconf.yaml
+        if: steps.list-changed.outputs.changed == 'true'
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.5.0
+        if: steps.list-changed.outputs.changed == 'true'
+
+      - name: Run chart-testing (install)
+        run: ct install --config ct.yaml
+        if: steps.list-changed.outputs.changed == 'true'
