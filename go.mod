@@ -1,4 +1,4 @@
-module github.com/STRRL/cloudflare-tunnel-ingress-controller
+module github.com/oliverbaehler/cloudflare-tunnel-ingress-controller
 
 go 1.19
 

@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-logr/logr"
+	"github.com/oliverbaehler/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/pkg/errors"
 )
 

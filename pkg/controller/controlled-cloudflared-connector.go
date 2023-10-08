@@ -3,7 +3,7 @@ package controller
 import (
 	"context"
 
-	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
+	cloudflarecontroller "github.com/oliverbaehler/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"

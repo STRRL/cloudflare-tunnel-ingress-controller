@@ -4,9 +4,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/controller"
-	"github.com/STRRL/cloudflare-tunnel-ingress-controller/test/fixtures"
 	"github.com/go-logr/stdr"
+	"github.com/oliverbaehler/cloudflare-tunnel-ingress-controller/pkg/controller"
+	"github.com/oliverbaehler/cloudflare-tunnel-ingress-controller/test/fixtures"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"

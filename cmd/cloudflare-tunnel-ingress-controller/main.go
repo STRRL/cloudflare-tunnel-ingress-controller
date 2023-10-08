@@ -2,18 +2,19 @@ package main
 
 import (
 	"context"
-	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
-	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/controller"
+	"log"
+	"os"
+	"time"
+
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
+	cloudflarecontroller "github.com/oliverbaehler/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
+	"github.com/oliverbaehler/cloudflare-tunnel-ingress-controller/pkg/controller"
 	"github.com/spf13/cobra"
-	"log"
-	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"time"
 )
 
 type rootCmdFlags struct {

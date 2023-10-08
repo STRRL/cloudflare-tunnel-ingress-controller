@@ -6,8 +6,8 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/go-logr/logr"
+	"github.com/oliverbaehler/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"

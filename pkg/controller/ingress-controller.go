@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
-	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/go-logr/logr"
+	cloudflarecontroller "github.com/oliverbaehler/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
+	"github.com/oliverbaehler/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/pkg/errors"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
