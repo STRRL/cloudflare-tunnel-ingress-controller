@@ -135,7 +135,16 @@ func (i *IngressController) listControlledIngressClasses(ctx context.Context) ([
 	if err != nil {
 		return nil, errors.Wrap(err, "list ingress classes")
 	}
-	return list.Items, nil
+	
+	filteredList := make([]networkingv1.IngressClass, 0, len(list.Items))
+	for _, ingress := range list.Items {
+		if ingress.Spec.Controller != i.controllerClassName {
+			continue
+		}
+		filteredList = append(filteredList, ingress)
+	}
+
+	return filteredList, nil
 }
 
 func (i *IngressController) listControlledIngresses(ctx context.Context) ([]networkingv1.Ingress, error) {
