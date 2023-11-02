@@ -5,8 +5,12 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
+	"github.com/oliverbaehler/cloudflare-tunnel-ingress-controller/pkg/exposure"
+)
+
+var (
+	hostname = "ingress.example.com"
 )
 
 func Test_fromExposureToCloudflareIngress(t *testing.T) {
@@ -36,17 +40,24 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				exposure: exposure.Exposure{
-					Hostname:      "ingress.example.com",
+					Hostname:      hostname,
 					ServiceTarget: "http://10.0.0.1:80",
 					PathPrefix:    "/",
 					IsDeleted:     false,
+					OriginRequest: cloudflare.OriginRequestConfig{
+						HTTPHostHeader: &hostname,
+						NoTLSVerify:    boolPointer(true),
+					},
 				},
 			},
 			want: &cloudflare.UnvalidatedIngressRule{
-				Hostname:      "ingress.example.com",
-				Path:          "/",
-				Service:       "http://10.0.0.1:80",
-				OriginRequest: nil,
+				Hostname: hostname,
+				Path:     "/",
+				Service:  "http://10.0.0.1:80",
+				OriginRequest: &cloudflare.OriginRequestConfig{
+					HTTPHostHeader: &hostname,
+					NoTLSVerify:    boolPointer(true),
+				},
 			},
 			wantErr: false,
 		},
@@ -55,17 +66,22 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				exposure: exposure.Exposure{
-					Hostname:      "ingress.example.com",
+					Hostname:      hostname,
 					ServiceTarget: "http://10.0.0.1:80",
 					PathPrefix:    "/prefix",
 					IsDeleted:     false,
+					OriginRequest: cloudflare.OriginRequestConfig{
+						HTTPHostHeader: &hostname,
+					},
 				},
 			},
 			want: &cloudflare.UnvalidatedIngressRule{
-				Hostname:      "ingress.example.com",
-				Path:          "/prefix",
-				Service:       "http://10.0.0.1:80",
-				OriginRequest: nil,
+				Hostname: hostname,
+				Path:     "/prefix",
+				Service:  "http://10.0.0.1:80",
+				OriginRequest: &cloudflare.OriginRequestConfig{
+					HTTPHostHeader: &hostname,
+				},
 			},
 			wantErr: false,
 		}, {
@@ -73,14 +89,17 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				exposure: exposure.Exposure{
-					Hostname:      "ingress.example.com",
+					Hostname:      hostname,
 					ServiceTarget: "https://10.0.0.1:443",
 					PathPrefix:    "/",
 					IsDeleted:     false,
+					OriginRequest: cloudflare.OriginRequestConfig{
+						NoTLSVerify: boolPointer(true),
+					},
 				},
 			},
 			want: &cloudflare.UnvalidatedIngressRule{
-				Hostname: "ingress.example.com",
+				Hostname: hostname,
 				Path:     "/",
 				Service:  "https://10.0.0.1:443",
 				OriginRequest: &cloudflare.OriginRequestConfig{
@@ -92,19 +111,21 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				exposure: exposure.Exposure{
-					Hostname:              "ingress.example.com",
-					ServiceTarget:         "https://10.0.0.1:443",
-					PathPrefix:            "/",
-					IsDeleted:             false,
-					ProxySSLVerifyEnabled: boolPointer(false),
+					Hostname:      hostname,
+					ServiceTarget: "https://10.0.0.1:443",
+					PathPrefix:    "/",
+					IsDeleted:     false,
+					OriginRequest: cloudflare.OriginRequestConfig{
+						Http2Origin: boolPointer(false),
+					},
 				},
 			},
 			want: &cloudflare.UnvalidatedIngressRule{
-				Hostname: "ingress.example.com",
+				Hostname: hostname,
 				Path:     "/",
 				Service:  "https://10.0.0.1:443",
 				OriginRequest: &cloudflare.OriginRequestConfig{
-					NoTLSVerify: boolPointer(true),
+					Http2Origin: boolPointer(false),
 				},
 			},
 		}, {
@@ -112,19 +133,67 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				exposure: exposure.Exposure{
-					Hostname:              "ingress.example.com",
-					ServiceTarget:         "https://10.0.0.1:443",
-					PathPrefix:            "/",
-					IsDeleted:             false,
-					ProxySSLVerifyEnabled: boolPointer(true),
+					Hostname:      hostname,
+					ServiceTarget: "https://10.0.0.1:443",
+					PathPrefix:    "/",
+					IsDeleted:     false,
+					OriginRequest: cloudflare.OriginRequestConfig{
+						Http2Origin: boolPointer(true),
+					},
 				},
 			},
 			want: &cloudflare.UnvalidatedIngressRule{
-				Hostname: "ingress.example.com",
+				Hostname: hostname,
 				Path:     "/",
 				Service:  "https://10.0.0.1:443",
 				OriginRequest: &cloudflare.OriginRequestConfig{
-					NoTLSVerify: boolPointer(false),
+					Http2Origin: boolPointer(true),
+				},
+			},
+		},
+		{
+			name: "http2-disabled",
+			args: args{
+				ctx: context.Background(),
+				exposure: exposure.Exposure{
+					Hostname:      hostname,
+					ServiceTarget: "https://10.0.0.1:443",
+					PathPrefix:    "/",
+					IsDeleted:     false,
+					OriginRequest: cloudflare.OriginRequestConfig{
+						Http2Origin: boolPointer(false),
+					},
+				},
+			},
+			want: &cloudflare.UnvalidatedIngressRule{
+				Hostname: hostname,
+				Path:     "/",
+				Service:  "https://10.0.0.1:443",
+				OriginRequest: &cloudflare.OriginRequestConfig{
+					Http2Origin: boolPointer(false),
+				},
+			},
+		},
+		{
+			name: "http2-enabled",
+			args: args{
+				ctx: context.Background(),
+				exposure: exposure.Exposure{
+					Hostname:      hostname,
+					ServiceTarget: "https://10.0.0.1:443",
+					PathPrefix:    "/",
+					IsDeleted:     false,
+					OriginRequest: cloudflare.OriginRequestConfig{
+						Http2Origin: boolPointer(true),
+					},
+				},
+			},
+			want: &cloudflare.UnvalidatedIngressRule{
+				Hostname: hostname,
+				Path:     "/",
+				Service:  "https://10.0.0.1:443",
+				OriginRequest: &cloudflare.OriginRequestConfig{
+					Http2Origin: boolPointer(true),
 				},
 			},
 		},
@@ -133,11 +202,11 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := fromExposureToCloudflareIngress(tt.args.ctx, tt.args.exposure)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("fromExposureToCloudflareIngress() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("fromExposureToCloudflareIngress() error = %+v, wantErr %+v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("fromExposureToCloudflareIngress() got = %v, want %v", got, tt.want)
+				t.Errorf("fromExposureToCloudflareIngress() got = %+v, want %+v", *got.OriginRequest, *tt.want.OriginRequest)
 			}
 		})
 	}

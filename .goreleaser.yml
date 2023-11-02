@@ -1,0 +1,77 @@
+project_name: cloudflare-tunnel-ingress-controller
+env:
+  - COSIGN_EXPERIMENTAL=true
+  - GO111MODULE=on
+before:
+  hooks:
+    - go mod download
+gomod:
+  proxy: true
+
+builds:
+  - main: cmd/{{ .ProjectName }}/main.go
+    binary: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+    env:
+      - CGO_ENABLED=0
+    goarch:
+      - amd64
+      - arm64
+    goos:
+      - linux
+      - darwin
+    flags:
+      - -trimpath
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    ldflags:
+      - >-
+        -X github.com/oliverbaehler/{{ .ProjectName }}/cmd/{{ .ProjectName }}/cmd.Version={{ .Tag }}
+        -X github.com/oliverbaehler/{{ .ProjectName }}/cmd/{{ .ProjectName }}/cmd.GitCommit={{ .Commit }}
+        -X github.com/oliverbaehler/{{ .ProjectName }}/cmd/{{ .ProjectName }}/cmd.BuildDate={{ .Date }}
+release:
+  footer: |
+    **Full Changelog**: https://github.com/oliverbaehler/{{ .ProjectName }}/compare/{{ .PreviousTag }}...{{ .Tag }}
+    
+    **Docker Images**
+    - `ghcr.io/oliverbaehler/{{ .ProjectName }}:{{ .Tag }}`
+    - `ghcr.io/oliverbaehler/{{ .ProjectName }}:latest`
+checksum:
+  name_template: 'checksums.txt'
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+    - '^test:'
+    - '^chore'
+    - 'merge conflict'
+    - Merge pull request
+    - Merge remote-tracking branch
+    - Merge branch
+  groups:
+    - title: Dependency updates
+      regexp: '^.*?(feat|fix)\(deps\)!?:.+$'
+      order: 300
+    - title: 'New Features'
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 100
+    - title: 'Bug fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 200
+    - title: 'Documentation updates'
+      regexp: ^.*?doc(\([[:word:]]+\))??!?:.+$
+      order: 400
+    - title: 'Build process updates'
+      regexp: ^.*?build(\([[:word:]]+\))??!?:.+$
+      order: 400
+    - title: Other work
+      order: 9999
+sboms:
+  - artifacts: archive
+signs:
+- cmd: cosign
+  args:
+  - "sign-blob"
+  - "--output-signature=${signature}"
+  - "${artifact}"
+  - "--yes"
+  artifacts: all

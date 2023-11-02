@@ -5,4 +5,8 @@ metadata:
     ingressclass.kubernetes.io/is-default-class: {{ .Values.ingressClass.isDefaultClass | quote }}
   name: {{ .Values.ingressClass.name }}
 spec:
+  {{- if .Values.ingressClass.controllerValue }}
   controller: {{ .Values.ingressClass.controllerValue }}
+  {{- else }}
+  controller: "oliverbaehler.io/{{ include "cloudflare-tunnel-ingress-controller.fullname" $ }}"
+  {{- end }}

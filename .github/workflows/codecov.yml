@@ -4,9 +4,11 @@ on:
   pull_request:
     branches:
       - "master"
+      - "main"
   push:
     branches:
       - "master"
+      - "main"
 
 permissions: read-all
 
@@ -14,15 +16,21 @@ jobs:
   integration-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
+      - name: Check secret
+        id: checksecret
+        uses: peak-scale/github-actions/exists@8dfd42735c85f6c58d5d4d6f3232cd0e39d1fe73 # v0.1.0
+        with:
+          value: ${{ secrets.CODECOV_TOKEN }}
       - uses: actions/setup-go@v4
         with:
-          go-version: '1.20'
+          go-version: '1.19'
       - name: Run integration tests
         run: |
           make integration-test
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
+        if: steps.checksecret.outputs.result == 'true'
+        uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # v3.1.4
         with:
           files: ./test/integration/cover.out
         env:

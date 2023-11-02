@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-logr/logr"
+	"github.com/oliverbaehler/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/pkg/errors"
 )
 
@@ -156,7 +156,7 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 			Name:    item.OldRecord.Name,
 			Content: item.Content,
 			Proxied: cloudflare.BoolPtr(true),
-			Comment: item.Comment,
+			Comment: &item.Comment,
 			TTL:     1,
 		})
 		if err != nil {

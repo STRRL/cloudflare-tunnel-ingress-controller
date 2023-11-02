@@ -9,3 +9,22 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    rebase-strategy: disabled
+    commit-message:
+      prefix: "feat(deps)"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    rebase-strategy: disabled
+    commit-message:
+      prefix: "ci(deps)"
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: weekly
+    rebase-strategy: disabled
+    commit-message:
+      prefix: "ci(deps)"
+

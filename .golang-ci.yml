@@ -1,0 +1,26 @@
+linters-settings:
+  lll:
+    line-length: 130
+linters:
+  enable-all: true
+  disable:
+    - testpackage
+    - forbidigo
+    - paralleltest
+    - exhaustivestruct
+    - varnamelen
+    - interfacer
+    - maligned
+    - scopelint
+    - golint
+    - varcheck
+    - nosnakecase
+    - deadcode
+    - ifshort
+    - structcheck
+    - rowserrcheck
+    - sqlclosecheck
+    - structcheck
+    - wastedassign
+    - exhaustruct
+    - nolintlint

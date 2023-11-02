@@ -3,11 +3,12 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/go-logr/logr"
+	"github.com/oliverbaehler/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -43,21 +44,9 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 			scheme = backendProtocol
 		}
 
-		var proxySSLVerifyEnabled *bool
-
-		if proxySSLVerify, ok := getAnnotation(ingress.Annotations, AnnotationProxySSLVerify); ok {
-			if proxySSLVerify == AnnotationProxySSLVerifyOn {
-				proxySSLVerifyEnabled = boolPointer(true)
-			} else if proxySSLVerify == AnnotationProxySSLVerifyOff {
-				proxySSLVerifyEnabled = boolPointer(false)
-			} else {
-				return nil, errors.Errorf(
-					"invalid value for annotation %s, available values: \"%s\" or \"%s\"",
-					AnnotationProxySSLVerify,
-					AnnotationProxySSLVerifyOn,
-					AnnotationProxySSLVerifyOff,
-				)
-			}
+		cfg, err := annotationProperties(ingress.Annotations)
+		if err != nil {
+			return nil, errors.Wrap(err, "parse annotation properties")
 		}
 
 		for _, path := range rule.HTTP.Paths {
@@ -105,35 +94,30 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 				return nil, errors.Errorf("path type in ingress %s/%s is %s, which is not supported", ingress.GetNamespace(), ingress.GetName(), *path.PathType)
 			}
 
+			// Target
+			target := fmt.Sprintf("%s://%s:%d", scheme, host, port)
+
+			// TLS Verification
+			if strings.HasPrefix(target, "https://") {
+				if cfg.NoTLSVerify == nil {
+					cfg.NoTLSVerify = boolPointer(true)
+				}
+			}
+
+			// Overwrite Host Header with target
+			cfg.HTTPHostHeader = &hostname
+
 			pathPrefix := path.Path
 
 			result = append(result, exposure.Exposure{
-				Hostname:              hostname,
-				ServiceTarget:         fmt.Sprintf("%s://%s:%d", scheme, host, port),
-				PathPrefix:            pathPrefix,
-				IsDeleted:             isDeleted,
-				ProxySSLVerifyEnabled: proxySSLVerifyEnabled,
+				Hostname:      hostname,
+				ServiceTarget: target,
+				PathPrefix:    pathPrefix,
+				IsDeleted:     isDeleted,
+				OriginRequest: *cfg,
 			})
 		}
 	}
 
 	return result, nil
-}
-
-func getPortWithName(ports []v1.ServicePort, portName string) (bool, int32) {
-	for _, port := range ports {
-		if port.Name == portName {
-			return true, port.Port
-		}
-	}
-	return false, 0
-}
-
-func getAnnotation(annotations map[string]string, key string) (string, bool) {
-	value, ok := annotations[key]
-	return value, ok
-}
-
-func boolPointer(b bool) *bool {
-	return &b
 }

@@ -16,6 +16,7 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+bin/
 
 # Go workspace file
 go.work
@@ -25,3 +26,7 @@ hack/dev/cloudflare-api.yaml
 
 # go test coverage report
 cover.out
+
+# cosign
+cosign.key
+cosign.pub

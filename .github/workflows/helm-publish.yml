@@ -1,0 +1,52 @@
+name: Publish charts
+permissions: read-all
+on:
+  push:
+    tags:
+      - "v*"
+jobs:
+  publish-helm:
+    runs-on: ubuntu-20.04
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+    outputs:
+      chart-digest: ${{ steps.helm_publish.outputs.digest }}
+    steps:
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
+      - uses: sigstore/cosign-installer@11086d25041f77fe8fe7b9ea4e48e3b9192b8f19 # v3.1.2
+      - name: "Extract Version"
+        id: extract_version
+        run: |
+          GIT_TAG=${GITHUB_REF##*/}
+          VERSION=${GIT_TAG##v}
+          echo "version=$(echo $VERSION)" >> $GITHUB_OUTPUT
+      - name: Helm | Publish
+        id: helm_publish
+        uses: peak-scale/github-actions/helm-oci-chart@38322faabccd75abfa581c435e367d446b6d2c3b
+        with:
+          registry: ghcr.io
+          repository: ${{ github.repository_owner }}/charts
+          name: "cloudflare-tunnel-ingress-controller"
+          path: "./charts/cloudflare-tunnel-ingress-controller/"
+          app-version: ${{ steps.extract_version.outputs.version }}
+          version: ${{ steps.extract_version.outputs.version }}
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          update-dependencies: 'true' # Defaults to false
+          sign-image: 'true'
+          signature-repository: ghcr.io/${{ github.repository_owner }}/signatures
+  helm-provenance:
+    needs: publish-helm
+    permissions:
+      id-token: write   # To sign the provenance.
+      packages: write   # To upload assets to release.
+      actions: read     # To read the workflow path.
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v1.9.0
+    with:
+      image: ghcr.io/${{ github.repository_owner }}/charts/cloudflare-tunnel-ingress-controller
+      digest: "${{ needs.publish-helm.outputs.chart-digest }}"
+      registry-username: ${{ github.actor }}
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}

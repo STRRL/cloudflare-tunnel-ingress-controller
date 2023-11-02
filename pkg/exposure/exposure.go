@@ -1,6 +1,7 @@
 package exposure
 
-// Exposure is the minimal information for exposing a service.
+import "github.com/cloudflare/cloudflare-go"
+
 type Exposure struct {
 	// Hostname is the domain name to expose the service, eg. hello.strrl.dev
 	Hostname string
@@ -10,6 +11,6 @@ type Exposure struct {
 	PathPrefix string
 	// IsDeleted is the flag to indicate if the exposure is deleted.
 	IsDeleted bool
-	// ProxySSLVerifyEnabled is the flag to indicate if the exposure should skip TLS verification.
-	ProxySSLVerifyEnabled *bool
+	// Ingress configuration
+	OriginRequest cloudflare.OriginRequestConfig
 }

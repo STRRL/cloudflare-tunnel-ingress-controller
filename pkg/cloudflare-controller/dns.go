@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
+	"github.com/oliverbaehler/cloudflare-tunnel-ingress-controller/pkg/exposure"
 )
 
 const ManagedCNAMERecordCommentMarkFormat = "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [%s]"

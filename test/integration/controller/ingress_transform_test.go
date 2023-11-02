@@ -4,9 +4,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/controller"
-	"github.com/STRRL/cloudflare-tunnel-ingress-controller/test/fixtures"
 	"github.com/go-logr/stdr"
+	"github.com/oliverbaehler/cloudflare-tunnel-ingress-controller/pkg/controller"
+	"github.com/oliverbaehler/cloudflare-tunnel-ingress-controller/test/fixtures"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -586,7 +586,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(exposure[0].ServiceTarget).Should(Equal("https://10.0.0.27:2333"))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
-		Expect(exposure[0].ProxySSLVerifyEnabled).Should(BeNil())
+		Expect(exposure[0].OriginRequest.NoTLSVerify).Should(BeNil())
 	})
 
 	It("should resolve https with proxy-ssl-verify disabled", func() {
@@ -674,8 +674,8 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(exposure[0].ServiceTarget).Should(Equal("https://10.0.0.28:2333"))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
-		Expect(exposure[0].ProxySSLVerifyEnabled).ShouldNot(BeNil())
-		Expect(*exposure[0].ProxySSLVerifyEnabled).Should(BeFalse())
+		Expect(exposure[0].OriginRequest.NoTLSVerify).ShouldNot(BeNil())
+		Expect(*exposure[0].OriginRequest.NoTLSVerify).Should(BeTrue())
 
 	})
 	It("should resolve https with proxy-ssl-verify enabled", func() {
@@ -763,7 +763,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(exposure[0].ServiceTarget).Should(Equal("https://10.0.0.29:2333"))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
-		Expect(exposure[0].ProxySSLVerifyEnabled).ShouldNot(BeNil())
-		Expect(*exposure[0].ProxySSLVerifyEnabled).Should(BeTrue())
+		Expect(exposure[0].OriginRequest.NoTLSVerify).ShouldNot(BeNil())
+		Expect(*exposure[0].OriginRequest.NoTLSVerify).Should(BeFalse())
 	})
 })
