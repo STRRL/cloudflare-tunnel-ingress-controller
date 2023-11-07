@@ -33,6 +33,9 @@ integration-test: setup-envtest
 setup-envtest:
 	bash ./hack/install-setup-envtest.sh
 
+
+
+
 # Docker Image
 KOCACHE             ?= /tmp/ko-cache
 KO_TAGS         ?= "latest"
@@ -51,9 +54,9 @@ LD_FLAGS        := "-X main.Version=$(VERSION) \
 .PHONY: ko-build
 ko-build: ko
 	@LD_FLAGS=$(LD_FLAGS) KOCACHE=$(KOCACHE) KO_DOCKER_REPO=$(FULL_IMG) \
-		$(KO) build ./cmd/cloudflare-tunnel-ingress-controller/ --preserve-import-paths --tags=$(KO_TAGS) --push=false
+		$(KO) build ./cmd/cloudflare-tunnel-ingress-controller/ --bare --local --tags=$(KO_TAGS) --push=false
 
-.PHONY: docker-build-all
+.PHONY: docker-build
 docker-build: ko-build
 
 REGISTRY_PASSWORD   ?= dummy

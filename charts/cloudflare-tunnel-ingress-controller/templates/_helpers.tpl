@@ -60,3 +60,8 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+
+{{- define "cloudflare-tunnel-ingress-controller.controllerclass" -}}
+  {{- default (printf "oliverbaehler.io/%s" (include "cloudflare-tunnel-ingress-controller.fullname" $)) .Values.ingressClass.controllerValue -}}
+{{- end -}}

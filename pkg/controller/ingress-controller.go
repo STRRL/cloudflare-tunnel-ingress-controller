@@ -18,7 +18,6 @@ import (
 var _ reconcile.Reconciler = &IngressController{}
 
 const WellKnownIngressAnnotation = "kubernetes.io/ingress.class"
-const IngressControllerFinalizer = "strrl.dev/cloudflare-tunnel-ingress-controller-controlled"
 
 type IngressController struct {
 	logger              logr.Logger
@@ -48,7 +47,7 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 	}
 
 	if !controlled {
-		i.logger.V(1).Info("ingress is NOT controlled by this controller",
+		i.logger.Info("ingress is NOT controlled by this controller",
 			"ingress", request.NamespacedName,
 			"controlled-ingress-class", i.ingressClassName,
 			"controlled-controller-class", i.controllerClassName,
@@ -66,9 +65,22 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 
 	i.logger.Info("update cloudflare tunnel config", "triggered-by", request.NamespacedName)
 
-	err = i.attachFinalizer(ctx, *(origin.DeepCopy()))
-	if err != nil {
-		return reconcile.Result{}, errors.Wrapf(err, "attach finalizer to ingress %s", request.NamespacedName)
+	if origin.DeletionTimestamp == nil {
+		err = i.attachFinalizer(ctx, *(origin.DeepCopy()))
+		if err != nil {
+			return reconcile.Result{}, errors.Wrapf(err, "attach finalizer to ingress %s", request.NamespacedName)
+		}
+	} else {
+		if !i.hasFinalizer(ctx, origin) {
+			i.logger.V(1).Info("ingress is being deleted and already finillized by this controller",
+				"ingress", request.NamespacedName,
+				"controlled-ingress-class", i.ingressClassName,
+				"controlled-controller-class", i.controllerClassName,
+			)
+			return reconcile.Result{
+				Requeue: false,
+			}, nil
+		}
 	}
 
 	ingresses, err := i.listControlledIngresses(ctx)
@@ -112,14 +124,9 @@ func (i *IngressController) isControlledByThisController(ctx context.Context, ta
 		return false, nil
 	}
 
-	controlledIngressClasses, err := i.listControlledIngressClasses(ctx)
+	controlledIngressClassNames, err := i.listControlledIngressClasses(ctx)
 	if err != nil {
 		return false, errors.Wrapf(err, "fetch controlled ingress classes with controller name %s", i.controllerClassName)
-	}
-
-	var controlledIngressClassNames []string
-	for _, controlledIngressClass := range controlledIngressClasses {
-		controlledIngressClassNames = append(controlledIngressClassNames, controlledIngressClass.Name)
 	}
 
 	if stringSliceContains(controlledIngressClassNames, *target.Spec.IngressClassName) {
@@ -129,24 +136,28 @@ func (i *IngressController) isControlledByThisController(ctx context.Context, ta
 	return false, nil
 }
 
-func (i *IngressController) listControlledIngressClasses(ctx context.Context) ([]networkingv1.IngressClass, error) {
+func (i *IngressController) listControlledIngressClasses(ctx context.Context) ([]string, error) {
 	list := networkingv1.IngressClassList{}
 	err := i.kubeClient.List(ctx, &list)
 	if err != nil {
 		return nil, errors.Wrap(err, "list ingress classes")
 	}
-	return list.Items, nil
+
+	var controlledNames []string
+	for _, ingressClass := range list.Items {
+		// Check if the IngressClass is controlled by the specified controller
+		if ingressClass.Spec.Controller == i.controllerClassName {
+			controlledNames = append(controlledNames, ingressClass.Name)
+		}
+	}
+
+	return controlledNames, nil
 }
 
 func (i *IngressController) listControlledIngresses(ctx context.Context) ([]networkingv1.Ingress, error) {
-	controlledIngressClasses, err := i.listControlledIngressClasses(ctx)
+	controlledIngressClassNames, err := i.listControlledIngressClasses(ctx)
 	if err != nil {
 		return nil, errors.Wrapf(err, "fetch controlled ingress classes with controller name %s", i.controllerClassName)
-	}
-
-	var controlledIngressClassNames []string
-	for _, controlledIngressClass := range controlledIngressClasses {
-		controlledIngressClassNames = append(controlledIngressClassNames, controlledIngressClass.Name)
 	}
 
 	var result []networkingv1.Ingress
@@ -175,30 +186,6 @@ func (i *IngressController) listControlledIngresses(ctx context.Context) ([]netw
 	}
 
 	return result, nil
-}
-
-func (i *IngressController) attachFinalizer(ctx context.Context, ingress networkingv1.Ingress) error {
-	if stringSliceContains(ingress.Finalizers, IngressControllerFinalizer) {
-		return nil
-	}
-	ingress.Finalizers = append(ingress.Finalizers, IngressControllerFinalizer)
-	err := i.kubeClient.Update(ctx, &ingress)
-	if err != nil {
-		return errors.Wrapf(err, "attach finalizer for %s/%s", ingress.Namespace, ingress.Name)
-	}
-	return nil
-}
-
-func (i *IngressController) cleanFinalizer(ctx context.Context, ingress networkingv1.Ingress) error {
-	if !stringSliceContains(ingress.Finalizers, IngressControllerFinalizer) {
-		return nil
-	}
-	ingress.Finalizers = removeStringFromSlice(ingress.Finalizers, IngressControllerFinalizer)
-	err := i.kubeClient.Update(ctx, &ingress)
-	if err != nil {
-		return errors.Wrapf(err, "clean finalizer for %s/%s", ingress.Namespace, ingress.Name)
-	}
-	return nil
 }
 
 func removeStringFromSlice(finalizers []string, finalizer string) []string {

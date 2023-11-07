@@ -9,10 +9,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/yaml"
 )
 
 func CreateControlledCloudflaredIfNotExist(
@@ -42,18 +40,9 @@ func CreateControlledCloudflaredIfNotExist(
 
 	// When a tunnel is found, compare if the current is deployed
 	if len(list.Items) > 0 {
-		deployment.APIVersion = "apps/v1"
-		deployment.Kind = "Deployment"
-		patchBytes, err := yaml.Marshal(deployment)
+		err := kubeClient.Update(ctx, deployment)
 		if err != nil {
-			return errors.Wrap(err, "marshal deployment for patch")
-		}
-
-		err = kubeClient.Patch(ctx, deployment, client.RawPatch(types.ApplyPatchType, patchBytes), &client.PatchOptions{
-			FieldManager: "cloudflare-controller",
-		})
-		if err != nil {
-			return errors.Wrap(err, "patch controlled-cloudflared-connector deployment")
+			return errors.Wrap(err, "update controlled-cloudflared-connector deployment")
 		}
 	} else {
 		err = kubeClient.Create(ctx, deployment)

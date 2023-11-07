@@ -48,7 +48,7 @@ spec:
           command:
             - cloudflare-tunnel-ingress-controller
             - --ingress-class={{ .Values.ingressClass.name }}
-            - --controller-class={{ .Values.ingressClass.controllerValue }}
+            - --controller-class={{ include "cloudflare-tunnel-ingress-controller.controllerclass" $ }}
             - --cloudflare-api-token=$(CLOUDFLARE_API_TOKEN)
             - --cloudflare-account-id=$(CLOUDFLARE_ACCOUNT_ID)
             - --cloudflare-tunnel-name=$(CLOUDFLARE_TUNNEL_NAME)
