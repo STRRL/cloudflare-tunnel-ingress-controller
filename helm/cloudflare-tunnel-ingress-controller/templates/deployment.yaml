@@ -43,18 +43,33 @@ spec:
             - name: CLOUDFLARE_API_TOKEN
               valueFrom:
                 secretKeyRef:
+                  {{- if hasKey .Values.cloudflare "secretRef" }}
+                  name: {{ .Values.cloudflare.secretRef.name }}
+                  key: {{ .Values.cloudflare.secretRef.apiTokenKey }}
+                  {{- else }}
                   name: cloudflare-api
                   key: api-token
+                  {{- end }}
             - name: CLOUDFLARE_ACCOUNT_ID
               valueFrom:
                 secretKeyRef:
+                  {{- if hasKey .Values.cloudflare "secretRef" }}
+                  name: {{ .Values.cloudflare.secretRef.name }}
+                  key: {{ .Values.cloudflare.secretRef.accountIDKey }}
+                  {{- else }}
                   name: cloudflare-api
                   key: cloudflare-account-id
+                  {{- end }}
             - name: CLOUDFLARE_TUNNEL_NAME
               valueFrom:
                 secretKeyRef:
+                  {{- if hasKey .Values.cloudflare "secretRef" }}
+                  name: {{ .Values.cloudflare.secretRef.name }}
+                  key: {{ .Values.cloudflare.secretRef.tunnelNameKey }}
+                  {{- else }}
                   name: cloudflare-api
                   key: cloudflare-tunnel-name
+                  {{- end }}
             - name: NAMESPACE
               valueFrom:
                 fieldRef:

@@ -2,11 +2,17 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-
 cloudflare:
-    apiToken: ""
-    accountId: ""
-    tunnelName: ""
+  accountId: ""
+  tunnelName: ""
+  apiToken: ""
+
+  # Uncomment if you would like to use an existing secret instead of the creating a new one.
+  # secretRef:
+  #   name: cloudflare-external-secret
+  #   accountIDKey: account_id
+  #   tunnelNameKey: tunnel_name
+  #   apiTokenKey: api_token
 
 ingressClass:
   name: cloudflare-tunnel
