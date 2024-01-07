@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"os"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/pkg/errors"
@@ -49,6 +50,8 @@ func CreateControlledCloudflaredIfNotExist(
 
 func cloudflaredConnectDeploymentTemplating(token string, namespace string) *appsv1.Deployment {
 	appName := "controlled-cloudflared-connector"
+	image := os.Getenv("CLOUDFLARED_IMAGE")
+	pullPolicy := os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY")
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      appName,
@@ -76,8 +79,8 @@ func cloudflaredConnectDeploymentTemplating(token string, namespace string) *app
 					Containers: []v1.Container{
 						{
 							Name:            appName,
-							Image:           "cloudflare/cloudflared:latest",
-							ImagePullPolicy: v1.PullIfNotPresent,
+							Image:           image,
+							ImagePullPolicy: v1.PullPolicy(pullPolicy),
 							Command: []string{
 								"cloudflared",
 								"--no-autoupdate",
