@@ -10,7 +10,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -19,6 +18,7 @@ func CreateControlledCloudflaredIfNotExist(
 	kubeClient client.Client,
 	tunnelClient *cloudflarecontroller.TunnelClient,
 	namespace string,
+	replicas int32,
 ) error {
 	list := appsv1.DeploymentList{}
 	err := kubeClient.List(ctx, &list, &client.ListOptions{
@@ -40,7 +40,7 @@ func CreateControlledCloudflaredIfNotExist(
 		return errors.Wrap(err, "fetch tunnel token")
 	}
 
-	deployment := cloudflaredConnectDeploymentTemplating(token, namespace)
+	deployment := cloudflaredConnectDeploymentTemplating(token, namespace, replicas)
 	err = kubeClient.Create(ctx, deployment)
 	if err != nil {
 		return errors.Wrap(err, "create controlled-cloudflared-connector deployment")
@@ -48,7 +48,7 @@ func CreateControlledCloudflaredIfNotExist(
 	return nil
 }
 
-func cloudflaredConnectDeploymentTemplating(token string, namespace string) *appsv1.Deployment {
+func cloudflaredConnectDeploymentTemplating(token string, namespace string, replicas int32) *appsv1.Deployment {
 	appName := "controlled-cloudflared-connector"
 	image := os.Getenv("CLOUDFLARED_IMAGE")
 	pullPolicy := os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY")
@@ -62,7 +62,7 @@ func cloudflaredConnectDeploymentTemplating(token string, namespace string) *app
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: pointer.Int32(1),
+			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": appName,
