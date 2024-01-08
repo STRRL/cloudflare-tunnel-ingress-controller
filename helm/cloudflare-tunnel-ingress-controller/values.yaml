@@ -70,3 +70,9 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+cloudflared:
+  image:
+    repository: cloudflare/cloudflared
+    pullPolicy: IfNotPresent
+    tag: latest
