@@ -21,13 +21,12 @@ type rootCmdFlags struct {
 	// for annotation on Ingress
 	ingressClass string
 	// for IngressClass.spec.controller
-	controllerClass         string
-	logLevel                int
-	cloudflareAPIToken      string
-	cloudflareAccountId     string
-	cloudflareTunnelName    string
-	namespace               string
-	cloudflaredReplicaCount int32
+	controllerClass      string
+	logLevel             int
+	cloudflareAPIToken   string
+	cloudflareAccountId  string
+	cloudflareTunnelName string
+	namespace            string
 }
 
 func main() {
@@ -100,13 +99,7 @@ func main() {
 					case <-done:
 						return
 					case _ = <-ticker.C:
-						err := controller.CreateControlledCloudflaredIfNotExist(
-							ctx,
-							mgr.GetClient(),
-							tunnelClient,
-							options.namespace,
-							options.cloudflaredReplicaCount,
-						)
+						err := controller.CreateControlledCloudflaredIfNotExist(ctx, mgr.GetClient(), tunnelClient, options.namespace)
 						if err != nil {
 							logger.WithName("controlled-cloudflared").Error(err, "create controlled cloudflared")
 						}
@@ -126,7 +119,6 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.cloudflareAccountId, "cloudflare-account-id", options.cloudflareAccountId, "cloudflare account id")
 	rootCommand.PersistentFlags().StringVar(&options.cloudflareTunnelName, "cloudflare-tunnel-name", options.cloudflareTunnelName, "cloudflare tunnel name")
 	rootCommand.PersistentFlags().StringVar(&options.namespace, "namespace", options.namespace, "namespace to execute cloudflared connector")
-	rootCommand.PersistentFlags().Int32Var(&options.cloudflaredReplicaCount, "cloudflared-replica-count", options.cloudflaredReplicaCount, "namespace to execute cloudflared connector")
 
 	err := rootCommand.Execute()
 	if err != nil {

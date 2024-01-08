@@ -39,7 +39,6 @@ spec:
             - --cloudflare-account-id=$(CLOUDFLARE_ACCOUNT_ID)
             - --cloudflare-tunnel-name=$(CLOUDFLARE_TUNNEL_NAME)
             - --namespace=$(NAMESPACE)
-            - --cloudflared-replica-count={{ .Values.cloudflared.replicaCount }}
           env:
             - name: CLOUDFLARE_API_TOKEN
               valueFrom:
@@ -79,6 +78,8 @@ spec:
               value: "{{ .Values.cloudflared.image.repository }}:{{ .Values.cloudflared.image.tag }}"
             - name: CLOUDFLARED_IMAGE_PULL_POLICY
               value: {{ .Values.cloudflared.image.pullPolicy | quote }}
+            - name: CLOUDFLARED_REPLICA_COUNT
+              value: {{ .Values.cloudflared.replicaCount | quote }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}
