@@ -21,9 +21,6 @@ ingressClass:
 
 replicaCount: 1
 
-cloudflared:
-  replicaCount: 1
-
 image:
   repository: ghcr.io/strrl/cloudflare-tunnel-ingress-controller
   pullPolicy: IfNotPresent
@@ -79,3 +76,4 @@ cloudflared:
     repository: cloudflare/cloudflared
     pullPolicy: IfNotPresent
     tag: latest
+  replicaCount: 1
