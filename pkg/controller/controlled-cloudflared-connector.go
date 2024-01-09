@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"os"
+	"strconv"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/pkg/errors"
@@ -10,7 +11,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -40,7 +40,12 @@ func CreateControlledCloudflaredIfNotExist(
 		return errors.Wrap(err, "fetch tunnel token")
 	}
 
-	deployment := cloudflaredConnectDeploymentTemplating(token, namespace)
+	replicas, err := strconv.ParseInt(os.Getenv("CLOUDFLARED_REPLICA_COUNT"), 10, 32)
+	if err != nil {
+		return errors.Wrap(err, "invalid replica count")
+	}
+
+	deployment := cloudflaredConnectDeploymentTemplating(token, namespace, int32(replicas))
 	err = kubeClient.Create(ctx, deployment)
 	if err != nil {
 		return errors.Wrap(err, "create controlled-cloudflared-connector deployment")
@@ -48,10 +53,11 @@ func CreateControlledCloudflaredIfNotExist(
 	return nil
 }
 
-func cloudflaredConnectDeploymentTemplating(token string, namespace string) *appsv1.Deployment {
+func cloudflaredConnectDeploymentTemplating(token string, namespace string, replicas int32) *appsv1.Deployment {
 	appName := "controlled-cloudflared-connector"
 	image := os.Getenv("CLOUDFLARED_IMAGE")
 	pullPolicy := os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY")
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      appName,
@@ -62,7 +68,7 @@ func cloudflaredConnectDeploymentTemplating(token string, namespace string) *app
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: pointer.Int32(1),
+			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": appName,

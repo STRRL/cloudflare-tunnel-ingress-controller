@@ -76,3 +76,4 @@ cloudflared:
     repository: cloudflare/cloudflared
     pullPolicy: IfNotPresent
     tag: latest
+  replicaCount: 1

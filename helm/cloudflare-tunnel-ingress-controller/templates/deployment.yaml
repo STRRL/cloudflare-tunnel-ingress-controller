@@ -78,6 +78,8 @@ spec:
               value: "{{ .Values.cloudflared.image.repository }}:{{ .Values.cloudflared.image.tag }}"
             - name: CLOUDFLARED_IMAGE_PULL_POLICY
               value: {{ .Values.cloudflared.image.pullPolicy | quote }}
+            - name: CLOUDFLARED_REPLICA_COUNT
+              value: {{ .Values.cloudflared.replicaCount | quote }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}
