@@ -71,6 +71,14 @@ tolerations: []
 
 affinity: {}
 
+# Any additional volumes to include in the controller deployment.
+# Note: These will be forwarded to the cloudflared deployment as well.
+extraVolumes: []
+
+# Any additional volumes to mount in the controller pod.
+# Note: These will be forwarded to the cloudflared pod as well.
+extraVolumeMounts: []
+
 cloudflared:
   image:
     repository: cloudflare/cloudflared

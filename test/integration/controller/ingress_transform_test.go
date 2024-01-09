@@ -3,6 +3,7 @@ package controller
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/test/fixtures"
@@ -586,7 +587,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(exposure[0].ServiceTarget).Should(Equal("https://10.0.0.27:2333"))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
-		Expect(exposure[0].ProxySSLVerifyEnabled).Should(BeNil())
+		Expect(exposure[0].NoTLSVerify).Should(BeNil())
 	})
 
 	It("should resolve https with proxy-ssl-verify disabled", func() {
@@ -674,10 +675,11 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(exposure[0].ServiceTarget).Should(Equal("https://10.0.0.28:2333"))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
-		Expect(exposure[0].ProxySSLVerifyEnabled).ShouldNot(BeNil())
-		Expect(*exposure[0].ProxySSLVerifyEnabled).Should(BeFalse())
+		Expect(exposure[0].NoTLSVerify).ShouldNot(BeNil())
+		Expect(*exposure[0].NoTLSVerify).Should(BeTrue())
 
 	})
+
 	It("should resolve https with proxy-ssl-verify enabled", func() {
 		// prepare
 		By("preparing namespace")
@@ -763,7 +765,183 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(exposure[0].ServiceTarget).Should(Equal("https://10.0.0.29:2333"))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
-		Expect(exposure[0].ProxySSLVerifyEnabled).ShouldNot(BeNil())
-		Expect(*exposure[0].ProxySSLVerifyEnabled).Should(BeTrue())
+		Expect(exposure[0].NoTLSVerify).ShouldNot(BeNil())
+		Expect(*exposure[0].NoTLSVerify).Should(BeFalse())
+	})
+
+	It("should fail when TLS timeout is not a valid duration", func() {
+		// prepare
+		By("preparing namespace")
+		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(IntegrationTestNamespace, kubeClient)
+		ns, err := namespaceFixtures.Start(ctx)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		defer func() {
+			By("cleaning up namespace")
+			err := namespaceFixtures.Stop(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+		}()
+
+		By("preparing service")
+		service := v1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:    ns,
+				GenerateName: "test-service-",
+			},
+			Spec: v1.ServiceSpec{
+				ClusterIP: "10.0.0.30",
+				Ports: []v1.ServicePort{
+					{
+						Name:     "https",
+						Protocol: v1.ProtocolTCP,
+						Port:     2333,
+						TargetPort: intstr.IntOrString{
+							Type:   intstr.Int,
+							IntVal: 443,
+						},
+					},
+				},
+			},
+		}
+		err = kubeClient.Create(ctx, &service)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		By("preparing ingress")
+		ingress := networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:    ns,
+				GenerateName: "test-ingress-",
+				Annotations: map[string]string{
+					"cloudflare-tunnel-ingress-controller.strrl.dev/origin-tls-timeout": "blah blah",
+				},
+			},
+			Spec: networkingv1.IngressSpec{
+				Rules: []networkingv1.IngressRule{
+					{
+						Host: "test.example.com",
+						IngressRuleValue: networkingv1.IngressRuleValue{
+							HTTP: &networkingv1.HTTPIngressRuleValue{
+								Paths: []networkingv1.HTTPIngressPath{
+									{
+										Path:     "/",
+										PathType: &pathTypePrefix,
+										Backend: networkingv1.IngressBackend{
+											Service: &networkingv1.IngressServiceBackend{
+												Name: service.Name,
+												Port: networkingv1.ServiceBackendPort{
+													Name: "https",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		err = kubeClient.Create(ctx, &ingress)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		By("transforming ingress to exposure")
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
+		Expect(err).Should(HaveOccurred())
+		Expect(exposure).Should(BeNil())
+	})
+
+	It("should configure origin service", func() {
+		// prepare
+		By("preparing namespace")
+		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(IntegrationTestNamespace, kubeClient)
+		ns, err := namespaceFixtures.Start(ctx)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		defer func() {
+			By("cleaning up namespace")
+			err := namespaceFixtures.Stop(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+		}()
+
+		By("preparing service")
+		service := v1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:    ns,
+				GenerateName: "test-service-",
+			},
+			Spec: v1.ServiceSpec{
+				ClusterIP: "10.0.0.31",
+				Ports: []v1.ServicePort{
+					{
+						Name:     "https",
+						Protocol: v1.ProtocolTCP,
+						Port:     2333,
+						TargetPort: intstr.IntOrString{
+							Type:   intstr.Int,
+							IntVal: 443,
+						},
+					},
+				},
+			},
+		}
+		err = kubeClient.Create(ctx, &service)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		By("preparing ingress")
+		ingress := networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:    ns,
+				GenerateName: "test-ingress-",
+				Annotations: map[string]string{
+					"cloudflare-tunnel-ingress-controller.strrl.dev/origin-server-name": "test",
+					"cloudflare-tunnel-ingress-controller.strrl.dev/origin-capool":      "/path/to/my/certs.crt",
+					"cloudflare-tunnel-ingress-controller.strrl.dev/origin-tls-timeout": "30s",
+				},
+			},
+			Spec: networkingv1.IngressSpec{
+				Rules: []networkingv1.IngressRule{
+					{
+						Host: "test.example.com",
+						IngressRuleValue: networkingv1.IngressRuleValue{
+							HTTP: &networkingv1.HTTPIngressRuleValue{
+								Paths: []networkingv1.HTTPIngressPath{
+									{
+										Path:     "/",
+										PathType: &pathTypePrefix,
+										Backend: networkingv1.IngressBackend{
+											Service: &networkingv1.IngressServiceBackend{
+												Name: service.Name,
+												Port: networkingv1.ServiceBackendPort{
+													Name: "https",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		err = kubeClient.Create(ctx, &ingress)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		By("transforming ingress to exposure")
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(exposure).ShouldNot(BeNil())
+		Expect(exposure).Should(HaveLen(1))
+		Expect(exposure[0].Hostname).Should(Equal("test.example.com"))
+		Expect(exposure[0].ServiceTarget).Should(Equal("http://10.0.0.31:2333"))
+		Expect(exposure[0].PathPrefix).Should(Equal("/"))
+		Expect(exposure[0].IsDeleted).Should(BeFalse())
+		Expect(exposure[0].OriginServerName).ShouldNot(BeNil())
+		Expect(*exposure[0].OriginServerName).Should(Equal("test"))
+		Expect(exposure[0].CAPool).ShouldNot(BeNil())
+		Expect(*exposure[0].CAPool).Should(Equal("/path/to/my/certs.crt"))
+		Expect(exposure[0].TLSTimeout).ShouldNot(BeNil())
+		Expect(*exposure[0].TLSTimeout).Should(Equal(time.Second * 30))
+		Expect(exposure[0].NoTLSVerify).Should(BeNil())
 	})
 })
