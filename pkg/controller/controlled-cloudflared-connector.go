@@ -11,6 +11,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -40,12 +41,35 @@ func CreateControlledCloudflaredIfNotExist(
 		return errors.Wrap(err, "fetch tunnel token")
 	}
 
+	controllerPod := v1.Pod{}
+	err = kubeClient.Get(ctx, types.NamespacedName{
+		Namespace: namespace,
+		Name:      os.Getenv("POD_NAME"),
+	}, &controllerPod)
+	if err != nil {
+		return errors.Wrap(err, "get controller pod")
+	}
+
+	var controllerVolumeMounts []v1.VolumeMount
+	for _, container := range controllerPod.Spec.Containers {
+		if container.Name == "cloudflare-tunnel-ingress-controller" {
+			controllerVolumeMounts = container.VolumeMounts
+		}
+	}
+
 	replicas, err := strconv.ParseInt(os.Getenv("CLOUDFLARED_REPLICA_COUNT"), 10, 32)
 	if err != nil {
 		return errors.Wrap(err, "invalid replica count")
 	}
 
-	deployment := cloudflaredConnectDeploymentTemplating(token, namespace, int32(replicas))
+	deployment := cloudflaredConnectDeploymentTemplating(
+		token,
+		namespace,
+		int32(replicas),
+		controllerPod.Spec.Volumes,
+		controllerVolumeMounts,
+	)
+
 	err = kubeClient.Create(ctx, deployment)
 	if err != nil {
 		return errors.Wrap(err, "create controlled-cloudflared-connector deployment")
@@ -53,7 +77,13 @@ func CreateControlledCloudflaredIfNotExist(
 	return nil
 }
 
-func cloudflaredConnectDeploymentTemplating(token string, namespace string, replicas int32) *appsv1.Deployment {
+func cloudflaredConnectDeploymentTemplating(
+	token string,
+	namespace string,
+	replicas int32,
+	extraVolumes []v1.Volume,
+	extraVolumeMounts []v1.VolumeMount,
+) *appsv1.Deployment {
 	appName := "controlled-cloudflared-connector"
 	image := os.Getenv("CLOUDFLARED_IMAGE")
 	pullPolicy := os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY")
@@ -97,9 +127,11 @@ func cloudflaredConnectDeploymentTemplating(token string, namespace string, repl
 								"--token",
 								token,
 							},
+							VolumeMounts: extraVolumeMounts,
 						},
 					},
 					RestartPolicy: v1.RestartPolicyAlways,
+					Volumes:       extraVolumes,
 				},
 			},
 		},

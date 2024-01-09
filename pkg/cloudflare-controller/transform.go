@@ -3,7 +3,7 @@ package cloudflarecontroller
 import (
 	"context"
 	"strings"
-
+	
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/pkg/errors"
@@ -14,19 +14,51 @@ func fromExposureToCloudflareIngress(ctx context.Context, exposure exposure.Expo
 		return nil, errors.Errorf("exposure %s is deleted, should not generate cloudflare ingress for it", exposure.Hostname)
 	}
 
-	result := cloudflare.UnvalidatedIngressRule{
-		Hostname: exposure.Hostname,
-		Path:     exposure.PathPrefix,
-		Service:  exposure.ServiceTarget,
+	var originRequest *cloudflare.OriginRequestConfig = nil
+
+	if exposure.OriginServerName != nil {
+		if originRequest == nil {
+			originRequest = &cloudflare.OriginRequestConfig{}
+		}
+
+		originRequest.OriginServerName = exposure.OriginServerName
+	}
+
+	if exposure.CAPool != nil {
+		if originRequest == nil {
+			originRequest = &cloudflare.OriginRequestConfig{}
+		}
+
+		originRequest.CAPool = exposure.CAPool
+	}
+
+	if exposure.TLSTimeout != nil {
+		if originRequest == nil {
+			originRequest = &cloudflare.OriginRequestConfig{}
+		}
+
+		originRequest.TLSTimeout = &cloudflare.TunnelDuration{
+			Duration: *exposure.TLSTimeout,
+		}
 	}
 
 	if strings.HasPrefix(exposure.ServiceTarget, "https://") {
-		result.OriginRequest = &cloudflare.OriginRequestConfig{}
-		if exposure.ProxySSLVerifyEnabled == nil {
-			result.OriginRequest.NoTLSVerify = boolPointer(true)
-		} else {
-			result.OriginRequest.NoTLSVerify = boolPointer(!*exposure.ProxySSLVerifyEnabled)
+		if originRequest == nil {
+			originRequest = &cloudflare.OriginRequestConfig{}
 		}
+
+		if exposure.NoTLSVerify == nil {
+			originRequest.NoTLSVerify = boolPointer(true)
+		} else {
+			originRequest.NoTLSVerify = exposure.NoTLSVerify
+		}
+	}
+
+	result := cloudflare.UnvalidatedIngressRule{
+		Hostname:      exposure.Hostname,
+		Path:          exposure.PathPrefix,
+		Service:       exposure.ServiceTarget,
+		OriginRequest: originRequest,
 	}
 
 	return &result, nil

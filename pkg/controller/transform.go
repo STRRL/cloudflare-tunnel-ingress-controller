@@ -3,8 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"time"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/go-logr/logr"
@@ -12,6 +11,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient client.Client, ingress networkingv1.Ingress) ([]exposure.Exposure, error) {
@@ -38,13 +38,12 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 			scheme = backendProtocol
 		}
 
-		var proxySSLVerifyEnabled *bool
-
-		if proxySSLVerify, ok := getAnnotation(ingress.Annotations, AnnotationProxySSLVerify); ok {
-			if proxySSLVerify == AnnotationProxySSLVerifyOn {
-				proxySSLVerifyEnabled = boolPointer(true)
-			} else if proxySSLVerify == AnnotationProxySSLVerifyOff {
-				proxySSLVerifyEnabled = boolPointer(false)
+		var noTlsVerify *bool
+		if annotation, ok := getAnnotation(ingress.Annotations, AnnotationProxySSLVerify); ok {
+			if annotation == AnnotationProxySSLVerifyOn {
+				noTlsVerify = boolPointer(false)
+			} else if annotation == AnnotationProxySSLVerifyOff {
+				noTlsVerify = boolPointer(true)
 			} else {
 				return nil, errors.Errorf(
 					"invalid value for annotation %s, available values: \"%s\" or \"%s\"",
@@ -53,6 +52,26 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 					AnnotationProxySSLVerifyOff,
 				)
 			}
+		}
+
+		var originServerName *string
+		if annotation, ok := getAnnotation(ingress.Annotations, AnnotationOriginServerName); ok {
+			originServerName = &annotation
+		}
+
+		var caPool *string
+		if annotation, ok := getAnnotation(ingress.Annotations, AnnotationCAPool); ok {
+			caPool = &annotation
+		}
+
+		var tlsTimeout *time.Duration
+		if annotation, ok := getAnnotation(ingress.Annotations, AnnotationTLSTimeout); ok {
+			duration, err := time.ParseDuration(annotation)
+			if err != nil {
+				return nil, errors.Errorf("invalid duration for tls timeout %s", annotation)
+			}
+
+			tlsTimeout = &duration
 		}
 
 		for _, path := range rule.HTTP.Paths {
@@ -96,11 +115,14 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 			}
 
 			result = append(result, exposure.Exposure{
-				Hostname:              hostname,
-				ServiceTarget:         fmt.Sprintf("%s://%s:%d", scheme, host, port),
+				Hostname:         hostname,
+				ServiceTarget:    fmt.Sprintf("%s://%s:%d", scheme, host, port),
 				PathPrefix:            path.Path,
-				IsDeleted:             isDeleted,
-				ProxySSLVerifyEnabled: proxySSLVerifyEnabled,
+				IsDeleted:        isDeleted,
+				OriginServerName: originServerName,
+				CAPool:           caPool,
+				NoTLSVerify:      noTlsVerify,
+				TLSTimeout:       tlsTimeout,
 			})
 		}
 	}

@@ -74,6 +74,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             - name: CLOUDFLARED_IMAGE
               value: "{{ .Values.cloudflared.image.repository }}:{{ .Values.cloudflared.image.tag }}"
             - name: CLOUDFLARED_IMAGE_PULL_POLICY
@@ -82,6 +86,10 @@ spec:
               value: {{ .Values.cloudflared.replicaCount | quote }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          {{- if gt (len .Values.extraVolumeMounts) 0 }}
+          volumeMounts:
+            {{- toYaml .Values.extraVolumeMounts | nindent 12 }}
+          {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -93,4 +101,8 @@ spec:
       {{- with .Values.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if gt (len .Values.extraVolumes) 0 }}
+      volumes:
+        {{- toYaml .Values.extraVolumes | nindent 8 }}
       {{- end }}
