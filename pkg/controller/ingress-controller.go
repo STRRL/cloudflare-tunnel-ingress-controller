@@ -3,11 +3,11 @@ package controller
 import (
 	"context"
 	"fmt"
-
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
+	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -99,6 +99,19 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 		}
 	}
 
+	origin.Status.LoadBalancer.Ingress = append(origin.Status.LoadBalancer.Ingress,
+		networkingv1.IngressLoadBalancerIngress{
+			Hostname: i.tunnelClient.TunnelDomain(),
+			Ports: []networkingv1.IngressPortStatus{{
+				Protocol: v1.ProtocolTCP,
+				Port:     443,
+			}},
+		},
+	)
+	if err = i.kubeClient.Status().Update(ctx, &origin); err != nil {
+		return reconcile.Result{}, errors.Wrapf(err, "failed to update ingress status")
+	}
+
 	i.logger.V(3).Info("reconcile completed", "triggered-by", request.NamespacedName)
 	return reconcile.Result{}, nil
 }
@@ -135,7 +148,7 @@ func (i *IngressController) listControlledIngressClasses(ctx context.Context) ([
 	if err != nil {
 		return nil, errors.Wrap(err, "list ingress classes")
 	}
-	
+
 	filteredList := make([]networkingv1.IngressClass, 0, len(list.Items))
 	for _, ingress := range list.Items {
 		if ingress.Spec.Controller != i.controllerClassName {
