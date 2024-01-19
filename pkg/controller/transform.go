@@ -102,19 +102,6 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 				IsDeleted:             isDeleted,
 				ProxySSLVerifyEnabled: proxySSLVerifyEnabled,
 			})
-
-			if service.Status.LoadBalancer.Ingress == nil {
-				service.Status.LoadBalancer.Ingress = []v1.LoadBalancerIngress{{Hostname: hostname}}
-			} else {
-				service.Status.LoadBalancer.Ingress = append(service.Status.LoadBalancer.Ingress, v1.LoadBalancerIngress{
-					Hostname: hostname,
-				})
-			}
-
-			err = kubeClient.Status().Update(ctx, &service)
-			if err != nil {
-				return nil, errors.Wrapf(err, "update service %s", service.Name)
-			}
 		}
 	}
 

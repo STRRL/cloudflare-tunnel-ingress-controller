@@ -35,6 +35,10 @@ func (t *TunnelClient) PutExposures(ctx context.Context, exposures []exposure.Ex
 	return nil
 }
 
+func (t *TunnelClient) TunnelDomain() string {
+	return tunnelDomain(t.tunnelId)
+}
+
 func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures []exposure.Exposure) error {
 	var ingressRules []cloudflare.UnvalidatedIngressRule
 

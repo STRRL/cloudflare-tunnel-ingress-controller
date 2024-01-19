@@ -12,7 +12,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
@@ -184,10 +183,6 @@ var _ = Describe("transform ingress to exposure", func() {
 		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
 		Expect(err).Should(HaveOccurred())
 		Expect(exposure).Should(BeNil())
-
-		err = kubeClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: service.Name}, &service)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(service.Status.LoadBalancer.Ingress).Should(BeEmpty())
 	})
 
 	It("should fail fast with PathType ImplementationSpecific", func() {
@@ -266,10 +261,6 @@ var _ = Describe("transform ingress to exposure", func() {
 		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
 		Expect(err).Should(HaveOccurred())
 		Expect(exposure).Should(BeNil())
-
-		err = kubeClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: service.Name}, &service)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(service.Status.LoadBalancer.Ingress).Should(BeEmpty())
 	})
 
 	It("should resolve ingress with port name", func() {
@@ -431,10 +422,6 @@ var _ = Describe("transform ingress to exposure", func() {
 		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
 		Expect(err).Should(HaveOccurred())
 		Expect(exposure).Should(BeNil())
-
-		err = kubeClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: service.Name}, &service)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(service.Status.LoadBalancer.Ingress).Should(BeEmpty())
 	})
 
 	It("should fail fast with headless service", func() {
@@ -513,10 +500,6 @@ var _ = Describe("transform ingress to exposure", func() {
 		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
 		Expect(err).Should(HaveOccurred())
 		Expect(exposure).Should(BeNil())
-
-		err = kubeClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: service.Name}, &service)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(service.Status.LoadBalancer.Ingress).Should(BeEmpty())
 	})
 
 	It("should resolve https", func() {
@@ -782,326 +765,5 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
 		Expect(exposure[0].ProxySSLVerifyEnabled).ShouldNot(BeNil())
 		Expect(*exposure[0].ProxySSLVerifyEnabled).Should(BeTrue())
-	})
-
-	It("should update service load balancer ingress hostname", func() {
-		// prepare
-		By("preparing namespace")
-		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(IntegrationTestNamespace, kubeClient)
-		ns, err := namespaceFixtures.Start(ctx)
-		Expect(err).ShouldNot(HaveOccurred())
-		expectedHostname := "test.example.com"
-
-		defer func() {
-			By("cleaning up namespace")
-			err := namespaceFixtures.Stop(ctx)
-			Expect(err).ShouldNot(HaveOccurred())
-		}()
-
-		By("preparing service")
-		service := v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace:    ns,
-				GenerateName: "test-service-",
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:     "http",
-						Protocol: v1.ProtocolTCP,
-						Port:     2333,
-						TargetPort: intstr.IntOrString{
-							Type:   intstr.Int,
-							IntVal: 8080,
-						},
-					},
-				},
-			},
-		}
-		err = kubeClient.Create(ctx, &service)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		By("preparing ingress")
-		ingress := networkingv1.Ingress{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace:    ns,
-				GenerateName: "test-ingress-",
-			},
-			Spec: networkingv1.IngressSpec{
-				Rules: []networkingv1.IngressRule{
-					{
-						Host: expectedHostname,
-						IngressRuleValue: networkingv1.IngressRuleValue{
-							HTTP: &networkingv1.HTTPIngressRuleValue{
-								Paths: []networkingv1.HTTPIngressPath{
-									{
-										Path:     "/",
-										PathType: &pathTypePrefix,
-										Backend: networkingv1.IngressBackend{
-											Service: &networkingv1.IngressServiceBackend{
-												Name: service.Name,
-												Port: networkingv1.ServiceBackendPort{
-													Number: 2333,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-		err = kubeClient.Create(ctx, &ingress)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(exposure).ShouldNot(BeNil())
-
-		err = kubeClient.Get(ctx, types.NamespacedName{
-			Namespace: ns,
-			Name:      service.Name,
-		}, &service)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(service.Status.LoadBalancer.Ingress).Should(ContainElement(v1.LoadBalancerIngress{Hostname: expectedHostname}))
-	})
-
-	It("should support multiple service backends", func() {
-		// prepare
-		By("preparing namespace")
-		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(IntegrationTestNamespace, kubeClient)
-		ns, err := namespaceFixtures.Start(ctx)
-		Expect(err).ShouldNot(HaveOccurred())
-		expectedHostname1 := "test1.example.com"
-		expectedHostname2 := "test2.example.com"
-
-		defer func() {
-			By("cleaning up namespace")
-			err := namespaceFixtures.Stop(ctx)
-			Expect(err).ShouldNot(HaveOccurred())
-		}()
-
-		By("preparing service 1")
-		service1 := v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace:    ns,
-				GenerateName: "test-service1-",
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:     "http",
-						Protocol: v1.ProtocolTCP,
-						Port:     2333,
-						TargetPort: intstr.IntOrString{
-							Type:   intstr.Int,
-							IntVal: 8080,
-						},
-					},
-				},
-			},
-		}
-		err = kubeClient.Create(ctx, &service1)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		By("preparing service 2")
-		service2 := v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace:    ns,
-				GenerateName: "test-service2-",
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:     "http",
-						Protocol: v1.ProtocolTCP,
-						Port:     2334,
-						TargetPort: intstr.IntOrString{
-							Type:   intstr.Int,
-							IntVal: 8088,
-						},
-					},
-				},
-			},
-		}
-		err = kubeClient.Create(ctx, &service2)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		By("preparing ingress")
-		ingress := networkingv1.Ingress{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace:    ns,
-				GenerateName: "test-ingress-",
-			},
-			Spec: networkingv1.IngressSpec{
-				Rules: []networkingv1.IngressRule{
-					{
-						Host: expectedHostname1,
-						IngressRuleValue: networkingv1.IngressRuleValue{
-							HTTP: &networkingv1.HTTPIngressRuleValue{
-								Paths: []networkingv1.HTTPIngressPath{
-									{
-										Path:     "/",
-										PathType: &pathTypePrefix,
-										Backend: networkingv1.IngressBackend{
-											Service: &networkingv1.IngressServiceBackend{
-												Name: service1.Name,
-												Port: networkingv1.ServiceBackendPort{
-													Number: 2333,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-					{
-						Host: expectedHostname2,
-						IngressRuleValue: networkingv1.IngressRuleValue{
-							HTTP: &networkingv1.HTTPIngressRuleValue{
-								Paths: []networkingv1.HTTPIngressPath{
-									{
-										Path:     "/",
-										PathType: &pathTypePrefix,
-										Backend: networkingv1.IngressBackend{
-											Service: &networkingv1.IngressServiceBackend{
-												Name: service2.Name,
-												Port: networkingv1.ServiceBackendPort{
-													Number: 2334,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-		err = kubeClient.Create(ctx, &ingress)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(exposure).ShouldNot(BeNil())
-
-		err = kubeClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: service1.Name}, &service1)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(service1.Status.LoadBalancer.Ingress).Should(ContainElement(v1.LoadBalancerIngress{Hostname: expectedHostname1}))
-
-		err = kubeClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: service2.Name}, &service2)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(service2.Status.LoadBalancer.Ingress).Should(ContainElement(v1.LoadBalancerIngress{Hostname: expectedHostname2}))
-	})
-
-	It("should support multiple hosts on a single service", func() {
-		// prepare
-		By("preparing namespace")
-		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(IntegrationTestNamespace, kubeClient)
-		ns, err := namespaceFixtures.Start(ctx)
-		Expect(err).ShouldNot(HaveOccurred())
-		expectedHostname1 := "test1.example.com"
-		expectedHostname2 := "test2.example.com"
-
-		defer func() {
-			By("cleaning up namespace")
-			err := namespaceFixtures.Stop(ctx)
-			Expect(err).ShouldNot(HaveOccurred())
-		}()
-
-		By("preparing service")
-		service := v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace:    ns,
-				GenerateName: "test-service-",
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:     "http",
-						Protocol: v1.ProtocolTCP,
-						Port:     2333,
-						TargetPort: intstr.IntOrString{
-							Type:   intstr.Int,
-							IntVal: 8080,
-						},
-					},
-				},
-			},
-		}
-		err = kubeClient.Create(ctx, &service)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		By("preparing ingress")
-		ingress := networkingv1.Ingress{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace:    ns,
-				GenerateName: "test-ingress-",
-			},
-			Spec: networkingv1.IngressSpec{
-				Rules: []networkingv1.IngressRule{
-					{
-						Host: expectedHostname1,
-						IngressRuleValue: networkingv1.IngressRuleValue{
-							HTTP: &networkingv1.HTTPIngressRuleValue{
-								Paths: []networkingv1.HTTPIngressPath{
-									{
-										Path:     "/",
-										PathType: &pathTypePrefix,
-										Backend: networkingv1.IngressBackend{
-											Service: &networkingv1.IngressServiceBackend{
-												Name: service.Name,
-												Port: networkingv1.ServiceBackendPort{
-													Number: 2333,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-					{
-						Host: expectedHostname2,
-						IngressRuleValue: networkingv1.IngressRuleValue{
-							HTTP: &networkingv1.HTTPIngressRuleValue{
-								Paths: []networkingv1.HTTPIngressPath{
-									{
-										Path:     "/",
-										PathType: &pathTypePrefix,
-										Backend: networkingv1.IngressBackend{
-											Service: &networkingv1.IngressServiceBackend{
-												Name: service.Name,
-												Port: networkingv1.ServiceBackendPort{
-													Number: 2334,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-		err = kubeClient.Create(ctx, &ingress)
-		Expect(err).ShouldNot(HaveOccurred())
-
-		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(exposure).ShouldNot(BeNil())
-
-		err = kubeClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: service.Name}, &service)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(service.Status.LoadBalancer.Ingress).Should(ContainElement(v1.LoadBalancerIngress{Hostname: expectedHostname1}))
-		Expect(service.Status.LoadBalancer.Ingress).Should(ContainElement(v1.LoadBalancerIngress{Hostname: expectedHostname2}))
 	})
 })
