@@ -101,13 +101,14 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 		}
 	}
 
+	hostname := i.tunnelClient.TunnelDomain()
 	matchesHostname := func(ingress networkingv1.IngressLoadBalancerIngress) bool {
-		return ingress.Hostname == i.tunnelClient.TunnelDomain()
+		return ingress.Hostname == hostname
 	}
 	if !slices.ContainsFunc(origin.Status.LoadBalancer.Ingress, matchesHostname) {
 		origin.Status.LoadBalancer.Ingress = append(origin.Status.LoadBalancer.Ingress,
 			networkingv1.IngressLoadBalancerIngress{
-				Hostname: i.tunnelClient.TunnelDomain(),
+				Hostname: hostname,
 				Ports: []networkingv1.IngressPortStatus{{
 					Protocol: v1.ProtocolTCP,
 					Port:     443,
