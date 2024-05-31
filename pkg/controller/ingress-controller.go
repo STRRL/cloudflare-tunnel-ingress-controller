@@ -3,6 +3,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
+
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/go-logr/logr"
@@ -99,15 +101,20 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 		}
 	}
 
-	origin.Status.LoadBalancer.Ingress = append(origin.Status.LoadBalancer.Ingress,
-		networkingv1.IngressLoadBalancerIngress{
-			Hostname: i.tunnelClient.TunnelDomain(),
-			Ports: []networkingv1.IngressPortStatus{{
-				Protocol: v1.ProtocolTCP,
-				Port:     443,
-			}},
-		},
-	)
+	matchesHostname := func(ingress networkingv1.IngressLoadBalancerIngress) bool {
+		return ingress.Hostname == i.tunnelClient.TunnelDomain()
+	}
+	if !slices.ContainsFunc(origin.Status.LoadBalancer.Ingress, matchesHostname) {
+		origin.Status.LoadBalancer.Ingress = append(origin.Status.LoadBalancer.Ingress,
+			networkingv1.IngressLoadBalancerIngress{
+				Hostname: i.tunnelClient.TunnelDomain(),
+				Ports: []networkingv1.IngressPortStatus{{
+					Protocol: v1.ProtocolTCP,
+					Port:     443,
+				}},
+			},
+		)
+	}
 	if err = i.kubeClient.Status().Update(ctx, &origin); err != nil {
 		return reconcile.Result{}, errors.Wrapf(err, "failed to update ingress status")
 	}
