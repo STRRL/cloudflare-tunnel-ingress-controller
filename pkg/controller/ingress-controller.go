@@ -106,17 +106,15 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 		return ingress.Hostname == hostname
 	}
 	if !slices.ContainsFunc(origin.Status.LoadBalancer.Ingress, matchesHostname) {
-		origin.Status.LoadBalancer.Ingress = append(origin.Status.LoadBalancer.Ingress,
-			networkingv1.IngressLoadBalancerIngress{
-				Hostname: hostname,
-				Ports: []networkingv1.IngressPortStatus{{
-					Protocol: v1.ProtocolTCP,
-					Port:     443,
-				}},
-			},
-		)
+		origin.Status.LoadBalancer.Ingress = []networkingv1.IngressLoadBalancerIngress{{
+			Hostname: hostname,
+			Ports: []networkingv1.IngressPortStatus{{
+				Protocol: v1.ProtocolTCP,
+				Port:     443,
+			}},
+		}}
 	}
-	if err = i.kubeClient.Status().Update(ctx, &origin); err != nil {
+	if err = i.kubeClient.Status().Update(ctx, origin.DeepCopy()); err != nil {
 		return reconcile.Result{}, errors.Wrapf(err, "failed to update ingress status")
 	}
 
