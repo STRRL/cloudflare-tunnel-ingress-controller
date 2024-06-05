@@ -28,3 +28,5 @@ hack/dev/cloudflare-api.yaml
 cover.out
 
 .idea/
+
+gateway-api-conformance-test-report.yaml
