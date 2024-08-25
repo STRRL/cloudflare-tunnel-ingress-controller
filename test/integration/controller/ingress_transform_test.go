@@ -259,8 +259,8 @@ var _ = Describe("transform ingress to exposure", func() {
 
 		By("transforming ingress to exposure")
 		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
-		Expect(err).Should(HaveOccurred())
-		Expect(exposure).Should(BeNil())
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(exposure).Should(HaveLen(1))
 	})
 
 	It("should resolve ingress with port name", func() {
