@@ -87,11 +87,16 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 				port = path.Backend.Service.Port.Number
 			}
 
-			// TODO: support other path types
+			var supportedPathTypes = map[networkingv1.PathType]struct{}{
+				networkingv1.PathTypePrefix:              {},
+				networkingv1.PathTypeImplementationSpecific: {},
+			}
+			
 			if path.PathType == nil {
 				return nil, errors.Errorf("path type in ingress %s/%s is nil", ingress.GetNamespace(), ingress.GetName())
 			}
-			if *path.PathType != networkingv1.PathTypePrefix {
+
+			if _, ok := supportedPathTypes[*path.PathType]; !ok {
 				return nil, errors.Errorf("path type in ingress %s/%s is %s, which is not supported", ingress.GetNamespace(), ingress.GetName(), *path.PathType)
 			}
 
