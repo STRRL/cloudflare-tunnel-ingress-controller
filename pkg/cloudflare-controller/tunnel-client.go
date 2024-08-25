@@ -160,7 +160,7 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 			Name:    item.OldRecord.Name,
 			Content: item.Content,
 			Proxied: cloudflare.BoolPtr(true),
-			Comment: item.Comment,
+			Comment: &item.Comment,
 			TTL:     1,
 		})
 		if err != nil {
