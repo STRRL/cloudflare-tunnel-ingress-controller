@@ -44,3 +44,18 @@ func RegisterGatewayClassController(logger logr.Logger, mgr manager.Manager) err
 
 	return nil
 }
+
+func RegisterGatewayController(logger logr.Logger, mgr manager.Manager) error {
+	controller := NewGatewayController(logger.WithName("gateway-controller"), mgr.GetClient())
+	err := builder.
+		ControllerManagedBy(mgr).
+		For(&gatewayv1.Gateway{}).
+		Complete(controller)
+
+	if err != nil {
+		logger.WithName("register-controller").Error(err, "could not register gateway controller")
+		return err
+	}
+
+	return nil
+}

@@ -47,6 +47,8 @@ rules:
     resources:
       - gatewayclasses
       - gatewayclasses/status
+      - gateways
+      - gateways/status
     verbs:
       - get
       - list

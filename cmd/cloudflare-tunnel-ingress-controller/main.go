@@ -111,6 +111,12 @@ func main() {
 				return err
 			}
 
+			// Add this new registration for the Gateway controller
+			err = controller.RegisterGatewayController(logger, mgr)
+			if err != nil {
+				return err
+			}
+
 			ticker := time.NewTicker(10 * time.Second)
 			done := make(chan struct{})
 			defer close(done)
