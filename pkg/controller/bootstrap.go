@@ -6,6 +6,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 type IngressControllerOptions struct {
@@ -26,8 +27,18 @@ func RegisterIngressController(logger logr.Logger, mgr manager.Manager, options 
 		return err
 	}
 
+	return nil
+}
+
+func RegisterGatewayClassController(logger logr.Logger, mgr manager.Manager) error {
+	controller := NewGatewayClassController(logger.WithName("gatewayclass-controller"), mgr.GetClient())
+	err := builder.
+		ControllerManagedBy(mgr).
+		For(&gatewayv1.GatewayClass{}).
+		Complete(controller)
+
 	if err != nil {
-		logger.WithName("register-controller").Error(err, "could not register ingress class controller")
+		logger.WithName("register-controller").Error(err, "could not register gatewayclass controller")
 		return err
 	}
 
