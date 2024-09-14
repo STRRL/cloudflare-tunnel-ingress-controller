@@ -2,7 +2,6 @@ package cloudflarecontroller
 
 import (
 	"context"
-	"strings"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
@@ -180,8 +179,11 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 }
 
 func zoneBelongedByExposure(exposure exposure.Exposure, zones []string) (bool, string) {
+	hostnameDomain := Domain{Name: exposure.Hostname}
+
 	for _, zone := range zones {
-		if strings.HasSuffix(exposure.Hostname, zone) {
+		zoneDomain := Domain{Name: zone}
+		if hostnameDomain.IsSubDomainOf(zoneDomain) || hostnameDomain.Name == zoneDomain.Name {
 			return true, zone
 		}
 	}
