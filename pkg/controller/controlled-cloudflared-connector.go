@@ -12,14 +12,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func CreateControlledCloudflaredIfNotExist(
+func CreateOrUpdateControlledCloudflaredIfNotExist(
 	ctx context.Context,
 	kubeClient client.Client,
 	tunnelClient *cloudflarecontroller.TunnelClient,
 	namespace string,
 ) error {
+	logger := log.FromContext(ctx)
 	list := appsv1.DeploymentList{}
 	err := kubeClient.List(ctx, &list, &client.ListOptions{
 		Namespace: namespace,
@@ -32,6 +34,43 @@ func CreateControlledCloudflaredIfNotExist(
 	}
 
 	if len(list.Items) > 0 {
+		// Check if the existing deployment needs to be updated
+		existingDeployment := &list.Items[0]
+		desiredReplicas, err := strconv.ParseInt(os.Getenv("CLOUDFLARED_REPLICA_COUNT"), 10, 32)
+		if err != nil {
+			return errors.Wrap(err, "invalid replica count")
+		}
+
+		needsUpdate := false
+		if *existingDeployment.Spec.Replicas != int32(desiredReplicas) {
+			needsUpdate = true
+		}
+
+		if len(existingDeployment.Spec.Template.Spec.Containers) > 0 {
+			container := &existingDeployment.Spec.Template.Spec.Containers[0]
+			if container.Image != os.Getenv("CLOUDFLARED_IMAGE") {
+				needsUpdate = true
+			}
+			if string(container.ImagePullPolicy) != os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY") {
+				needsUpdate = true
+			}
+		}
+
+		if needsUpdate {
+			token, err := tunnelClient.FetchTunnelToken(ctx)
+			if err != nil {
+				return errors.Wrap(err, "fetch tunnel token")
+			}
+
+			updatedDeployment := cloudflaredConnectDeploymentTemplating(token, namespace, int32(desiredReplicas))
+			existingDeployment.Spec = updatedDeployment.Spec
+			err = kubeClient.Update(ctx, existingDeployment)
+			if err != nil {
+				return errors.Wrap(err, "update controlled-cloudflared-connector deployment")
+			}
+			logger.Info("Updated controlled-cloudflared-connector deployment", "namespace", namespace)
+		}
+
 		return nil
 	}
 
@@ -50,6 +89,7 @@ func CreateControlledCloudflaredIfNotExist(
 	if err != nil {
 		return errors.Wrap(err, "create controlled-cloudflared-connector deployment")
 	}
+	logger.Info("Created controlled-cloudflared-connector deployment", "namespace", namespace)
 	return nil
 }
 

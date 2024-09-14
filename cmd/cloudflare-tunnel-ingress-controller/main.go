@@ -2,18 +2,19 @@ package main
 
 import (
 	"context"
+	"log"
+	"os"
+	"time"
+
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/controller"
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
-	"log"
-	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"time"
 )
 
 type rootCmdFlags struct {
@@ -99,7 +100,7 @@ func main() {
 					case <-done:
 						return
 					case _ = <-ticker.C:
-						err := controller.CreateControlledCloudflaredIfNotExist(ctx, mgr.GetClient(), tunnelClient, options.namespace)
+						err := controller.CreateOrUpdateControlledCloudflaredIfNotExist(ctx, mgr.GetClient(), tunnelClient, options.namespace)
 						if err != nil {
 							logger.WithName("controlled-cloudflared").Error(err, "create controlled cloudflared")
 						}
