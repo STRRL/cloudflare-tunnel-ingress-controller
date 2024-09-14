@@ -1,14 +1,17 @@
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "cloudflare-tunnel-ingress-controller.fullname" . }}-watch-ingress
+  name: cloudflare-tunnel-ingress-controller
   labels:
-    {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
+    app: cloudflare-tunnel-ingress-controller
 rules:
   - apiGroups:
       - ""
     resources:
       - services
+      - endpoints
+      - secrets
     verbs:
       - get
       - list
@@ -52,3 +55,27 @@ rules:
       - watch
       - update
       - patch
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudflare-tunnel-ingress-controller
+  namespace: cloudflare-tunnel-ingress-controller-dev
+  labels:
+    app: cloudflare-tunnel-ingress-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloudflare-tunnel-ingress-controller
+  labels:
+    app: cloudflare-tunnel-ingress-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cloudflare-tunnel-ingress-controller
+subjects:
+  - name: cloudflare-tunnel-ingress-controller
+    kind: ServiceAccount
+    # hardcoded namespace for dev
+    namespace: cloudflare-tunnel-ingress-controller-dev

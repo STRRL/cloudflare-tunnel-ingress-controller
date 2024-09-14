@@ -2,18 +2,22 @@ package main
 
 import (
 	"context"
+	"log"
+	"os"
+	"time"
+
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/controller"
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
-	"log"
-	"os"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"time"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 type rootCmdFlags struct {
@@ -72,7 +76,20 @@ func main() {
 				os.Exit(1)
 			}
 
-			mgr, err := manager.New(cfg, manager.Options{})
+			scheme := runtime.NewScheme()
+			err = clientgoscheme.AddToScheme(scheme)
+			if err != nil {
+				logger.Error(err, "unable to add scheme")
+				os.Exit(1)
+			}
+			// append gateway-api scheme
+			err = gatewayv1.AddToScheme(scheme)
+			if err != nil {
+				logger.Error(err, "unable to add gateway-api scheme")
+				os.Exit(1)
+			}
+
+			mgr, err := manager.New(cfg, manager.Options{Scheme: scheme})
 			if err != nil {
 				logger.Error(err, "unable to set up manager")
 				os.Exit(1)
@@ -85,6 +102,17 @@ func main() {
 					ControllerClassName: options.controllerClass,
 					CFTunnelClient:      tunnelClient,
 				})
+			if err != nil {
+				return err
+			}
+
+			err = controller.RegisterGatewayClassController(logger, mgr)
+			if err != nil {
+				return err
+			}
+
+			// Add this new registration for the Gateway controller
+			err = controller.RegisterGatewayController(logger, mgr)
 			if err != nil {
 				return err
 			}
