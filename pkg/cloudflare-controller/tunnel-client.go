@@ -9,6 +9,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+type TunnelClientInterface interface {
+	PutExposures(ctx context.Context, exposures []exposure.Exposure) error
+	TunnelDomain() string
+	FetchTunnelToken(ctx context.Context) (string, error)
+}
+
+var _ TunnelClientInterface = &TunnelClient{}
+
 type TunnelClient struct {
 	logger     logr.Logger
 	cfClient   *cloudflare.API
