@@ -100,7 +100,7 @@ func main() {
 					case <-done:
 						return
 					case _ = <-ticker.C:
-						err := controller.CreateOrUpdateControlledCloudflaredIfNotExist(ctx, mgr.GetClient(), tunnelClient, options.namespace)
+						err := controller.CreateOrUpdateControlledCloudflared(ctx, mgr.GetClient(), tunnelClient, options.namespace)
 						if err != nil {
 							logger.WithName("controlled-cloudflared").Error(err, "create controlled cloudflared")
 						}

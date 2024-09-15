@@ -15,10 +15,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func CreateOrUpdateControlledCloudflaredIfNotExist(
+func CreateOrUpdateControlledCloudflared(
 	ctx context.Context,
 	kubeClient client.Client,
-	tunnelClient *cloudflarecontroller.TunnelClient,
+	tunnelClient cloudflarecontroller.TunnelClientInterface,
 	namespace string,
 ) error {
 	logger := log.FromContext(ctx)
