@@ -1,0 +1,38 @@
+{{- if .Values.cloudflaredServiceMonitor.create }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "cloudflare-tunnel-ingress-controller.fullname" . }}-controlled-cloudflared
+  labels:
+    {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.cloudflaredServiceMonitor.jobLabel }}
+  jobLabel: {{ .Values.cloudflaredServiceMonitor.jobLabel }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: controlled-cloudflared
+      {{- include "cloudflare-tunnel-ingress-controller.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: 44483
+      path: /metrics
+      scheme: {{ .Values.cloudflaredServiceMonitor.scheme }}
+      {{- if .Values.cloudflaredServiceMonitor.interval }}
+      interval: {{ .Values.cloudflaredServiceMonitor.interval }}
+      {{- end }}
+      {{- if .Values.cloudflaredServiceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ .Values.cloudflaredServiceMonitor.scrapeTimeout }}
+      {{- end }}
+      {{- if .Values.cloudflaredServiceMonitor.honorLabels }}
+      honorLabels: {{ .Values.cloudflaredServiceMonitor.honorLabels }}
+      {{- end }}
+      {{- if .Values.cloudflaredServiceMonitor.metricRelabelings }}
+      metricRelabelings: {{ .Values.cloudflaredServiceMonitor.metricRelabelings }}
+      {{- end }}
+      {{- if .Values.cloudflaredServiceMonitor.relabelings }}
+      relabelings: {{ .Values.cloudflaredServiceMonitor.relabelings }}
+      {{- end }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+{{- end }}
