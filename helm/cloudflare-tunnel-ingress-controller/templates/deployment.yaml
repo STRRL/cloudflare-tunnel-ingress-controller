@@ -45,7 +45,7 @@ spec:
                 secretKeyRef:
                   {{- if hasKey .Values.cloudflare "secretRef" }}
                   name: {{ .Values.cloudflare.secretRef.name }}
-                  key: {{ .Values.cloudflare.secretRef.apiTokenKey }}
+                  key: apiTokenKey
                   {{- else }}
                   name: cloudflare-api
                   key: api-token
@@ -55,7 +55,7 @@ spec:
                 secretKeyRef:
                   {{- if hasKey .Values.cloudflare "secretRef" }}
                   name: {{ .Values.cloudflare.secretRef.name }}
-                  key: {{ .Values.cloudflare.secretRef.accountIDKey }}
+                  key: accountIDKey 
                   {{- else }}
                   name: cloudflare-api
                   key: cloudflare-account-id
@@ -65,7 +65,7 @@ spec:
                 secretKeyRef:
                   {{- if hasKey .Values.cloudflare "secretRef" }}
                   name: {{ .Values.cloudflare.secretRef.name }}
-                  key: {{ .Values.cloudflare.secretRef.tunnelNameKey }}
+                  key: tunnelNameKey
                   {{- else }}
                   name: cloudflare-api
                   key: cloudflare-tunnel-name
