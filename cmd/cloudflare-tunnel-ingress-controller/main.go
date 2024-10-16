@@ -28,17 +28,19 @@ type rootCmdFlags struct {
 	cloudflareAccountId  string
 	cloudflareTunnelName string
 	namespace            string
+	cloudflaredProtocol  string
 }
 
 func main() {
 	var rootLogger = stdr.NewWithOptions(log.New(os.Stderr, "", log.LstdFlags), stdr.Options{LogCaller: stdr.All})
 
 	options := rootCmdFlags{
-		logger:          rootLogger.WithName("main"),
-		ingressClass:    "cloudflare-tunnel",
-		controllerClass: "strrl.dev/cloudflare-tunnel-ingress-controller",
-		logLevel:        0,
-		namespace:       "default",
+		logger:              rootLogger.WithName("main"),
+		ingressClass:        "cloudflare-tunnel",
+		controllerClass:     "strrl.dev/cloudflare-tunnel-ingress-controller",
+		logLevel:            0,
+		namespace:           "default",
+		cloudflaredProtocol: "quic",
 	}
 
 	crlog.SetLogger(rootLogger.WithName("controller-runtime"))
@@ -100,7 +102,7 @@ func main() {
 					case <-done:
 						return
 					case _ = <-ticker.C:
-						err := controller.CreateOrUpdateControlledCloudflared(ctx, mgr.GetClient(), tunnelClient, options.namespace)
+						err := controller.CreateOrUpdateControlledCloudflared(ctx, mgr.GetClient(), tunnelClient, options.namespace, options.cloudflaredProtocol)
 						if err != nil {
 							logger.WithName("controlled-cloudflared").Error(err, "create controlled cloudflared")
 						}
@@ -120,6 +122,7 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.cloudflareAccountId, "cloudflare-account-id", options.cloudflareAccountId, "cloudflare account id")
 	rootCommand.PersistentFlags().StringVar(&options.cloudflareTunnelName, "cloudflare-tunnel-name", options.cloudflareTunnelName, "cloudflare tunnel name")
 	rootCommand.PersistentFlags().StringVar(&options.namespace, "namespace", options.namespace, "namespace to execute cloudflared connector")
+	rootCommand.PersistentFlags().StringVar(&options.cloudflaredProtocol, "cloudflared-protocol", options.cloudflaredProtocol, "cloudflared protocol")
 
 	err := rootCommand.Execute()
 	if err != nil {

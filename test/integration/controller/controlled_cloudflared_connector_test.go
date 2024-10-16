@@ -67,8 +67,10 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			},
 		}
 
+		protocol := "quic"
+
 		// Act
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns)
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Assert
@@ -101,8 +103,10 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			},
 		}
 
+		protocol := "quic"
+
 		// Create initial deployment
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns)
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Change environment variables
@@ -110,7 +114,7 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		os.Setenv("CLOUDFLARED_IMAGE", "cloudflare/cloudflared:2022.3.0")
 
 		// Act
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns)
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Assert
