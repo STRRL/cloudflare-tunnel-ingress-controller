@@ -112,6 +112,7 @@ func cloudflaredConnectDeploymentTemplating(token string, namespace string, repl
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": appName,
+					"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
 				},
 			},
 			Template: v1.PodTemplateSpec{
@@ -119,6 +120,7 @@ func cloudflaredConnectDeploymentTemplating(token string, namespace string, repl
 					Name: appName,
 					Labels: map[string]string{
 						"app": appName,
+						"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
 					},
 				},
 				Spec: v1.PodSpec{
