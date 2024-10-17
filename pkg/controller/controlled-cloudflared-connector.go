@@ -20,6 +20,7 @@ func CreateOrUpdateControlledCloudflared(
 	kubeClient client.Client,
 	tunnelClient cloudflarecontroller.TunnelClientInterface,
 	namespace string,
+	protocol string,
 ) error {
 	logger := log.FromContext(ctx)
 	list := appsv1.DeploymentList{}
@@ -62,7 +63,7 @@ func CreateOrUpdateControlledCloudflared(
 				return errors.Wrap(err, "fetch tunnel token")
 			}
 
-			updatedDeployment := cloudflaredConnectDeploymentTemplating(token, namespace, int32(desiredReplicas))
+			updatedDeployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, int32(desiredReplicas))
 			existingDeployment.Spec = updatedDeployment.Spec
 			err = kubeClient.Update(ctx, existingDeployment)
 			if err != nil {
@@ -84,7 +85,7 @@ func CreateOrUpdateControlledCloudflared(
 		return errors.Wrap(err, "invalid replica count")
 	}
 
-	deployment := cloudflaredConnectDeploymentTemplating(token, namespace, int32(replicas))
+	deployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, int32(replicas))
 	err = kubeClient.Create(ctx, deployment)
 	if err != nil {
 		return errors.Wrap(err, "create controlled-cloudflared-connector deployment")
@@ -93,7 +94,7 @@ func CreateOrUpdateControlledCloudflared(
 	return nil
 }
 
-func cloudflaredConnectDeploymentTemplating(token string, namespace string, replicas int32) *appsv1.Deployment {
+func cloudflaredConnectDeploymentTemplating(protocol string, token string, namespace string, replicas int32) *appsv1.Deployment {
 	appName := "controlled-cloudflared-connector"
 	image := os.Getenv("CLOUDFLARED_IMAGE")
 	pullPolicy := os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY")
@@ -131,6 +132,8 @@ func cloudflaredConnectDeploymentTemplating(token string, namespace string, repl
 							ImagePullPolicy: v1.PullPolicy(pullPolicy),
 							Command: []string{
 								"cloudflared",
+								"--protocol",
+								protocol,
 								"--no-autoupdate",
 								"tunnel",
 								"--metrics",

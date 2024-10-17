@@ -39,6 +39,7 @@ spec:
             - --cloudflare-account-id=$(CLOUDFLARE_ACCOUNT_ID)
             - --cloudflare-tunnel-name=$(CLOUDFLARE_TUNNEL_NAME)
             - --namespace=$(NAMESPACE)
+            - --cloudflared-protocol={{ .Values.cloudflared.protocol }}
           env:
             - name: CLOUDFLARE_API_TOKEN
               valueFrom:
