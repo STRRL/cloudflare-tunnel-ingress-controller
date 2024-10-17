@@ -14,7 +14,7 @@ spec:
       app.kubernetes.io/component: controlled-cloudflared
       {{- include "cloudflare-tunnel-ingress-controller.selectorLabels" . | nindent 6 }}
   endpoints:
-    - port: 44483
+    - port: metrics
       path: /metrics
       scheme: {{ .Values.cloudflaredServiceMonitor.scheme }}
       {{- if .Values.cloudflaredServiceMonitor.interval }}
