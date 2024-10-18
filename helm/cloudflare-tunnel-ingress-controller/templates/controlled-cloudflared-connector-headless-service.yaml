@@ -3,15 +3,20 @@ apiVersion: v1
 kind: Service
 metadata:
   name: controlled-cloudflared-connector-headless
+  labels:
+    app.kubernetes.io/component: controlled-cloudflared
+    {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
   annotations:
+    {{- if not .Values.cloudflaredServiceMonitor.create }}
     prometheus.io/scrape: "true"
     prometheus.io/port: "44483"
+    {{- end }}
 spec:
-    ports:
+  ports:
     - name: metrics
       port: 44483
       protocol: TCP
-    clusterIP: None
-    selector:
-        "app": "controlled-cloudflared-connector"
-        "strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector"
+  clusterIP: None
+  selector:
+    app: controlled-cloudflared-connector
+    strrl.dev/cloudflare-tunnel-ingress-controller: controlled-cloudflared-connector
