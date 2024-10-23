@@ -115,6 +115,10 @@ spec:
           env:
             - name: CLOUDFLARED_REPLICA_COUNT
               value: "1"
+            - name: CLOUDFLARED_IMAGE
+              value: "cloudflare/cloudflared:latest"
+            - name: CLOUDFLARED_IMAGE_PULL_POLICY
+              value: "IfNotPresent"
             - name: CLOUDFLARE_API_TOKEN
               valueFrom:
                 secretKeyRef:

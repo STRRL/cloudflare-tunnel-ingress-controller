@@ -96,8 +96,17 @@ func CreateOrUpdateControlledCloudflared(
 
 func cloudflaredConnectDeploymentTemplating(protocol string, token string, namespace string, replicas int32) *appsv1.Deployment {
 	appName := "controlled-cloudflared-connector"
+
+	// Use default values if environment variables are empty
 	image := os.Getenv("CLOUDFLARED_IMAGE")
+	if image == "" {
+		image = "cloudflare/cloudflared:latest"
+	}
+
 	pullPolicy := os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY")
+	if pullPolicy == "" {
+		pullPolicy = "IfNotPresent"
+	}
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
