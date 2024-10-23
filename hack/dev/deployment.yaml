@@ -113,6 +113,8 @@ spec:
             - --cloudflare-tunnel-name=$(CLOUDFLARE_TUNNEL_NAME)
             - --namespace=$(NAMESPACE)
           env:
+            - name: CLOUDFLARED_REPLICA_COUNT
+              value: "1"
             - name: CLOUDFLARE_API_TOKEN
               valueFrom:
                 secretKeyRef:

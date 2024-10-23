@@ -37,13 +37,13 @@ func CreateOrUpdateControlledCloudflared(
 	if len(list.Items) > 0 {
 		// Check if the existing deployment needs to be updated
 		existingDeployment := &list.Items[0]
-		desiredReplicas, err := strconv.ParseInt(os.Getenv("CLOUDFLARED_REPLICA_COUNT"), 10, 32)
+		desiredReplicas, err := getDesiredReplicas()
 		if err != nil {
-			return errors.Wrap(err, "invalid replica count")
+			return errors.Wrap(err, "get desired replicas")
 		}
 
 		needsUpdate := false
-		if *existingDeployment.Spec.Replicas != int32(desiredReplicas) {
+		if *existingDeployment.Spec.Replicas != desiredReplicas {
 			needsUpdate = true
 		}
 
@@ -63,7 +63,7 @@ func CreateOrUpdateControlledCloudflared(
 				return errors.Wrap(err, "fetch tunnel token")
 			}
 
-			updatedDeployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, int32(desiredReplicas))
+			updatedDeployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, desiredReplicas)
 			existingDeployment.Spec = updatedDeployment.Spec
 			err = kubeClient.Update(ctx, existingDeployment)
 			if err != nil {
@@ -80,12 +80,12 @@ func CreateOrUpdateControlledCloudflared(
 		return errors.Wrap(err, "fetch tunnel token")
 	}
 
-	replicas, err := strconv.ParseInt(os.Getenv("CLOUDFLARED_REPLICA_COUNT"), 10, 32)
+	replicas, err := getDesiredReplicas()
 	if err != nil {
-		return errors.Wrap(err, "invalid replica count")
+		return errors.Wrap(err, "get desired replicas")
 	}
 
-	deployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, int32(replicas))
+	deployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, replicas)
 	err = kubeClient.Create(ctx, deployment)
 	if err != nil {
 		return errors.Wrap(err, "create controlled-cloudflared-connector deployment")
@@ -149,4 +149,16 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 			},
 		},
 	}
+}
+
+func getDesiredReplicas() (int32, error) {
+	replicaCount := os.Getenv("CLOUDFLARED_REPLICA_COUNT")
+	if replicaCount == "" {
+		return 1, nil
+	}
+	replicas, err := strconv.ParseInt(replicaCount, 10, 32)
+	if err != nil {
+		return 0, errors.Wrap(err, "invalid replica count")
+	}
+	return int32(replicas), nil
 }
