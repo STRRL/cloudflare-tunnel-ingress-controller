@@ -40,7 +40,7 @@ func main() {
 		controllerClass:     "strrl.dev/cloudflare-tunnel-ingress-controller",
 		logLevel:            0,
 		namespace:           "default",
-		cloudflaredProtocol: "quic",
+		cloudflaredProtocol: "auto",
 	}
 
 	crlog.SetLogger(rootLogger.WithName("controller-runtime"))

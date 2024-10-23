@@ -79,7 +79,7 @@ cloudflared:
     pullPolicy: IfNotPresent
     tag: latest
   replicaCount: 1
-  protocol: quic
+  protocol: auto
 
 cloudflaredServiceMonitor:
   create: false
