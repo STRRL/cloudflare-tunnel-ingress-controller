@@ -80,3 +80,14 @@ cloudflared:
     tag: latest
   replicaCount: 1
   protocol: quic
+
+cloudflaredServiceMonitor:
+  create: false
+  jobLabel: ""
+  interval: ""
+  scrapeTimeout: ""
+  honorLabels: false
+  metricRelabelings: []
+  relabelings: []
+  labels: {}
+  scheme: http
