@@ -22,7 +22,7 @@ ingressClass:
 replicaCount: 1
 
 image:
-  repository: ghcr.io/strrl/cloudflare-tunnel-ingress-controller
+  repository: cr.strrl.dev/strrl/cloudflare-tunnel-ingress-controller
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
