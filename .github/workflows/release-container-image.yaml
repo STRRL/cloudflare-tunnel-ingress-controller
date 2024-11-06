@@ -13,21 +13,25 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       tags: ${{ steps.meta.outputs.tags }}
       labels: ${{ steps.meta.outputs.labels }}
+      owner: ${{ steps.lowercase.outputs.owner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Convert owner to lowercase
+        id: lowercase
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: |
-            ghcr.io/${{ github.repository_owner }}/cloudflare-tunnel-ingress-controller
+            ghcr.io/${{ steps.lowercase.outputs.owner }}/cloudflare-tunnel-ingress-controller
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=ref,event=branch,enable=${{ github.ref_name != 'main' }},suffix=-{{sha}},format=lowercase
+            type=ref,event=pr,prefix=pr-,suffix=-{{sha}},format=lowercase
+            type=semver,pattern={{version}},format=lowercase
+            type=semver,pattern={{major}}.{{minor}},format=lowercase
+            type=semver,pattern={{major}},format=lowercase
             type=sha
 
   build-amd64:
@@ -43,7 +47,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}
+          username: ${{ needs.metadata.outputs.owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push AMD64
         uses: docker/build-push-action@v5
@@ -51,7 +55,7 @@ jobs:
           file: image/cloudflare-tunnel-ingress-controller/Dockerfile
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ghcr.io/${{ github.repository_owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }}-amd64
+          tags: ghcr.io/${{ needs.metadata.outputs.owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }}-amd64
           labels: ${{ needs.metadata.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -60,7 +64,11 @@ jobs:
     needs: metadata
     permissions:
       packages: write
-    runs-on: orbstack-vm-arm64
+    runs-on: [
+      "self-hosted",
+      "linux",
+      "arm64",
+    ]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx
@@ -69,7 +77,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}
+          username: ${{ needs.metadata.outputs.owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push ARM64
         uses: docker/build-push-action@v5
@@ -77,7 +85,7 @@ jobs:
           file: image/cloudflare-tunnel-ingress-controller/Dockerfile
           platforms: linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ghcr.io/${{ github.repository_owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }}-arm64
+          tags: ghcr.io/${{ needs.metadata.outputs.owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }}-arm64
           labels: ${{ needs.metadata.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -92,19 +100,19 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}
+          username: ${{ needs.metadata.outputs.owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Create and push manifest
         run: |
-          docker buildx imagetools create -t ghcr.io/${{ github.repository_owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }} \
-            ghcr.io/${{ github.repository_owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }}-amd64 \
-            ghcr.io/${{ github.repository_owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }}-arm64
+          docker buildx imagetools create -t ghcr.io/${{ needs.metadata.outputs.owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }} \
+            ghcr.io/${{ needs.metadata.outputs.owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }}-amd64 \
+            ghcr.io/${{ needs.metadata.outputs.owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }}-arm64
 
           # Create additional tags from metadata
           for tag in $(echo "${{ needs.metadata.outputs.tags }}" | tr '\n' ' '); do
             if [[ $tag != *":${{ needs.metadata.outputs.version }}" ]]; then
               docker buildx imagetools create -t $tag \
-                ghcr.io/${{ github.repository_owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }}-amd64 \
-                ghcr.io/${{ github.repository_owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }}-arm64
+                ghcr.io/${{ needs.metadata.outputs.owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }}-amd64 \
+                ghcr.io/${{ needs.metadata.outputs.owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }}-arm64
             fi
           done
