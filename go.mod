@@ -5,7 +5,7 @@ go 1.22.0
 toolchain go1.22.2
 
 require (
-	github.com/cloudflare/cloudflare-go v0.108.0
+	github.com/cloudflare/cloudflare-go v0.109.0
 	github.com/go-logr/logr v1.4.2
 	github.com/go-logr/stdr v1.2.2
 	github.com/onsi/ginkgo/v2 v2.20.2
