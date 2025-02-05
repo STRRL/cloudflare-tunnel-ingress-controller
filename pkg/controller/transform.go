@@ -12,6 +12,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 )
 
 func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient client.Client, ingress networkingv1.Ingress) ([]exposure.Exposure, error) {
@@ -36,6 +37,18 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 
 		if backendProtocol, ok := getAnnotation(ingress.Annotations, AnnotationBackendProtocol); ok {
 			scheme = backendProtocol
+		}
+
+		var httpHostHeader *string
+
+		if header, ok := getAnnotation(ingress.Annotations, AnnotationHTTPHostHeader); ok {
+			httpHostHeader = ptr.To(header)
+		}
+
+		var originServerName *string
+
+		if name, ok := getAnnotation(ingress.Annotations, AnnotationOriginServerName); ok {
+			originServerName = ptr.To(name)
 		}
 
 		var proxySSLVerifyEnabled *bool
@@ -88,10 +101,10 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 			}
 
 			var supportedPathTypes = map[networkingv1.PathType]struct{}{
-				networkingv1.PathTypePrefix:              {},
+				networkingv1.PathTypePrefix:                 {},
 				networkingv1.PathTypeImplementationSpecific: {},
 			}
-			
+
 			if path.PathType == nil {
 				return nil, errors.Errorf("path type in ingress %s/%s is nil", ingress.GetNamespace(), ingress.GetName())
 			}
@@ -106,6 +119,8 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 				PathPrefix:            path.Path,
 				IsDeleted:             isDeleted,
 				ProxySSLVerifyEnabled: proxySSLVerifyEnabled,
+				HTTPHostHeader:        httpHostHeader,
+				OriginServerName:      originServerName,
 			})
 		}
 	}

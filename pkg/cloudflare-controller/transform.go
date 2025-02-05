@@ -20,8 +20,18 @@ func fromExposureToCloudflareIngress(ctx context.Context, exposure exposure.Expo
 		Service:  exposure.ServiceTarget,
 	}
 
+	if exposure.HTTPHostHeader != nil {
+		if result.OriginRequest == nil {
+			result.OriginRequest = &cloudflare.OriginRequestConfig{}
+		}
+		result.OriginRequest.HTTPHostHeader = exposure.HTTPHostHeader
+	}
+
 	if strings.HasPrefix(exposure.ServiceTarget, "https://") {
-		result.OriginRequest = &cloudflare.OriginRequestConfig{}
+		if result.OriginRequest == nil {
+			result.OriginRequest = &cloudflare.OriginRequestConfig{}
+		}
+		result.OriginRequest.OriginServerName = exposure.OriginServerName
 		if exposure.ProxySSLVerifyEnabled == nil {
 			result.OriginRequest.NoTLSVerify = boolPointer(true)
 		} else {

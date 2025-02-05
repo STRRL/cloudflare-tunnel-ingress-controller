@@ -12,4 +12,8 @@ type Exposure struct {
 	IsDeleted bool
 	// ProxySSLVerifyEnabled is the flag to indicate if the exposure should skip TLS verification.
 	ProxySSLVerifyEnabled *bool
+	// HTTPHostHeader is to set the HTTP Host header for the local webserver.
+	HTTPHostHeader *string
+	// OriginServerName is the hostname on the origin server certificate.
+	OriginServerName *string
 }
