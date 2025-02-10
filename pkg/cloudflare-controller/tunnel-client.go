@@ -2,6 +2,8 @@ package cloudflarecontroller
 
 import (
 	"context"
+	"slices"
+	"strings"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
@@ -63,6 +65,15 @@ func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures [
 		}
 		ingressRules = append(ingressRules, *ingress)
 	}
+
+	// sort the rules by hostnames first for prettiness, then by path length in descending order
+	// to ensure "precedence will be given first to the longest matching path".
+	slices.SortFunc(ingressRules, func(a, b cloudflare.UnvalidatedIngressRule) int {
+		if v := strings.Compare(strings.ToLower(a.Hostname), strings.ToLower(b.Hostname)); v != 0 {
+			return v
+		}
+		return len(b.Path) - len(a.Path)
+	})
 
 	// at last, append a default 404 service as default route
 	ingressRules = append(ingressRules, cloudflare.UnvalidatedIngressRule{
