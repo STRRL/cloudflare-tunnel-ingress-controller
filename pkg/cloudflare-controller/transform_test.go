@@ -7,6 +7,7 @@ import (
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
+	"k8s.io/utils/ptr"
 )
 
 func Test_fromExposureToCloudflareIngress(t *testing.T) {
@@ -68,6 +69,74 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 				OriginRequest: nil,
 			},
 			wantErr: false,
+		},
+		{
+			name: "contains http-host-header",
+			args: args{
+				ctx: context.Background(),
+				exposure: exposure.Exposure{
+					Hostname:       "ingress.example.com",
+					ServiceTarget:  "http://10.0.0.1:80",
+					PathPrefix:     "/prefix",
+					IsDeleted:      false,
+					HTTPHostHeader: ptr.To("foo.internal"),
+				},
+			},
+			want: &cloudflare.UnvalidatedIngressRule{
+				Hostname: "ingress.example.com",
+				Path:     "/prefix",
+				Service:  "http://10.0.0.1:80",
+				OriginRequest: &cloudflare.OriginRequestConfig{
+					HTTPHostHeader: ptr.To("foo.internal"),
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "https with origin-server-name",
+			args: args{
+				ctx: context.Background(),
+				exposure: exposure.Exposure{
+					Hostname:         "ingress.example.com",
+					ServiceTarget:    "https://10.0.0.1:443",
+					PathPrefix:       "/",
+					IsDeleted:        false,
+					OriginServerName: ptr.To("bar.internal"),
+				},
+			},
+			want: &cloudflare.UnvalidatedIngressRule{
+				Hostname: "ingress.example.com",
+				Path:     "/",
+				Service:  "https://10.0.0.1:443",
+				OriginRequest: &cloudflare.OriginRequestConfig{
+					NoTLSVerify:      boolPointer(true),
+					OriginServerName: ptr.To("bar.internal"),
+				},
+			},
+		},
+		{
+			name: "https with different http-host-header and origin-server-name",
+			args: args{
+				ctx: context.Background(),
+				exposure: exposure.Exposure{
+					Hostname:         "ingress.example.com",
+					ServiceTarget:    "https://10.0.0.1:443",
+					PathPrefix:       "/",
+					IsDeleted:        false,
+					HTTPHostHeader:   ptr.To("foo.internal"),
+					OriginServerName: ptr.To("bar.internal"),
+				},
+			},
+			want: &cloudflare.UnvalidatedIngressRule{
+				Hostname: "ingress.example.com",
+				Path:     "/",
+				Service:  "https://10.0.0.1:443",
+				OriginRequest: &cloudflare.OriginRequestConfig{
+					NoTLSVerify:      boolPointer(true),
+					HTTPHostHeader:   ptr.To("foo.internal"),
+					OriginServerName: ptr.To("bar.internal"),
+				},
+			},
 		}, {
 			name: "https should enable no-tls-verify by default",
 			args: args{
