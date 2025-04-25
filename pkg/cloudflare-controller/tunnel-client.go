@@ -149,7 +149,7 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 		return errors.Wrapf(err, "list TXT records for zone %s", zone.Name)
 	}
 
-	toCreate, toUpdate, toDelete, err := syncDNSRecord(exposures, cnameDnsRecords, txtDnsRecords, t.tunnelId, t.tunnelName)
+	toCreate, toUpdate, toDelete, err := syncDNSRecord(t.logger, exposures, cnameDnsRecords, txtDnsRecords, t.tunnelId, t.tunnelName)
 	if err != nil {
 		return errors.Wrap(err, "sync DNS records")
 	}

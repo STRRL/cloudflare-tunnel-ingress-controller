@@ -6,6 +6,7 @@ import (
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
+	"github.com/go-logr/logr"
 )
 
 const WhateverTunnelId = "whatever"
@@ -13,6 +14,7 @@ const WhateverTunnelDomain = "whatever.cfargotunnel.com"
 
 func Test_syncDNSRecord(t *testing.T) {
 	type args struct {
+		logger              logr.Logger
 		exposures           []exposure.Exposure
 		existedCNAMERecords []cloudflare.DNSRecord
 		existedTXTRecords   []cloudflare.DNSRecord
@@ -30,6 +32,7 @@ func Test_syncDNSRecord(t *testing.T) {
 		{
 			name: "noop",
 			args: args{
+				logger:              logr.Discard(),
 				exposures:           nil,
 				existedCNAMERecords: nil,
 				existedTXTRecords:   nil,
@@ -43,6 +46,7 @@ func Test_syncDNSRecord(t *testing.T) {
 		{
 			name: "create new exposure",
 			args: args{
+				logger: logr.Discard(),
 				exposures: []exposure.Exposure{
 					{
 						Hostname:      "test.example.com",
@@ -75,6 +79,7 @@ func Test_syncDNSRecord(t *testing.T) {
 		{
 			name: "ignore deleted exposure",
 			args: args{
+				logger: logr.Discard(),
 				exposures: []exposure.Exposure{
 					{
 						Hostname:      "test.example.com",
@@ -113,6 +118,7 @@ func Test_syncDNSRecord(t *testing.T) {
 		{
 			name: "only delete managed record",
 			args: args{
+				logger:    logr.Discard(),
 				exposures: nil,
 				existedCNAMERecords: []cloudflare.DNSRecord{
 					{
@@ -159,6 +165,7 @@ func Test_syncDNSRecord(t *testing.T) {
 		{
 			name: "update existed exposure, override existed CNAME record, make it managed by this controller",
 			args: args{
+				logger: logr.Discard(),
 				exposures: []exposure.Exposure{
 					{
 						Hostname:      "test.example.com",
@@ -202,6 +209,7 @@ func Test_syncDNSRecord(t *testing.T) {
 		{
 			name: "delete unused exposure",
 			args: args{
+				logger: logr.Discard(),
 				exposures: []exposure.Exposure{
 					{
 						Hostname:      "test.example.com",
@@ -250,6 +258,7 @@ func Test_syncDNSRecord(t *testing.T) {
 		{
 			name: "always update existed record",
 			args: args{
+				logger: logr.Discard(),
 				exposures: []exposure.Exposure{
 					{
 						Hostname:      "test.example.com",
@@ -302,7 +311,7 @@ func Test_syncDNSRecord(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotCreate, gotUpdate, gotDelete, err := syncDNSRecord(tt.args.exposures, tt.args.existedCNAMERecords, tt.args.existedTXTRecords, tt.args.tunnelId, tt.args.tunnelName)
+			gotCreate, gotUpdate, gotDelete, err := syncDNSRecord(tt.args.logger, tt.args.exposures, tt.args.existedCNAMERecords, tt.args.existedTXTRecords, tt.args.tunnelId, tt.args.tunnelName)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("syncDNSRecord() error = %v, wantErr %v", err, tt.wantErr)
 				return

@@ -6,6 +6,7 @@ import (
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
+	"github.com/go-logr/logr"
 )
 
 const ManagedRecordTXTContentFormat = "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [%s]"
@@ -49,6 +50,7 @@ type DNSOperationDelete struct {
 // this controller will only delete the CNAME record,
 // and only when the TXT record is deleted, it will delete the CNAME record.
 func syncDNSRecord(
+	logger logr.Logger,
 	exposures []exposure.Exposure,
 	existedCNAMERecords []cloudflare.DNSRecord,
 	existedTXTRecords []cloudflare.DNSRecord,
@@ -71,6 +73,19 @@ func syncDNSRecord(
 		containsCNAME, oldCNAME := dnsRecordsContainsHostname(existedCNAMERecords, item.Hostname)
 
 		if containsCNAME {
+			// Check if the record is managed by this controller
+			hasTXTRecord := false
+			for _, txtRecord := range existedTXTRecords {
+				if txtRecord.Name == fmt.Sprintf("%s.%s", ManagedRecordTXTPrefix, item.Hostname) {
+					hasTXTRecord = true
+					break
+				}
+			}
+			if !hasTXTRecord {
+				logger.Info("WARNING, the origin DNS record is not managed by this controller, it would be changed to managed record",
+					"origin-record", oldCNAME,
+				)
+			}
 			toUpdate = append(toUpdate, DNSOperationUpdate{
 				OldRecord: oldCNAME,
 				Type:      "CNAME",
