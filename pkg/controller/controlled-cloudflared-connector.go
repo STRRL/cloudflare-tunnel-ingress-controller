@@ -9,8 +9,10 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -63,7 +65,7 @@ func CreateOrUpdateControlledCloudflared(
 				return errors.Wrap(err, "fetch tunnel token")
 			}
 
-			updatedDeployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, desiredReplicas)
+			updatedDeployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, desiredReplicas, nil)
 			existingDeployment.Spec = updatedDeployment.Spec
 			err = kubeClient.Update(ctx, existingDeployment)
 			if err != nil {
@@ -84,8 +86,13 @@ func CreateOrUpdateControlledCloudflared(
 	if err != nil {
 		return errors.Wrap(err, "get desired replicas")
 	}
+	// this added as ownerreference to the ingress class
+	ingClass := &networkingv1.IngressClass{}
+	if err := kubeClient.Get(ctx, client.ObjectKey{Name: "cloudflare-tunnel"}, ingClass); err != nil {
+		return errors.Wrap(err, "get IngressClass cloudflare-tunnel")
+	}
 
-	deployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, replicas)
+	deployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, replicas, ingClass)
 	err = kubeClient.Create(ctx, deployment)
 	if err != nil {
 		return errors.Wrap(err, "create controlled-cloudflared-connector deployment")
@@ -94,7 +101,7 @@ func CreateOrUpdateControlledCloudflared(
 	return nil
 }
 
-func cloudflaredConnectDeploymentTemplating(protocol string, token string, namespace string, replicas int32) *appsv1.Deployment {
+func cloudflaredConnectDeploymentTemplating(protocol string, token string, namespace string, replicas int32, ingClass *networkingv1.IngressClass) *appsv1.Deployment {
 	appName := "controlled-cloudflared-connector"
 
 	// Use default values if environment variables are empty
@@ -108,7 +115,7 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 		pullPolicy = "IfNotPresent"
 	}
 
-	return &appsv1.Deployment{
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      appName,
 			Namespace: namespace,
@@ -158,6 +165,16 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 			},
 		},
 	}
+	if ingClass != nil {
+		deployment.OwnerReferences = []metav1.OwnerReference{{
+			APIVersion: "networking.k8s.io/v1",
+			Kind:       "IngressClass",
+			Name:       ingClass.Name,
+			UID:        ingClass.UID,
+			Controller: ptr.To(true),
+		}}
+	}
+	return deployment
 }
 
 func getDesiredReplicas() (int32, error) {
