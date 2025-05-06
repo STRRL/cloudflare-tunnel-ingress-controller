@@ -80,6 +80,37 @@ There is also an awesome project which could integrate with Cloudflare Tunnel as
 ## Contributing
 
 Contributions are welcome! If you find a bug or have a feature request, please open an issue or submit a pull request.
+To speed up local development and testing, you can use [Act](https://github.com/nektos/act) to run GitHub Actions workflows locally. For example, to run unit tests using the same workflow as CI:
+
+```bash
+act -W .github/workflows/unit-test.yaml
+```
+
+You can view all available workflows [here](https://github.com/STRRL/cloudflare-tunnel-ingress-controller/tree/master/.github/workflows).
+
+### Local Development with Skaffold
+
+To run the project locally, Skaffold is integrated into the Makefile. First, install Skaffold by following the instructions at [skaffold.dev](https://skaffold.dev).
+
+Then, start the development environment with:
+
+```bash
+skaffold dev
+```
+
+> **Important:** The controller pod expects a Kubernetes `Secret` named `cloudflare-api` with credentials to authenticate with Cloudflare.
+> If this secret is not present, the pod will fail with:
+> `CreateContainerConfigError: secret "cloudflare-api" not found`.
+
+You can create the required secret manually after running `skaffold dev`:
+
+```bash
+kubectl create secret generic cloudflare-api \
+  -n cloudflare-tunnel-ingress-controller-dev \
+  --from-literal=api-token='your_api_token' \
+  --from-literal=cloudflare-account-id='your_account_id' \
+  --from-literal=cloudflare-tunnel-name='your_tunnel_name'
+```
 
 ## License
 
