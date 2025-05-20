@@ -29,6 +29,7 @@ type rootCmdFlags struct {
 	cloudflareTunnelName string
 	namespace            string
 	cloudflaredProtocol  string
+	cloudflaredExtraArgs string
 }
 
 func main() {
@@ -41,6 +42,7 @@ func main() {
 		logLevel:            0,
 		namespace:           "default",
 		cloudflaredProtocol: "auto",
+		cloudflaredExtraArgs: os.Getenv("CONTROLLER_CLOUDFLARED_EXTRA_ARGS"),
 	}
 
 	crlog.SetLogger(rootLogger.WithName("controller-runtime"))
@@ -102,7 +104,7 @@ func main() {
 					case <-done:
 						return
 					case _ = <-ticker.C:
-						err := controller.CreateOrUpdateControlledCloudflared(ctx, mgr.GetClient(), tunnelClient, options.namespace, options.cloudflaredProtocol)
+						err := controller.CreateOrUpdateControlledCloudflared(ctx, mgr.GetClient(), tunnelClient, options.namespace, options.cloudflaredProtocol, options.cloudflaredExtraArgs)
 						if err != nil {
 							logger.WithName("controlled-cloudflared").Error(err, "create controlled cloudflared")
 						}
@@ -123,6 +125,7 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.cloudflareTunnelName, "cloudflare-tunnel-name", options.cloudflareTunnelName, "cloudflare tunnel name")
 	rootCommand.PersistentFlags().StringVar(&options.namespace, "namespace", options.namespace, "namespace to execute cloudflared connector")
 	rootCommand.PersistentFlags().StringVar(&options.cloudflaredProtocol, "cloudflared-protocol", options.cloudflaredProtocol, "cloudflared protocol")
+	rootCommand.PersistentFlags().StringVar(&options.cloudflaredExtraArgs, "cloudflared-extra-args", options.cloudflaredExtraArgs, "Comma-separated extra arguments for cloudflared")
 
 	err := rootCommand.Execute()
 	if err != nil {

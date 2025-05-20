@@ -81,6 +81,8 @@ spec:
               value: {{ .Values.cloudflared.image.pullPolicy | quote }}
             - name: CLOUDFLARED_REPLICA_COUNT
               value: {{ .Values.cloudflared.replicaCount | quote }}
+            - name: CONTROLLER_CLOUDFLARED_EXTRA_ARGS
+              value: {{ .Values.cloudflared.extraArgs | join "," | quote }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}

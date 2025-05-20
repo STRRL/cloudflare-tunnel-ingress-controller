@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"strconv"
+	"strings"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/pkg/errors"
@@ -21,6 +22,7 @@ func CreateOrUpdateControlledCloudflared(
 	tunnelClient cloudflarecontroller.TunnelClientInterface,
 	namespace string,
 	protocol string,
+	cloudflaredExtraArgs string,
 ) error {
 	logger := log.FromContext(ctx)
 	list := appsv1.DeploymentList{}
@@ -63,7 +65,7 @@ func CreateOrUpdateControlledCloudflared(
 				return errors.Wrap(err, "fetch tunnel token")
 			}
 
-			updatedDeployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, desiredReplicas)
+			updatedDeployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, desiredReplicas, cloudflaredExtraArgs)
 			existingDeployment.Spec = updatedDeployment.Spec
 			err = kubeClient.Update(ctx, existingDeployment)
 			if err != nil {
@@ -85,7 +87,7 @@ func CreateOrUpdateControlledCloudflared(
 		return errors.Wrap(err, "get desired replicas")
 	}
 
-	deployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, replicas)
+	deployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, replicas, cloudflaredExtraArgs)
 	err = kubeClient.Create(ctx, deployment)
 	if err != nil {
 		return errors.Wrap(err, "create controlled-cloudflared-connector deployment")
@@ -94,7 +96,7 @@ func CreateOrUpdateControlledCloudflared(
 	return nil
 }
 
-func cloudflaredConnectDeploymentTemplating(protocol string, token string, namespace string, replicas int32) *appsv1.Deployment {
+func cloudflaredConnectDeploymentTemplating(protocol string, token string, namespace string, replicas int32, cloudflaredExtraArgs string) *appsv1.Deployment {
 	appName := "controlled-cloudflared-connector"
 
 	// Use default values if environment variables are empty
@@ -106,6 +108,28 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 	pullPolicy := os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY")
 	if pullPolicy == "" {
 		pullPolicy = "IfNotPresent"
+	}
+
+	command := []string{
+		"cloudflared",
+		"--protocol",
+		protocol,
+		"--no-autoupdate",
+		"tunnel",
+		"--metrics",
+		"0.0.0.0:44483",
+		"run",
+		"--token",
+		token,
+	}
+	if cloudflaredExtraArgs != "" {
+		extraArgs := strings.Split(cloudflaredExtraArgs, ",")
+		for _, arg := range extraArgs {
+			trimmedArg := strings.TrimSpace(arg)
+			if trimmedArg != "" { // Avoid adding empty strings if there are spaces around commas
+				command = append(command, trimmedArg)
+			}
+		}
 	}
 
 	return &appsv1.Deployment{
@@ -139,18 +163,7 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 							Name:            appName,
 							Image:           image,
 							ImagePullPolicy: v1.PullPolicy(pullPolicy),
-							Command: []string{
-								"cloudflared",
-								"--protocol",
-								protocol,
-								"--no-autoupdate",
-								"tunnel",
-								"--metrics",
-								"0.0.0.0:44483",
-								"run",
-								"--token",
-								token,
-							},
+							Command:         command,
 						},
 					},
 					RestartPolicy: v1.RestartPolicyAlways,

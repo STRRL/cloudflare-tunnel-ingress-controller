@@ -80,6 +80,7 @@ cloudflared:
     tag: latest
   replicaCount: 1
   protocol: auto
+  extraArgs: []
 
 cloudflaredServiceMonitor:
   create: false
