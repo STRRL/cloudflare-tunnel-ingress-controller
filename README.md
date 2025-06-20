@@ -114,13 +114,21 @@ There are two ways to provide the required secret:
      --from-literal=cloudflare-tunnel-name='your_tunnel_name'
    ```
 
-2. **(Recommended for local development)** Copy the template [`hack/dev/cloudflare-api.example.yaml`](./hack/dev/cloudflare-api.example.yaml) to `hack/dev/cloudflare-api.yaml` and fill in your credentials. The file `hack/dev/cloudflare-api.yaml` is listed in `.gitignore`, so your secrets won't be committed. When you run `skaffold dev`, this secret will be applied automatically. There is an existant file called cloudflare-api.example.yaml as a example of a secret, just copy it and rename with cloudflare-api.yaml and fill it with your data, that will be the secret use by skaffold.
+2. **(Recommended for local development)** Copy the example file [`hack/dev/cloudflare-api.example.yaml`](./hack/dev/cloudflare-api.example.yaml) to `hack/dev/cloudflare-api.yaml` and fill in your own credentials:
+
+```bash
+cp hack/dev/cloudflare-api.example.yaml hack/dev/cloudflare-api.yaml
+```
+
+This file is included in `.gitignore`, so your secrets will not be committed to version control.
+When you run `skaffold dev`, the secret defined in `cloudflare-api.yaml` will be automatically applied to your cluster.
 
    ```yaml
    apiVersion: v1
    kind: Secret
    metadata:
-     name: cloudflare-api
+    name: cloudflare-api
+    namespace: cloudflare-tunnel-ingress-controller-dev
    stringData:
      api-token: "<your_api_token>"
      cloudflare-account-id: "<your_account_id>"
