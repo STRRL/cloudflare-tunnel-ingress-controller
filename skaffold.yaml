@@ -15,6 +15,6 @@ build:
 manifests:
   rawYaml:
     - hack/dev/ns.yaml
-    - hack/dev/cloudflare-api.yaml
+    - hack/dev/cloudflare-api-example.yaml
     - hack/dev/deployment.yaml
     - hack/dev/ingress-class.yaml
