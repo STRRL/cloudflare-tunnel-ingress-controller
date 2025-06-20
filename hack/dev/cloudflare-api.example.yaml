@@ -3,6 +3,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: cloudflare-api
+  namespace: cloudflare-tunnel-ingress-controller-dev
 stringData:
   api-token: ""
   cloudflare-account-id: ""
