@@ -40,6 +40,9 @@ spec:
             - --cloudflare-tunnel-name=$(CLOUDFLARE_TUNNEL_NAME)
             - --namespace=$(NAMESPACE)
             - --cloudflared-protocol={{ .Values.cloudflared.protocol }}
+            {{- range .Values.cloudflared.extraArgs }}
+            - --cloudflared-extra-args={{ . }}
+            {{- end }}
           env:
             - name: CLOUDFLARE_API_TOKEN
               valueFrom:
