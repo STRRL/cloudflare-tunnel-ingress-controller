@@ -48,6 +48,12 @@ func CreateOrUpdateControlledCloudflared(
 			needsUpdate = true
 		}
 
+		// Get token once for all checks
+		token, err := tunnelClient.FetchTunnelToken(ctx)
+		if err != nil {
+			return errors.Wrap(err, "fetch tunnel token")
+		}
+
 		if len(existingDeployment.Spec.Template.Spec.Containers) > 0 {
 			container := &existingDeployment.Spec.Template.Spec.Containers[0]
 			if container.Image != os.Getenv("CLOUDFLARED_IMAGE") {
@@ -56,13 +62,15 @@ func CreateOrUpdateControlledCloudflared(
 			if string(container.ImagePullPolicy) != os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY") {
 				needsUpdate = true
 			}
+			
+			// Check if command arguments have changed
+			desiredCommand := buildCloudflaredCommand(protocol, token, extraArgs)
+			if !slicesEqual(container.Command, desiredCommand) {
+				needsUpdate = true
+			}
 		}
 
 		if needsUpdate {
-			token, err := tunnelClient.FetchTunnelToken(ctx)
-			if err != nil {
-				return errors.Wrap(err, "fetch tunnel token")
-			}
 
 			updatedDeployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, desiredReplicas, extraArgs)
 			existingDeployment.Spec = updatedDeployment.Spec
@@ -180,4 +188,16 @@ func buildCloudflaredCommand(protocol string, token string, extraArgs []string) 
 	command = append(command, "--metrics", "0.0.0.0:44483", "run", "--token", token)
 	
 	return command
+}
+
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, v := range a {
+		if v != b[i] {
+			return false
+		}
+	}
+	return true
 }
