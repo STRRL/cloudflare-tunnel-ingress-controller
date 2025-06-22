@@ -70,7 +70,7 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		protocol := "quic"
 
 		// Act
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol)
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
 		Expect(err).NotTo(HaveOccurred())
 
 		// Assert
@@ -106,7 +106,7 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		protocol := "quic"
 
 		// Create initial deployment
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol)
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
 		Expect(err).NotTo(HaveOccurred())
 
 		// Change environment variables
@@ -114,7 +114,7 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		os.Setenv("CLOUDFLARED_IMAGE", "cloudflare/cloudflared:2022.3.0")
 
 		// Act
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol)
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
 		Expect(err).NotTo(HaveOccurred())
 
 		// Assert
@@ -127,5 +127,43 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 
 		Expect(*deployment.Spec.Replicas).To(Equal(int32(3)))
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal("cloudflare/cloudflared:2022.3.0"))
+	})
+
+	It("should include extra args in cloudflared command", func() {
+		// Prepare
+		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
+		ns, err := namespaceFixtures.Start(ctx)
+		Expect(err).NotTo(HaveOccurred())
+
+		defer func() {
+			err := namespaceFixtures.Stop(ctx)
+			Expect(err).NotTo(HaveOccurred())
+		}()
+
+		mockTunnelClient := &MockTunnelClient{
+			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
+				return "mock-token", nil
+			},
+		}
+
+		protocol := "quic"
+		extraArgs := []string{"--post-quantum", "--edge-ip-version", "4"}
+
+		// Act
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, extraArgs)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Assert
+		deployment := &appsv1.Deployment{}
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-connector",
+		}, deployment)
+		Expect(err).NotTo(HaveOccurred())
+
+		command := deployment.Spec.Template.Spec.Containers[0].Command
+		Expect(command).To(ContainElement("--post-quantum"))
+		Expect(command).To(ContainElement("--edge-ip-version"))
+		Expect(command).To(ContainElement("4"))
 	})
 })
