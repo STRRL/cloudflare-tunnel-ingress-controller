@@ -169,17 +169,15 @@ func buildCloudflaredCommand(protocol string, token string, extraArgs []string) 
 		protocol,
 		"--no-autoupdate",
 		"tunnel",
-		"--metrics",
-		"0.0.0.0:44483",
-		"run",
-		"--token",
-		token,
 	}
 	
-	// Append extra arguments if provided
+	// Add all extra arguments between "tunnel" and "run"
 	if len(extraArgs) > 0 {
 		command = append(command, extraArgs...)
 	}
+	
+	// Add metrics, run subcommand and token
+	command = append(command, "--metrics", "0.0.0.0:44483", "run", "--token", token)
 	
 	return command
 }
