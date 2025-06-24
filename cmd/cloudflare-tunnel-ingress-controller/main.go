@@ -22,14 +22,14 @@ type rootCmdFlags struct {
 	// for annotation on Ingress
 	ingressClass string
 	// for IngressClass.spec.controller
-	controllerClass       string
-	logLevel              int
-	cloudflareAPIToken    string
-	cloudflareAccountId   string
-	cloudflareTunnelName  string
-	namespace             string
-	cloudflaredProtocol   string
-	cloudflaredExtraArgs  []string
+	controllerClass      string
+	logLevel             int
+	cloudflareAPIToken   string
+	cloudflareAccountId  string
+	cloudflareTunnelName string
+	namespace            string
+	cloudflaredProtocol  string
+	cloudflaredExtraArgs []string
 }
 
 func main() {
