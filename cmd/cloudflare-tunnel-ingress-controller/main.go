@@ -22,13 +22,14 @@ type rootCmdFlags struct {
 	// for annotation on Ingress
 	ingressClass string
 	// for IngressClass.spec.controller
-	controllerClass      string
-	logLevel             int
-	cloudflareAPIToken   string
-	cloudflareAccountId  string
-	cloudflareTunnelName string
-	namespace            string
-	cloudflaredProtocol  string
+	controllerClass       string
+	logLevel              int
+	cloudflareAPIToken    string
+	cloudflareAccountId   string
+	cloudflareTunnelName  string
+	namespace             string
+	cloudflaredProtocol   string
+	cloudflaredExtraArgs  []string
 }
 
 func main() {
@@ -102,7 +103,7 @@ func main() {
 					case <-done:
 						return
 					case _ = <-ticker.C:
-						err := controller.CreateOrUpdateControlledCloudflared(ctx, mgr.GetClient(), tunnelClient, options.namespace, options.cloudflaredProtocol)
+						err := controller.CreateOrUpdateControlledCloudflared(ctx, mgr.GetClient(), tunnelClient, options.namespace, options.cloudflaredProtocol, options.cloudflaredExtraArgs)
 						if err != nil {
 							logger.WithName("controlled-cloudflared").Error(err, "create controlled cloudflared")
 						}
@@ -123,6 +124,7 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.cloudflareTunnelName, "cloudflare-tunnel-name", options.cloudflareTunnelName, "cloudflare tunnel name")
 	rootCommand.PersistentFlags().StringVar(&options.namespace, "namespace", options.namespace, "namespace to execute cloudflared connector")
 	rootCommand.PersistentFlags().StringVar(&options.cloudflaredProtocol, "cloudflared-protocol", options.cloudflaredProtocol, "cloudflared protocol")
+	rootCommand.PersistentFlags().StringSliceVar(&options.cloudflaredExtraArgs, "cloudflared-extra-args", options.cloudflaredExtraArgs, "extra arguments to pass to cloudflared")
 
 	err := rootCommand.Execute()
 	if err != nil {

@@ -80,6 +80,9 @@ cloudflared:
     tag: latest
   replicaCount: 1
   protocol: auto
+  # Extra arguments to pass to cloudflared command
+  # Example: ["--post-quantum", "--edge-ip-version", "4"]
+  extraArgs: []
 
 cloudflaredServiceMonitor:
   create: false
