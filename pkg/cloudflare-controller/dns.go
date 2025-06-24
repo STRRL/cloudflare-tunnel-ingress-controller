@@ -119,11 +119,13 @@ func syncDNSRecord(
 	for _, cnameRecord := range existedCNAMERecords {
 		containsCNAME, _ := exposureContainsHostname(effectiveExposures, cnameRecord.Name)
 		if !containsCNAME {
-			// Check if there's a corresponding TXT record
+			// Check if there's a corresponding TXT record managed by this tunnel
 			var targetTXTRecord *cloudflare.DNSRecord
+			expectedTXTContent := fmt.Sprintf(ManagedRecordTXTContentFormat, tunnelName)
 			for _, txtRecord := range existedTXTRecords {
 				txtRecord := txtRecord
-				if txtRecord.Name == fmt.Sprintf("%s.%s", ManagedRecordTXTPrefix, cnameRecord.Name) {
+				if txtRecord.Name == fmt.Sprintf("%s.%s", ManagedRecordTXTPrefix, cnameRecord.Name) &&
+					txtRecord.Content == expectedTXTContent {
 					targetTXTRecord = &txtRecord
 					break
 				}

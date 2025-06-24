@@ -256,6 +256,33 @@ func Test_syncDNSRecord(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "do not delete CNAME record managed by different tunnel",
+			args: args{
+				logger:    logr.Discard(),
+				exposures: nil,
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: "another-tunnel.cfargotunnel.com",
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [different-tunnel]",
+					},
+				},
+				tunnelId:   "current-tunnel-id",
+				tunnelName: "current-tunnel",
+			},
+			wantCreate: nil,
+			wantUpdate: nil,
+			wantDelete: nil, // Should not delete because TXT content doesn't match current tunnel
+			wantErr:    false,
+		},
+		{
 			name: "always update existed record",
 			args: args{
 				logger: logr.Discard(),
