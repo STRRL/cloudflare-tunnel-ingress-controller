@@ -35,6 +35,16 @@ make unit-test
 # Run integration tests (requires setup-envtest)
 make integration-test
 
+# Run E2E tests (requires minikube and Cloudflare credentials)
+make e2e-test          # Setup environment + run tests
+make e2e-test-full     # Setup + run + cleanup
+make e2e-setup         # Setup environment only  
+make e2e-run           # Run tests only (assumes setup done)
+make e2e-cleanup       # Cleanup environment only
+
+# Run all tests
+make test-all
+
 # Build Docker image
 make image
 
@@ -94,6 +104,39 @@ Located in `pkg/` directories alongside source files (e.g., `dns_test.go`, `tran
 
 ### Integration Tests
 Located in `test/integration/` using Ginkgo/Gomega framework with envtest for Kubernetes API simulation
+
+### E2E Tests
+Located in `test/e2e/` for end-to-end testing with real Cloudflare APIs and minikube. These tests validate the complete workflow from Kubernetes Ingress creation to real domain accessibility.
+
+#### E2E Test Setup
+1. **Prerequisites**: Install `minikube`, `helm`, and `kubectl`
+2. **Configuration**: Copy `test/e2e/.env.example` to `test/e2e/.env` and configure:
+   - `CLOUDFLARE_API_TOKEN`: API token with Zone:Zone:Read, Zone:DNS:Edit, Account:Cloudflare Tunnel:Edit permissions
+   - `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare account ID
+   - `CLOUDFLARE_TUNNEL_NAME`: Test tunnel name (will be created if doesn't exist)
+   - `CLOUDFLARE_TEST_DOMAIN_SUFFIX`: Domain suffix for test hostnames (e.g., `test.yourdomain.com`)
+   - `E2E_TESTS_ENABLED=true`: Enable E2E tests
+3. **Run Tests**:
+   - `make e2e-test-full`: Complete workflow (setup + test + cleanup)
+   - `make e2e-test`: Setup + test (leaves environment for debugging)
+   - `make e2e-setup`: Setup environment only
+   - `make e2e-run`: Run tests only (assumes setup done)
+   - `make e2e-cleanup`: Cleanup environment only
+
+#### E2E Test Environment
+The E2E setup automatically:
+- **Starts minikube** if not running
+- **Builds controller image** with `:dev` tag
+- **Loads image** into minikube cluster
+- **Deploys controller** via Helm with test configuration
+- **Creates credentials** secret for Cloudflare API
+- **Waits for controller** to be ready
+
+#### E2E Test Requirements
+- **minikube, helm, kubectl** installed
+- **Real Cloudflare account** with API credentials
+- **Domain ownership** for the test domain suffix
+- **Docker** for building controller image
 
 ### Test Environment Setup
 Integration tests use `setup-envtest` to download and configure a local Kubernetes API server for testing. The `hack/install-setup-envtest.sh` script automatically installs `setup-envtest` if not present. Tests use Ginkgo/Gomega with controller-runtime's envtest framework.
