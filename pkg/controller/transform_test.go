@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestGetHostFromService(t *testing.T) {
@@ -14,17 +15,25 @@ func TestGetHostFromService(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "cluster_ip",
+			name: "cluster_ip_service",
 			service: &v1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-service",
+					Namespace: "default",
+				},
 				Spec: v1.ServiceSpec{
 					ClusterIP: "1.1.1.1",
 				},
 			},
-			want: "1.1.1.1",
+			want: "my-service.default.svc.cluster.local",
 		},
 		{
 			name: "headless",
 			service: &v1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "headless-service",
+					Namespace: "default",
+				},
 				Spec: v1.ServiceSpec{
 					ClusterIP: "None",
 				},
@@ -34,18 +43,29 @@ func TestGetHostFromService(t *testing.T) {
 		{
 			name: "external_name",
 			service: &v1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "external-service",
+					Namespace: "default",
+				},
 				Spec: v1.ServiceSpec{
+					Type:         v1.ServiceTypeExternalName,
 					ExternalName: "example.default.svc.cluster.local",
 				},
 			},
 			want: "example.default.svc.cluster.local",
 		},
 		{
-			name: "empty",
+			name: "different_namespace",
 			service: &v1.Service{
-				Spec: v1.ServiceSpec{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "app-service",
+					Namespace: "production",
+				},
+				Spec: v1.ServiceSpec{
+					ClusterIP: "10.0.0.1",
+				},
 			},
-			wantErr: true,
+			want: "app-service.production.svc.cluster.local",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

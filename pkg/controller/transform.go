@@ -128,15 +128,15 @@ func getHostFromService(service *v1.Service) (string, error) {
 		return "", errors.Errorf("service %s has None for cluster ip, headless service is not supported", client.ObjectKeyFromObject(service))
 	}
 
-	if service.Spec.ClusterIP != "" {
-		return service.Spec.ClusterIP, nil
+	if service.Spec.Type == v1.ServiceTypeExternalName {
+		if service.Spec.ExternalName != "" {
+			return service.Spec.ExternalName, nil
+		}
 	}
 
-	if service.Spec.ExternalName != "" {
-		return service.Spec.ExternalName, nil
-	}
-
-	return "", errors.Errorf("service %s has no cluster ip nor external name", client.ObjectKeyFromObject(service))
+	// Use FQDN service name instead of cluster IP for better stability
+	// Format: <service-name>.<namespace>.svc.cluster.local
+	return fmt.Sprintf("%s.%s.svc.cluster.local", service.Name, service.Namespace), nil
 }
 
 func getPortWithName(ports []v1.ServicePort, portName string) (bool, int32) {
