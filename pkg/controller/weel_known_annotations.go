@@ -13,3 +13,9 @@ const AnnotationHTTPHostHeader = "cloudflare-tunnel-ingress-controller.strrl.dev
 
 // AnnotationOriginServerName is the hostname on the origin server certificate.
 const AnnotationOriginServerName = "cloudflare-tunnel-ingress-controller.strrl.dev/origin-server-name"
+
+// AnnotationAccessApplicationName is the name of the Access application to create.
+const AnnotationAccessApplicationName = "cloudflare-tunnel-ingress-controller.strrl.dev/access-application-name"
+
+// AnnotationAccessPolicyAllowedEmails is a comma-separated list of email addresses to allow access to the application.
+const AnnotationAccessPolicyAllowedEmails = "cloudflare-tunnel-ingress-controller.strrl.dev/access-policy-allowed-emails"

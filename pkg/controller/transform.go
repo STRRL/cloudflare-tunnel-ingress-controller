@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -14,6 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 )
+
+var DefaultAccessPolicyAllowedEmails = []string{"@thehutgroup.com", "@thg.com", "@thgingenuity.com"}
 
 func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient client.Client, ingress networkingv1.Ingress) ([]exposure.Exposure, error) {
 	isDeleted := false
@@ -49,6 +52,20 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 
 		if name, ok := getAnnotation(ingress.Annotations, AnnotationOriginServerName); ok {
 			originServerName = ptr.To(name)
+		}
+
+		var accessApplicationName *string
+		if name, ok := getAnnotation(ingress.Annotations, AnnotationAccessApplicationName); ok {
+			accessApplicationName = ptr.To(name)
+		} else {
+			accessApplicationName = ptr.To(ingress.GetName())
+		}
+
+		var accessPolicyAllowedEmails []string
+		if emails, ok := getAnnotation(ingress.Annotations, AnnotationAccessPolicyAllowedEmails); ok {
+			accessPolicyAllowedEmails = strings.Split(emails, ",")
+		} else {
+			accessPolicyAllowedEmails = DefaultAccessPolicyAllowedEmails
 		}
 
 		var proxySSLVerifyEnabled *bool
@@ -114,8 +131,10 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 				PathPrefix:            path.Path,
 				IsDeleted:             isDeleted,
 				ProxySSLVerifyEnabled: proxySSLVerifyEnabled,
-				HTTPHostHeader:        httpHostHeader,
-				OriginServerName:      originServerName,
+				HTTPHostHeader:            httpHostHeader,
+				OriginServerName:          originServerName,
+				AccessApplicationName:     accessApplicationName,
+				AccessPolicyAllowedEmails: accessPolicyAllowedEmails,
 			})
 		}
 	}
