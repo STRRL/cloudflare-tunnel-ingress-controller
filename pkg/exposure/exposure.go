@@ -16,4 +16,8 @@ type Exposure struct {
 	HTTPHostHeader *string
 	// OriginServerName is the hostname on the origin server certificate.
 	OriginServerName *string
+	// AccessApplicationName is the name of the Access application to create.
+	AccessApplicationName *string
+	// AccessPolicyAllowedEmails is a list of email addresses to allow access to the application.
+	AccessPolicyAllowedEmails []string
 }

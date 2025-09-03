@@ -15,6 +15,8 @@ type TunnelClientInterface interface {
 	PutExposures(ctx context.Context, exposures []exposure.Exposure) error
 	TunnelDomain() string
 	FetchTunnelToken(ctx context.Context) (string, error)
+	PutAccessApplication(ctx context.Context, exposures []exposure.Exposure) error
+	PutAccessPolicy(ctx context.Context, exposures []exposure.Exposure) error
 }
 
 var _ TunnelClientInterface = &TunnelClient{}
@@ -41,6 +43,164 @@ func (t *TunnelClient) PutExposures(ctx context.Context, exposures []exposure.Ex
 	if err != nil {
 		return errors.Wrap(err, "update DNS CNAME record")
 	}
+
+	err = t.PutAccessApplication(ctx, exposures)
+	if err != nil {
+		return errors.Wrap(err, "put access application")
+	}
+
+	err = t.PutAccessPolicy(ctx, exposures)
+	if err != nil {
+		return errors.Wrap(err, "put access policy")
+	}
+
+	return nil
+}
+
+func (t *TunnelClient) PutAccessApplication(ctx context.Context, exposures []exposure.Exposure) error {
+	apps, _, err := t.cfClient.ListAccessApplications(ctx, cloudflare.ResourceIdentifier(t.accountId), cloudflare.ListAccessApplicationsParams{})
+	if err != nil {
+		return errors.Wrap(err, "list access applications")
+	}
+
+	for _, exposure := range exposures {
+		if exposure.AccessApplicationName == nil {
+			continue
+		}
+
+		appName := *exposure.AccessApplicationName
+		appDomain := exposure.Hostname
+
+		var existingApp *cloudflare.AccessApplication
+		for _, app := range apps {
+			if app.Name == appName {
+				existingApp = &app
+				break
+			}
+		}
+
+		if exposure.IsDeleted {
+			if existingApp != nil {
+				t.logger.Info("delete access application", "app", existingApp.Name)
+				err := t.cfClient.DeleteAccessApplication(ctx, cloudflare.ResourceIdentifier(t.accountId), existingApp.ID)
+				if err != nil {
+					return errors.Wrap(err, "delete access application")
+				}
+			}
+			continue
+		}
+
+		if existingApp != nil {
+			t.logger.Info("update access application", "app", existingApp.Name)
+			_, err := t.cfClient.UpdateAccessApplication(ctx, cloudflare.ResourceIdentifier(t.accountId), cloudflare.UpdateAccessApplicationParams{
+				ID:     existingApp.ID,
+				Name:   appName,
+				Domain: appDomain,
+			})
+			if err != nil {
+				return errors.Wrap(err, "update access application")
+			}
+		} else {
+			t.logger.Info("create access application", "app", appName)
+			_, err := t.cfClient.CreateAccessApplication(ctx, cloudflare.ResourceIdentifier(t.accountId), cloudflare.CreateAccessApplicationParams{
+				Name:   appName,
+				Domain: appDomain,
+			})
+			if err != nil {
+				return errors.Wrap(err, "create access application")
+			}
+		}
+	}
+
+	return nil
+}
+
+func (t *TunnelClient) PutAccessPolicy(ctx context.Context, exposures []exposure.Exposure) error {
+	apps, _, err := t.cfClient.ListAccessApplications(ctx, cloudflare.ResourceIdentifier(t.accountId), cloudflare.ListAccessApplicationsParams{})
+	if err != nil {
+		return errors.Wrap(err, "list access applications")
+	}
+
+	for _, exposure := range exposures {
+		if exposure.AccessApplicationName == nil || len(exposure.AccessPolicyAllowedEmails) == 0 {
+			continue
+		}
+
+		appName := *exposure.AccessApplicationName
+		allowedEmails := exposure.AccessPolicyAllowedEmails
+
+		var app *cloudflare.AccessApplication
+		for _, a := range apps {
+			if a.Name == appName {
+				app = &a
+				break
+			}
+		}
+
+		if app == nil {
+			continue
+		}
+
+		policies, _, err := t.cfClient.ListAccessPolicies(ctx, cloudflare.ResourceIdentifier(t.accountId), cloudflare.ListAccessPoliciesParams{
+			ApplicationID: app.ID,
+		})
+		if err != nil {
+			return errors.Wrap(err, "list access policies")
+		}
+
+		var existingPolicy *cloudflare.AccessPolicy
+		for _, p := range policies {
+			if p.Name == "Allow predefined emails" {
+				existingPolicy = &p
+				break
+			}
+		}
+
+		if exposure.IsDeleted {
+			if existingPolicy != nil {
+				t.logger.Info("delete access policy", "policy", existingPolicy.Name)
+				err := t.cfClient.DeleteAccessPolicy(ctx, cloudflare.ResourceIdentifier(t.accountId), cloudflare.DeleteAccessPolicyParams{
+					ApplicationID: app.ID,
+					PolicyID:      existingPolicy.ID,
+				})
+				if err != nil {
+					return errors.Wrap(err, "delete access policy")
+				}
+			}
+			continue
+		}
+
+		var include []interface{}
+		for _, email := range allowedEmails {
+			include = append(include, map[string]interface{}{"email": map[string]string{"email": email}})
+		}
+
+		if existingPolicy != nil {
+			t.logger.Info("update access policy", "policy", existingPolicy.Name)
+			_, err := t.cfClient.UpdateAccessPolicy(ctx, cloudflare.ResourceIdentifier(t.accountId), cloudflare.UpdateAccessPolicyParams{
+				ApplicationID: app.ID,
+				PolicyID:      existingPolicy.ID,
+				Name:          "Allow predefined emails",
+				Decision:      "allow",
+				Include:       include,
+			})
+			if err != nil {
+				return errors.Wrap(err, "update access policy")
+			}
+		} else {
+			t.logger.Info("create access policy", "policy", "Allow predefined emails")
+			_, err := t.cfClient.CreateAccessPolicy(ctx, cloudflare.ResourceIdentifier(t.accountId), cloudflare.CreateAccessPolicyParams{
+				ApplicationID: app.ID,
+				Name:          "Allow predefined emails",
+				Decision:      "allow",
+				Include:       include,
+			})
+			if err != nil {
+				return errors.Wrap(err, "create access policy")
+			}
+		}
+	}
+
 	return nil
 }
 

@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -49,6 +50,16 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 
 		if name, ok := getAnnotation(ingress.Annotations, AnnotationOriginServerName); ok {
 			originServerName = ptr.To(name)
+		}
+
+		var accessApplicationName *string
+		if name, ok := getAnnotation(ingress.Annotations, AnnotationAccessApplicationName); ok {
+			accessApplicationName = ptr.To(name)
+		}
+
+		var accessPolicyAllowedEmails []string
+		if emails, ok := getAnnotation(ingress.Annotations, AnnotationAccessPolicyAllowedEmails); ok {
+			accessPolicyAllowedEmails = strings.Split(emails, ",")
 		}
 
 		var proxySSLVerifyEnabled *bool
@@ -114,8 +125,10 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 				PathPrefix:            path.Path,
 				IsDeleted:             isDeleted,
 				ProxySSLVerifyEnabled: proxySSLVerifyEnabled,
-				HTTPHostHeader:        httpHostHeader,
-				OriginServerName:      originServerName,
+				HTTPHostHeader:            httpHostHeader,
+				OriginServerName:          originServerName,
+				AccessApplicationName:     accessApplicationName,
+				AccessPolicyAllowedEmails: accessPolicyAllowedEmails,
 			})
 		}
 	}
