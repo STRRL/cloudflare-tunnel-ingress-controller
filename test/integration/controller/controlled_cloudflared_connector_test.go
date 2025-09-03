@@ -21,6 +21,14 @@ type MockTunnelClient struct {
 	FetchTunnelTokenFunc func(ctx context.Context) (string, error)
 }
 
+func (m *MockTunnelClient) PutAccessApplication(ctx context.Context, exposures []exposure.Exposure) error {
+	return nil
+}
+
+func (m *MockTunnelClient) PutAccessPolicy(ctx context.Context, exposures []exposure.Exposure) error {
+	return nil
+}
+
 func (m *MockTunnelClient) PutExposures(ctx context.Context, exposures []exposure.Exposure) error {
 	return nil
 }

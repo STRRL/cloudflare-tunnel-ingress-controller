@@ -16,6 +16,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+var DefaultAccessPolicyAllowedEmails = []string{"@thehutgroup.com", "@thg.com", "@thgingenuity.com"}
+
 func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient client.Client, ingress networkingv1.Ingress) ([]exposure.Exposure, error) {
 	isDeleted := false
 
@@ -55,11 +57,15 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 		var accessApplicationName *string
 		if name, ok := getAnnotation(ingress.Annotations, AnnotationAccessApplicationName); ok {
 			accessApplicationName = ptr.To(name)
+		} else {
+			accessApplicationName = ptr.To(ingress.GetName())
 		}
 
 		var accessPolicyAllowedEmails []string
 		if emails, ok := getAnnotation(ingress.Annotations, AnnotationAccessPolicyAllowedEmails); ok {
 			accessPolicyAllowedEmails = strings.Split(emails, ",")
+		} else {
+			accessPolicyAllowedEmails = DefaultAccessPolicyAllowedEmails
 		}
 
 		var proxySSLVerifyEnabled *bool
