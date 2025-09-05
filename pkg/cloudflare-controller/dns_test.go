@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
-	"github.com/cloudflare/cloudflare-go"
+	"github.com/cloudflare/cloudflare-go/v6/dns"
 )
 
 const WhateverTunnelId = "whatever"
@@ -14,7 +14,7 @@ const WhateverTunnelDomain = "whatever.cfargotunnel.com"
 func Test_syncDNSRecord(t *testing.T) {
 	type args struct {
 		exposures      []exposure.Exposure
-		existedRecords []cloudflare.DNSRecord
+		existedRecords []dns.RecordResponse
 		tunnelId       string
 		tunnelName     string
 	}
@@ -102,7 +102,7 @@ func Test_syncDNSRecord(t *testing.T) {
 			name: "only delete managed record",
 			args: args{
 				exposures: nil,
-				existedRecords: []cloudflare.DNSRecord{
+				existedRecords: []dns.RecordResponse{
 					{
 						Name:    "test.example.com",
 						Type:    "CNAME",
@@ -135,7 +135,7 @@ func Test_syncDNSRecord(t *testing.T) {
 						IsDeleted:     false,
 					},
 				},
-				existedRecords: []cloudflare.DNSRecord{
+				existedRecords: []dns.RecordResponse{
 					{
 						Name:    "test.example.com",
 						Type:    "A",
@@ -149,7 +149,7 @@ func Test_syncDNSRecord(t *testing.T) {
 			wantCreate: nil,
 			wantUpdate: []DNSOperationUpdate{
 				{
-					OldRecord: cloudflare.DNSRecord{
+					OldRecord: dns.RecordResponse{
 						Name:    "test.example.com",
 						Type:    "A",
 						Content: "1.2.3.4",
@@ -174,7 +174,7 @@ func Test_syncDNSRecord(t *testing.T) {
 						IsDeleted:     true,
 					},
 				},
-				existedRecords: []cloudflare.DNSRecord{
+				existedRecords: []dns.RecordResponse{
 					{
 						Name:    "test.example.com",
 						Type:    "A",
@@ -189,7 +189,7 @@ func Test_syncDNSRecord(t *testing.T) {
 			wantUpdate: nil,
 			wantDelete: []DNSOperationDelete{
 				{
-					OldRecord: cloudflare.DNSRecord{
+					OldRecord: dns.RecordResponse{
 						Name:    "test.example.com",
 						Type:    "A",
 						Content: "1.2.3.4",
@@ -210,7 +210,7 @@ func Test_syncDNSRecord(t *testing.T) {
 						IsDeleted:     false,
 					},
 				},
-				existedRecords: []cloudflare.DNSRecord{
+				existedRecords: []dns.RecordResponse{
 					{
 						Name:    "test.example.com",
 						Type:    "CNAME",
@@ -224,7 +224,7 @@ func Test_syncDNSRecord(t *testing.T) {
 			wantCreate: nil,
 			wantUpdate: []DNSOperationUpdate{
 				{
-					OldRecord: cloudflare.DNSRecord{
+					OldRecord: dns.RecordResponse{
 						Name:    "test.example.com",
 						Type:    "CNAME",
 						Content: WhateverTunnelDomain,

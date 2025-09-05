@@ -5,39 +5,50 @@ import (
 	"strings"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
-	"github.com/cloudflare/cloudflare-go"
+	"github.com/cloudflare/cloudflare-go/v6"
+	"github.com/cloudflare/cloudflare-go/v6/zero_trust"
 	"github.com/pkg/errors"
 )
 
-func fromExposureToCloudflareIngress(ctx context.Context, exposure exposure.Exposure) (*cloudflare.UnvalidatedIngressRule, error) {
+func fromExposureToCloudflareIngress(ctx context.Context, exposure exposure.Exposure) (zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngress, error) {
 	if exposure.IsDeleted {
-		return nil, errors.Errorf("exposure %s is deleted, should not generate cloudflare ingress for it", exposure.Hostname)
+		return zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngress{}, errors.Errorf("exposure %s is deleted, should not generate cloudflare ingress for it", exposure.Hostname)
 	}
 
-	result := cloudflare.UnvalidatedIngressRule{
-		Hostname: exposure.Hostname,
-		Path:     exposure.PathPrefix,
-		Service:  exposure.ServiceTarget,
+	result := zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngress{
+		Hostname: cloudflare.F(exposure.Hostname),
+		Service:  cloudflare.F(exposure.ServiceTarget),
 	}
+
+	if exposure.PathPrefix != "" {
+		result.Path = cloudflare.F(exposure.PathPrefix)
+	}
+
+	var originRequest zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngressOriginRequest
+	needOriginRequest := false
 
 	if exposure.HTTPHostHeader != nil {
-		if result.OriginRequest == nil {
-			result.OriginRequest = &cloudflare.OriginRequestConfig{}
-		}
-		result.OriginRequest.HTTPHostHeader = exposure.HTTPHostHeader
+		originRequest.HTTPHostHeader = cloudflare.F(*exposure.HTTPHostHeader)
+		needOriginRequest = true
 	}
 
 	if strings.HasPrefix(exposure.ServiceTarget, "https://") {
-		if result.OriginRequest == nil {
-			result.OriginRequest = &cloudflare.OriginRequestConfig{}
+		if exposure.OriginServerName != nil {
+			originRequest.OriginServerName = cloudflare.F(*exposure.OriginServerName)
+			needOriginRequest = true
 		}
-		result.OriginRequest.OriginServerName = exposure.OriginServerName
 		if exposure.ProxySSLVerifyEnabled == nil {
-			result.OriginRequest.NoTLSVerify = boolPointer(true)
+			originRequest.NoTLSVerify = cloudflare.F(true)
+			needOriginRequest = true
 		} else {
-			result.OriginRequest.NoTLSVerify = boolPointer(!*exposure.ProxySSLVerifyEnabled)
+			originRequest.NoTLSVerify = cloudflare.F(!*exposure.ProxySSLVerifyEnabled)
+			needOriginRequest = true
 		}
 	}
 
-	return &result, nil
+	if needOriginRequest {
+		result.OriginRequest = cloudflare.F(originRequest)
+	}
+
+	return result, nil
 }

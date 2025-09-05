@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
-	"github.com/cloudflare/cloudflare-go"
+	"github.com/cloudflare/cloudflare-go/v6"
+	"github.com/cloudflare/cloudflare-go/v6/zero_trust"
 	"k8s.io/utils/ptr"
 )
 
@@ -18,7 +19,7 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    *cloudflare.UnvalidatedIngressRule
+		want    zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngress
 		wantErr bool
 	}{
 		{
@@ -29,7 +30,7 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 					IsDeleted: true,
 				},
 			},
-			want:    nil,
+			want:    zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngress{},
 			wantErr: true,
 		},
 		{
@@ -43,11 +44,10 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 					IsDeleted:     false,
 				},
 			},
-			want: &cloudflare.UnvalidatedIngressRule{
-				Hostname:      "ingress.example.com",
-				Path:          "/",
-				Service:       "http://10.0.0.1:80",
-				OriginRequest: nil,
+			want: zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngress{
+				Hostname: cloudflare.F("ingress.example.com"),
+				Path:     cloudflare.F("/"),
+				Service:  cloudflare.F("http://10.0.0.1:80"),
 			},
 			wantErr: false,
 		},
@@ -62,11 +62,10 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 					IsDeleted:     false,
 				},
 			},
-			want: &cloudflare.UnvalidatedIngressRule{
-				Hostname:      "ingress.example.com",
-				Path:          "/prefix",
-				Service:       "http://10.0.0.1:80",
-				OriginRequest: nil,
+			want: zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngress{
+				Hostname: cloudflare.F("ingress.example.com"),
+				Path:     cloudflare.F("/prefix"),
+				Service:  cloudflare.F("http://10.0.0.1:80"),
 			},
 			wantErr: false,
 		},
@@ -82,13 +81,13 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 					HTTPHostHeader: ptr.To("foo.internal"),
 				},
 			},
-			want: &cloudflare.UnvalidatedIngressRule{
-				Hostname: "ingress.example.com",
-				Path:     "/prefix",
-				Service:  "http://10.0.0.1:80",
-				OriginRequest: &cloudflare.OriginRequestConfig{
-					HTTPHostHeader: ptr.To("foo.internal"),
-				},
+			want: zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngress{
+				Hostname: cloudflare.F("ingress.example.com"),
+				Path:     cloudflare.F("/prefix"),
+				Service:  cloudflare.F("http://10.0.0.1:80"),
+				OriginRequest: cloudflare.F(zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngressOriginRequest{
+					HTTPHostHeader: cloudflare.F("foo.internal"),
+				}),
 			},
 			wantErr: false,
 		},
@@ -104,15 +103,16 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 					OriginServerName: ptr.To("bar.internal"),
 				},
 			},
-			want: &cloudflare.UnvalidatedIngressRule{
-				Hostname: "ingress.example.com",
-				Path:     "/",
-				Service:  "https://10.0.0.1:443",
-				OriginRequest: &cloudflare.OriginRequestConfig{
-					NoTLSVerify:      boolPointer(true),
-					OriginServerName: ptr.To("bar.internal"),
-				},
+			want: zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngress{
+				Hostname: cloudflare.F("ingress.example.com"),
+				Path:     cloudflare.F("/"),
+				Service:  cloudflare.F("https://10.0.0.1:443"),
+				OriginRequest: cloudflare.F(zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngressOriginRequest{
+					NoTLSVerify:      cloudflare.F(true),
+					OriginServerName: cloudflare.F("bar.internal"),
+				}),
 			},
+			wantErr: false,
 		},
 		{
 			name: "https with different http-host-header and origin-server-name",
@@ -127,17 +127,19 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 					OriginServerName: ptr.To("bar.internal"),
 				},
 			},
-			want: &cloudflare.UnvalidatedIngressRule{
-				Hostname: "ingress.example.com",
-				Path:     "/",
-				Service:  "https://10.0.0.1:443",
-				OriginRequest: &cloudflare.OriginRequestConfig{
-					NoTLSVerify:      boolPointer(true),
-					HTTPHostHeader:   ptr.To("foo.internal"),
-					OriginServerName: ptr.To("bar.internal"),
-				},
+			want: zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngress{
+				Hostname: cloudflare.F("ingress.example.com"),
+				Path:     cloudflare.F("/"),
+				Service:  cloudflare.F("https://10.0.0.1:443"),
+				OriginRequest: cloudflare.F(zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngressOriginRequest{
+					NoTLSVerify:      cloudflare.F(true),
+					HTTPHostHeader:   cloudflare.F("foo.internal"),
+					OriginServerName: cloudflare.F("bar.internal"),
+				}),
 			},
-		}, {
+			wantErr: false,
+		},
+		{
 			name: "https should enable no-tls-verify by default",
 			args: args{
 				ctx: context.Background(),
@@ -148,15 +150,17 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 					IsDeleted:     false,
 				},
 			},
-			want: &cloudflare.UnvalidatedIngressRule{
-				Hostname: "ingress.example.com",
-				Path:     "/",
-				Service:  "https://10.0.0.1:443",
-				OriginRequest: &cloudflare.OriginRequestConfig{
-					NoTLSVerify: boolPointer(true),
-				},
+			want: zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngress{
+				Hostname: cloudflare.F("ingress.example.com"),
+				Path:     cloudflare.F("/"),
+				Service:  cloudflare.F("https://10.0.0.1:443"),
+				OriginRequest: cloudflare.F(zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngressOriginRequest{
+					NoTLSVerify: cloudflare.F(true),
+				}),
 			},
-		}, {
+			wantErr: false,
+		},
+		{
 			name: "https with no-tls-verify enabled",
 			args: args{
 				ctx: context.Background(),
@@ -168,15 +172,17 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 					ProxySSLVerifyEnabled: boolPointer(false),
 				},
 			},
-			want: &cloudflare.UnvalidatedIngressRule{
-				Hostname: "ingress.example.com",
-				Path:     "/",
-				Service:  "https://10.0.0.1:443",
-				OriginRequest: &cloudflare.OriginRequestConfig{
-					NoTLSVerify: boolPointer(true),
-				},
+			want: zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngress{
+				Hostname: cloudflare.F("ingress.example.com"),
+				Path:     cloudflare.F("/"),
+				Service:  cloudflare.F("https://10.0.0.1:443"),
+				OriginRequest: cloudflare.F(zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngressOriginRequest{
+					NoTLSVerify: cloudflare.F(true),
+				}),
 			},
-		}, {
+			wantErr: false,
+		},
+		{
 			name: "https with no-tls-verify disabled",
 			args: args{
 				ctx: context.Background(),
@@ -188,14 +194,15 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 					ProxySSLVerifyEnabled: boolPointer(true),
 				},
 			},
-			want: &cloudflare.UnvalidatedIngressRule{
-				Hostname: "ingress.example.com",
-				Path:     "/",
-				Service:  "https://10.0.0.1:443",
-				OriginRequest: &cloudflare.OriginRequestConfig{
-					NoTLSVerify: boolPointer(false),
-				},
+			want: zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngress{
+				Hostname: cloudflare.F("ingress.example.com"),
+				Path:     cloudflare.F("/"),
+				Service:  cloudflare.F("https://10.0.0.1:443"),
+				OriginRequest: cloudflare.F(zero_trust.TunnelCloudflaredConfigurationUpdateParamsConfigIngressOriginRequest{
+					NoTLSVerify: cloudflare.F(false),
+				}),
 			},
+			wantErr: false,
 		},
 	}
 	for _, tt := range tests {

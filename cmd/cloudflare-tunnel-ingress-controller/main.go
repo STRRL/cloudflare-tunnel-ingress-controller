@@ -8,7 +8,8 @@ import (
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/controller"
-	"github.com/cloudflare/cloudflare-go"
+	"github.com/cloudflare/cloudflare-go/v6"
+	"github.com/cloudflare/cloudflare-go/v6/option"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
@@ -22,14 +23,14 @@ type rootCmdFlags struct {
 	// for annotation on Ingress
 	ingressClass string
 	// for IngressClass.spec.controller
-	controllerClass       string
-	logLevel              int
-	cloudflareAPIToken    string
-	cloudflareAccountId   string
-	cloudflareTunnelName  string
-	namespace             string
-	cloudflaredProtocol   string
-	cloudflaredExtraArgs  []string
+	controllerClass      string
+	logLevel             int
+	cloudflareAPIToken   string
+	cloudflareAccountId  string
+	cloudflareTunnelName string
+	namespace            string
+	cloudflaredProtocol  string
+	cloudflaredExtraArgs []string
 }
 
 func main() {
@@ -55,16 +56,12 @@ func main() {
 			logger.Info("logging verbosity", "level", options.logLevel)
 
 			logger.V(3).Info("build cloudflare client with API Token", "api-token", options.cloudflareAPIToken)
-			cloudflareClient, err := cloudflare.NewWithAPIToken(options.cloudflareAPIToken)
-			if err != nil {
-				logger.Error(err, "create cloudflare client")
-				os.Exit(1)
-			}
+			cloudflareClient := cloudflare.NewClient(option.WithAPIToken(options.cloudflareAPIToken))
 
 			var tunnelClient *cloudflarecontroller.TunnelClient
 
 			logger.V(3).Info("bootstrap tunnel client with tunnel name", "account-id", options.cloudflareAccountId, "tunnel-name", options.cloudflareTunnelName)
-			tunnelClient, err = cloudflarecontroller.BootstrapTunnelClientWithTunnelName(ctx, logger.WithName("tunnel-client"), cloudflareClient, options.cloudflareAccountId, options.cloudflareTunnelName)
+			tunnelClient, err := cloudflarecontroller.BootstrapTunnelClientWithTunnelName(ctx, logger.WithName("tunnel-client"), cloudflareClient, options.cloudflareAccountId, options.cloudflareTunnelName)
 			if err != nil {
 				logger.Error(err, "bootstrap tunnel client with tunnel name")
 				os.Exit(1)

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
-	"github.com/cloudflare/cloudflare-go"
+	"github.com/cloudflare/cloudflare-go/v6/dns"
 )
 
 const ManagedCNAMERecordCommentMarkFormat = "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [%s]"
@@ -18,17 +18,17 @@ type DNSOperationCreate struct {
 }
 
 type DNSOperationUpdate struct {
-	OldRecord cloudflare.DNSRecord
+	OldRecord dns.RecordResponse
 	Type      string
 	Content   string
 	Comment   string
 }
 
 type DNSOperationDelete struct {
-	OldRecord cloudflare.DNSRecord
+	OldRecord dns.RecordResponse
 }
 
-func syncDNSRecord(exposures []exposure.Exposure, existedCNAMERecords []cloudflare.DNSRecord, tunnelId string, tunnelName string) ([]DNSOperationCreate, []DNSOperationUpdate, []DNSOperationDelete, error) {
+func syncDNSRecord(exposures []exposure.Exposure, existedCNAMERecords []dns.RecordResponse, tunnelId string, tunnelName string) ([]DNSOperationCreate, []DNSOperationUpdate, []DNSOperationDelete, error) {
 	var effectiveExposures []exposure.Exposure
 	for _, item := range exposures {
 		if !item.IsDeleted {
@@ -74,13 +74,13 @@ func syncDNSRecord(exposures []exposure.Exposure, existedCNAMERecords []cloudfla
 	return toCreate, toUpdate, toDelete, nil
 }
 
-func dnsRecordsContainsHostname(records []cloudflare.DNSRecord, hostname string) (bool, cloudflare.DNSRecord) {
+func dnsRecordsContainsHostname(records []dns.RecordResponse, hostname string) (bool, dns.RecordResponse) {
 	for _, item := range records {
 		if item.Name == hostname {
 			return true, item
 		}
 	}
-	return false, cloudflare.DNSRecord{}
+	return false, dns.RecordResponse{}
 }
 
 func exposureContainsHostname(exposures []exposure.Exposure, hostname string) (bool, exposure.Exposure) {
