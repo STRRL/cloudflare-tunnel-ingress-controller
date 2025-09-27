@@ -6,6 +6,7 @@ import (
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
+	"github.com/go-logr/logr"
 )
 
 const WhateverTunnelId = "whatever"
@@ -13,10 +14,12 @@ const WhateverTunnelDomain = "whatever.cfargotunnel.com"
 
 func Test_syncDNSRecord(t *testing.T) {
 	type args struct {
-		exposures      []exposure.Exposure
-		existedRecords []cloudflare.DNSRecord
-		tunnelId       string
-		tunnelName     string
+		logger              logr.Logger
+		exposures           []exposure.Exposure
+		existedCNAMERecords []cloudflare.DNSRecord
+		existedTXTRecords   []cloudflare.DNSRecord
+		tunnelId            string
+		tunnelName          string
 	}
 	var tests = []struct {
 		name       string
@@ -29,9 +32,11 @@ func Test_syncDNSRecord(t *testing.T) {
 		{
 			name: "noop",
 			args: args{
-				exposures:      nil,
-				existedRecords: nil,
-				tunnelId:       WhateverTunnelId,
+				logger:              logr.Discard(),
+				exposures:           nil,
+				existedCNAMERecords: nil,
+				existedTXTRecords:   nil,
+				tunnelId:            WhateverTunnelId,
 			},
 			wantCreate: nil,
 			wantUpdate: nil,
@@ -41,6 +46,7 @@ func Test_syncDNSRecord(t *testing.T) {
 		{
 			name: "create new exposure",
 			args: args{
+				logger: logr.Discard(),
 				exposures: []exposure.Exposure{
 					{
 						Hostname:      "test.example.com",
@@ -49,16 +55,21 @@ func Test_syncDNSRecord(t *testing.T) {
 						IsDeleted:     false,
 					},
 				},
-				existedRecords: nil,
-				tunnelId:       WhateverTunnelId,
-				tunnelName:     "tunnel-in-test",
+				existedCNAMERecords: nil,
+				existedTXTRecords:   nil,
+				tunnelId:            WhateverTunnelId,
+				tunnelName:          "tunnel-in-test",
 			},
 			wantCreate: []DNSOperationCreate{
 				{
 					Hostname: "test.example.com",
 					Type:     "CNAME",
 					Content:  WhateverTunnelDomain,
-					Comment:  "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
+				},
+				{
+					Hostname: "_ctic_managed.test.example.com",
+					Type:     "TXT",
+					Content:  "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
 				},
 			},
 			wantUpdate: nil,
@@ -68,6 +79,7 @@ func Test_syncDNSRecord(t *testing.T) {
 		{
 			name: "ignore deleted exposure",
 			args: args{
+				logger: logr.Discard(),
 				exposures: []exposure.Exposure{
 					{
 						Hostname:      "test.example.com",
@@ -82,16 +94,21 @@ func Test_syncDNSRecord(t *testing.T) {
 						IsDeleted:     false,
 					},
 				},
-				existedRecords: nil,
-				tunnelId:       WhateverTunnelId,
-				tunnelName:     "tunnel-in-test",
+				existedCNAMERecords: nil,
+				existedTXTRecords:   nil,
+				tunnelId:            WhateverTunnelId,
+				tunnelName:          "tunnel-in-test",
 			},
 			wantCreate: []DNSOperationCreate{
 				{
 					Hostname: "test2.example.com",
 					Type:     "CNAME",
 					Content:  WhateverTunnelDomain,
-					Comment:  "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
+				},
+				{
+					Hostname: "_ctic_managed.test2.example.com",
+					Type:     "TXT",
+					Content:  "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
 				},
 			},
 			wantUpdate: nil,
@@ -101,32 +118,54 @@ func Test_syncDNSRecord(t *testing.T) {
 		{
 			name: "only delete managed record",
 			args: args{
+				logger:    logr.Discard(),
 				exposures: nil,
-				existedRecords: []cloudflare.DNSRecord{
+				existedCNAMERecords: []cloudflare.DNSRecord{
 					{
 						Name:    "test.example.com",
 						Type:    "CNAME",
 						Content: "another.example.com",
-						Comment: "not a managed record",
 					},
 					{
 						Name:    "test2.example.com",
 						Type:    "A",
 						Content: "1.2.3.4",
-						Comment: "",
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
 					},
 				},
 				tunnelId:   "",
-				tunnelName: "",
+				tunnelName: "tunnel-in-test",
 			},
 			wantCreate: nil,
 			wantUpdate: nil,
-			wantDelete: nil,
-			wantErr:    false,
+			wantDelete: []DNSOperationDelete{
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: "another.example.com",
+					},
+				},
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
+					},
+				},
+			},
+			wantErr: false,
 		},
 		{
-			name: "update existed exposure",
+			name: "update existed exposure, override existed CNAME record, make it managed by this controller",
 			args: args{
+				logger: logr.Discard(),
 				exposures: []exposure.Exposure{
 					{
 						Hostname:      "test.example.com",
@@ -135,29 +174,33 @@ func Test_syncDNSRecord(t *testing.T) {
 						IsDeleted:     false,
 					},
 				},
-				existedRecords: []cloudflare.DNSRecord{
+				existedCNAMERecords: []cloudflare.DNSRecord{
 					{
 						Name:    "test.example.com",
 						Type:    "A",
 						Content: "1.2.3.4",
-						Comment: "",
 					},
 				},
-				tunnelId:   WhateverTunnelId,
-				tunnelName: "tunnel-in-test",
+				existedTXTRecords: nil,
+				tunnelId:          WhateverTunnelId,
+				tunnelName:        "tunnel-in-test",
 			},
-			wantCreate: nil,
+			wantCreate: []DNSOperationCreate{
+				{
+					Hostname: "_ctic_managed.test.example.com",
+					Type:     "TXT",
+					Content:  "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
+				},
+			},
 			wantUpdate: []DNSOperationUpdate{
 				{
 					OldRecord: cloudflare.DNSRecord{
 						Name:    "test.example.com",
 						Type:    "A",
 						Content: "1.2.3.4",
-						Comment: "",
 					},
 					Type:    "CNAME",
 					Content: WhateverTunnelDomain,
-					Comment: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
 				},
 			},
 			wantDelete: nil,
@@ -166,6 +209,7 @@ func Test_syncDNSRecord(t *testing.T) {
 		{
 			name: "delete unused exposure",
 			args: args{
+				logger: logr.Discard(),
 				exposures: []exposure.Exposure{
 					{
 						Hostname:      "test.example.com",
@@ -174,12 +218,18 @@ func Test_syncDNSRecord(t *testing.T) {
 						IsDeleted:     true,
 					},
 				},
-				existedRecords: []cloudflare.DNSRecord{
+				existedCNAMERecords: []cloudflare.DNSRecord{
 					{
 						Name:    "test.example.com",
 						Type:    "A",
 						Content: "1.2.3.4",
-						Comment: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
 					},
 				},
 				tunnelId:   WhateverTunnelId,
@@ -193,15 +243,49 @@ func Test_syncDNSRecord(t *testing.T) {
 						Name:    "test.example.com",
 						Type:    "A",
 						Content: "1.2.3.4",
-						Comment: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
+					},
+				},
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
 					},
 				},
 			},
 			wantErr: false,
 		},
 		{
+			name: "do not delete CNAME record managed by different tunnel",
+			args: args{
+				logger:    logr.Discard(),
+				exposures: nil,
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: "another-tunnel.cfargotunnel.com",
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [different-tunnel]",
+					},
+				},
+				tunnelId:   "current-tunnel-id",
+				tunnelName: "current-tunnel",
+			},
+			wantCreate: nil,
+			wantUpdate: nil,
+			wantDelete: nil, // Should not delete because TXT content doesn't match current tunnel
+			wantErr:    false,
+		},
+		{
 			name: "always update existed record",
 			args: args{
+				logger: logr.Discard(),
 				exposures: []exposure.Exposure{
 					{
 						Hostname:      "test.example.com",
@@ -210,12 +294,18 @@ func Test_syncDNSRecord(t *testing.T) {
 						IsDeleted:     false,
 					},
 				},
-				existedRecords: []cloudflare.DNSRecord{
+				existedCNAMERecords: []cloudflare.DNSRecord{
 					{
 						Name:    "test.example.com",
 						Type:    "CNAME",
 						Content: WhateverTunnelDomain,
-						Comment: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
 					},
 				},
 				tunnelId:   WhateverTunnelId,
@@ -228,11 +318,18 @@ func Test_syncDNSRecord(t *testing.T) {
 						Name:    "test.example.com",
 						Type:    "CNAME",
 						Content: WhateverTunnelDomain,
-						Comment: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
 					},
 					Type:    "CNAME",
 					Content: WhateverTunnelDomain,
-					Comment: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
+				},
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
+					},
+					Type:    "TXT",
+					Content: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
 				},
 			},
 			wantDelete: nil,
@@ -241,7 +338,7 @@ func Test_syncDNSRecord(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotCreate, gotUpdate, gotDelete, err := syncDNSRecord(tt.args.exposures, tt.args.existedRecords, tt.args.tunnelId, tt.args.tunnelName)
+			gotCreate, gotUpdate, gotDelete, err := syncDNSRecord(tt.args.logger, tt.args.exposures, tt.args.existedCNAMERecords, tt.args.existedTXTRecords, tt.args.tunnelId, tt.args.tunnelName)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("syncDNSRecord() error = %v, wantErr %v", err, tt.wantErr)
 				return
