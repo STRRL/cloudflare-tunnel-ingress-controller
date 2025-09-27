@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -102,7 +103,8 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
 		Expect(exposure[0].Hostname).Should(Equal("test.example.com"))
-		Expect(exposure[0].ServiceTarget).Should(Equal("http://10.0.0.23:2333"))
+		expectedTarget := fmt.Sprintf("http://%s.%s.svc.cluster.local:2333", service.Name, ns)
+		Expect(exposure[0].ServiceTarget).Should(Equal(expectedTarget))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
 	})
@@ -341,7 +343,8 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
 		Expect(exposure[0].Hostname).Should(Equal("test.example.com"))
-		Expect(exposure[0].ServiceTarget).Should(Equal("http://10.0.0.26:2333"))
+		expectedTarget := fmt.Sprintf("http://%s.%s.svc.cluster.local:2333", service.Name, ns)
+		Expect(exposure[0].ServiceTarget).Should(Equal(expectedTarget))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
 	})
@@ -583,7 +586,8 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
 		Expect(exposure[0].Hostname).Should(Equal("test.example.com"))
-		Expect(exposure[0].ServiceTarget).Should(Equal("https://10.0.0.27:2333"))
+		expectedTarget := fmt.Sprintf("https://%s.%s.svc.cluster.local:2333", service.Name, ns)
+		Expect(exposure[0].ServiceTarget).Should(Equal(expectedTarget))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
 		Expect(exposure[0].ProxySSLVerifyEnabled).Should(BeNil())
@@ -671,7 +675,8 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
 		Expect(exposure[0].Hostname).Should(Equal("test.example.com"))
-		Expect(exposure[0].ServiceTarget).Should(Equal("https://10.0.0.28:2333"))
+		expectedTarget := fmt.Sprintf("https://%s.%s.svc.cluster.local:2333", service.Name, ns)
+		Expect(exposure[0].ServiceTarget).Should(Equal(expectedTarget))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
 		Expect(exposure[0].ProxySSLVerifyEnabled).ShouldNot(BeNil())
@@ -760,7 +765,8 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
 		Expect(exposure[0].Hostname).Should(Equal("test.example.com"))
-		Expect(exposure[0].ServiceTarget).Should(Equal("https://10.0.0.29:2333"))
+		expectedTarget := fmt.Sprintf("https://%s.%s.svc.cluster.local:2333", service.Name, ns)
+		Expect(exposure[0].ServiceTarget).Should(Equal(expectedTarget))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
 		Expect(exposure[0].ProxySSLVerifyEnabled).ShouldNot(BeNil())
