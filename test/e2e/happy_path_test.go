@@ -285,7 +285,7 @@ func captureDashboardScreenshot(ctx context.Context, url string) (string, error)
 		return "", err
 	}
 
-	filename := fmt.Sprintf("dashboard-%d.png", time.Now().Unix())
+	filename := fmt.Sprintf("dashboard-%s.png", time.Now().Format("2006-01-02_15-04-05"))
 	path := filepath.Join(artifactsDir, filename)
 	if err := os.WriteFile(path, imageBytes, 0o644); err != nil {
 		return "", err
