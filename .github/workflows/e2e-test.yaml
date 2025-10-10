@@ -1,0 +1,75 @@
+name: E2E Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_domain:
+        description: 'Base domain for testing (e.g., example.com)'
+        required: false
+        default: ''
+  pull_request:
+    branches:
+      - "master"
+
+permissions: read-all
+
+jobs:
+  e2e-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: './go.mod'
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Start minikube
+        uses: medyagh/setup-minikube@latest
+        with:
+          driver: docker
+          container-runtime: docker
+          cpus: 2
+          memory: 4096
+
+      - name: Verify minikube
+        run: |
+          minikube status
+          kubectl get nodes
+
+      - name: Create .env.e2e file
+        run: |
+          cat > .env.e2e <<EOF
+          CLOUDFLARE_API_TOKEN=${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID=${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_TUNNEL_NAME=${{ secrets.CLOUDFLARE_TUNNEL_NAME }}
+          E2E_BASE_DOMAIN=${{ secrets.E2E_BASE_DOMAIN || github.event.inputs.base_domain }}
+          E2E_CONTROLLER_IMAGE=cloudflare-tunnel-ingress-controller:e2e
+          EOF
+
+      - name: Build e2e controller image
+        run: |
+          make e2e-image
+
+      - name: Run e2e tests
+        run: |
+          make e2e
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts-${{ github.run_number }}-${{ github.run_attempt }}
+          path: test/e2e/artifacts/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Cleanup minikube profiles
+        if: always()
+        run: |
+          minikube profile list -o json | jq -r '.valid[].Name' | grep '^cf-ic-e2e-' | xargs -r -I {} minikube delete -p {} || true

@@ -27,3 +27,7 @@ hack/dev/cloudflare-api.yaml
 cover.out
 
 .idea/
+
+.env
+.env.*
+test/e2e/artifacts/
