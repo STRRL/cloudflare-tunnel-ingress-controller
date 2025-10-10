@@ -2,7 +2,7 @@ E2E_CONTROLLER_IMAGE ?= cloudflare-tunnel-ingress-controller:e2e
 
 .PHONY: dev
 dev:
-	skaffold dev --namespace cloudflare-tunnel-ingress-controller-dev
+	skaffold dev --namespace cloudflare-tunnel-ingress-controller-dev --cache-artifacts=false
 
 .PHONY: image
 image:
