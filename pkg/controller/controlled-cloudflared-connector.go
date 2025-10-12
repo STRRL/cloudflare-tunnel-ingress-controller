@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"os"
+	"slices"
 	"strconv"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
@@ -24,14 +25,15 @@ func CreateOrUpdateControlledCloudflared(
 	extraArgs []string,
 ) error {
 	logger := log.FromContext(ctx)
-	list := appsv1.DeploymentList{}
-	err := kubeClient.List(ctx, &list, &client.ListOptions{
+
+	// List existing deployments with the specific label
+	var list appsv1.DeploymentList
+	if err := kubeClient.List(ctx, &list, &client.ListOptions{
 		Namespace: namespace,
 		LabelSelector: labels.SelectorFromSet(labels.Set{
 			"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
 		}),
-	})
-	if err != nil {
+	}); err != nil {
 		return errors.Wrapf(err, "list controlled-cloudflared-connector in namespace %s", namespace)
 	}
 
@@ -44,7 +46,7 @@ func CreateOrUpdateControlledCloudflared(
 		}
 
 		needsUpdate := false
-		if *existingDeployment.Spec.Replicas != desiredReplicas {
+		if desiredReplicas >= 0 && *existingDeployment.Spec.Replicas != desiredReplicas {
 			needsUpdate = true
 		}
 
@@ -65,17 +67,15 @@ func CreateOrUpdateControlledCloudflared(
 			
 			// Check if command arguments have changed
 			desiredCommand := buildCloudflaredCommand(protocol, token, extraArgs)
-			if !slicesEqual(container.Command, desiredCommand) {
+			if !slices.Equal(container.Command, desiredCommand) {
 				needsUpdate = true
 			}
 		}
 
 		if needsUpdate {
-
 			updatedDeployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, desiredReplicas, extraArgs)
 			existingDeployment.Spec = updatedDeployment.Spec
-			err = kubeClient.Update(ctx, existingDeployment)
-			if err != nil {
+			if err := kubeClient.Update(ctx, existingDeployment); err != nil {
 				return errors.Wrap(err, "update controlled-cloudflared-connector deployment")
 			}
 			logger.Info("Updated controlled-cloudflared-connector deployment", "namespace", namespace)
@@ -95,11 +95,11 @@ func CreateOrUpdateControlledCloudflared(
 	}
 
 	deployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, replicas, extraArgs)
-	err = kubeClient.Create(ctx, deployment)
-	if err != nil {
+	if err := kubeClient.Create(ctx, deployment); err != nil {
 		return errors.Wrap(err, "create controlled-cloudflared-connector deployment")
 	}
 	logger.Info("Created controlled-cloudflared-connector deployment", "namespace", namespace)
+
 	return nil
 }
 
@@ -117,7 +117,7 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 		pullPolicy = "IfNotPresent"
 	}
 
-	return &appsv1.Deployment{
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      appName,
 			Namespace: namespace,
@@ -156,12 +156,18 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 			},
 		},
 	}
+
+	if replicas < 0 {
+		deployment.Spec.Replicas = nil // Use Kubernetes default
+	}
+
+	return deployment
 }
 
 func getDesiredReplicas() (int32, error) {
 	replicaCount := os.Getenv("CLOUDFLARED_REPLICA_COUNT")
 	if replicaCount == "" {
-		return 1, nil
+		return -1, nil
 	}
 	replicas, err := strconv.ParseInt(replicaCount, 10, 32)
 	if err != nil {
@@ -188,16 +194,4 @@ func buildCloudflaredCommand(protocol string, token string, extraArgs []string) 
 	command = append(command, "--metrics", "0.0.0.0:44483", "run", "--token", token)
 	
 	return command
-}
-
-func slicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i, v := range a {
-		if v != b[i] {
-			return false
-		}
-	}
-	return true
 }
