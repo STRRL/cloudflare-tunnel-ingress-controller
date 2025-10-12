@@ -2,7 +2,9 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"reflect"
 	"slices"
 	"strconv"
 
@@ -46,7 +48,7 @@ func CreateOrUpdateControlledCloudflared(
 		}
 
 		needsUpdate := false
-		if desiredReplicas >= 0 && *existingDeployment.Spec.Replicas != desiredReplicas {
+		if desiredReplicas >= 0 && existingDeployment.Spec.Replicas != nil && *existingDeployment.Spec.Replicas != desiredReplicas {
 			needsUpdate = true
 		}
 
@@ -57,17 +59,26 @@ func CreateOrUpdateControlledCloudflared(
 		}
 
 		if len(existingDeployment.Spec.Template.Spec.Containers) > 0 {
-			container := &existingDeployment.Spec.Template.Spec.Containers[0]
+			container := existingDeployment.Spec.Template.Spec.Containers[0]
 			if container.Image != os.Getenv("CLOUDFLARED_IMAGE") {
 				needsUpdate = true
 			}
 			if string(container.ImagePullPolicy) != os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY") {
 				needsUpdate = true
 			}
-			
+
 			// Check if command arguments have changed
-			desiredCommand := buildCloudflaredCommand(protocol, token, extraArgs)
+			desiredCommand := getCloudflaredCommand(protocol, token, extraArgs)
 			if !slices.Equal(container.Command, desiredCommand) {
+				needsUpdate = true
+			}
+
+			// Check if resource requirements have changed
+			desiredResources, err := getDesiredResources()
+			if err != nil {
+				return errors.Wrap(err, "get desired resources")
+			}
+			if os.Getenv("CLOUDFLARED_RESOURCES") != "" && !reflect.DeepEqual(container.Resources, desiredResources) {
 				needsUpdate = true
 			}
 		}
@@ -117,6 +128,9 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 		pullPolicy = "IfNotPresent"
 	}
 
+	// Ignore error, if any. If there's an error, resources will be empty and thus ignored by Kubernetes.
+	resources, _ := getDesiredResources()
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      appName,
@@ -148,7 +162,8 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 							Name:            appName,
 							Image:           image,
 							ImagePullPolicy: v1.PullPolicy(pullPolicy),
-							Command: buildCloudflaredCommand(protocol, token, extraArgs),
+							Command:         getCloudflaredCommand(protocol, token, extraArgs),
+							Resources:       resources,
 						},
 					},
 					RestartPolicy: v1.RestartPolicyAlways,
@@ -176,7 +191,7 @@ func getDesiredReplicas() (int32, error) {
 	return int32(replicas), nil
 }
 
-func buildCloudflaredCommand(protocol string, token string, extraArgs []string) []string {
+func getCloudflaredCommand(protocol string, token string, extraArgs []string) []string {
 	command := []string{
 		"cloudflared",
 		"--protocol",
@@ -184,14 +199,29 @@ func buildCloudflaredCommand(protocol string, token string, extraArgs []string) 
 		"--no-autoupdate",
 		"tunnel",
 	}
-	
+
 	// Add all extra arguments between "tunnel" and "run"
 	if len(extraArgs) > 0 {
 		command = append(command, extraArgs...)
 	}
-	
+
 	// Add metrics, run subcommand and token
 	command = append(command, "--metrics", "0.0.0.0:44483", "run", "--token", token)
-	
+
 	return command
+}
+
+func getDesiredResources() (v1.ResourceRequirements, error) {
+	var desiredresources v1.ResourceRequirements
+
+	resources := os.Getenv("CLOUDFLARED_RESOURCES")
+	if resources == "" {
+		return desiredresources, nil
+	}
+
+	if err := json.Unmarshal([]byte(resources), &desiredresources); err != nil {
+		return desiredresources, errors.Wrap(err, "invalid resource requirements")
+	}
+
+	return desiredresources, nil
 }
