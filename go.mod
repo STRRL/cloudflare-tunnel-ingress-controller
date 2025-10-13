@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.4
 
 require (
-	github.com/chromedp/chromedp v0.14.1
+	github.com/chromedp/chromedp v0.14.2
 	github.com/cloudflare/cloudflare-go v0.115.0
 	github.com/go-logr/logr v1.4.3
 	github.com/go-logr/stdr v1.2.2
