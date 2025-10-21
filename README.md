@@ -2,6 +2,8 @@
 
 TLDR; This project simplifies exposing Kubernetes services to the internet easily and securely using Cloudflare Tunnel.
 
+We'd love to hear how the project works for you—please take a minute to fill out the short community survey: [cloudflare-tunnel-ingress-controller feedback](https://forms.gle/GqZomrLdb1vzyVJDA).
+
 ## Prerequisites
 
 To use the Cloudflare Tunnel Ingress Controller, you need to have a Cloudflare account and a domain configured on Cloudflare. You also need to create a Cloudflare API token with the following permissions: `Zone:Zone:Read`, `Zone:DNS:Edit`, and `Account:Cloudflare Tunnel:Edit`.
