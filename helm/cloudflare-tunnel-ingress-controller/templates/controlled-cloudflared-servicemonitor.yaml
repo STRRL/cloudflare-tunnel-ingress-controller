@@ -5,6 +5,9 @@ metadata:
   name: {{ include "cloudflare-tunnel-ingress-controller.fullname" . }}-controlled-cloudflared
   labels:
     {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
+    {{- if .Values.cloudflaredServiceMonitor.labels }}
+    {{- toYaml .Values.cloudflaredServiceMonitor.labels | nindent 4 }}
+    {{- end }}
 spec:
   {{- if .Values.cloudflaredServiceMonitor.jobLabel }}
   jobLabel: {{ .Values.cloudflaredServiceMonitor.jobLabel }}
