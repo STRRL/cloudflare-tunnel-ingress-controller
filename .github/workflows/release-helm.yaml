@@ -9,7 +9,7 @@ permissions: read-all
 
 jobs:
   release-chart:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: "Extract Version"
@@ -17,7 +17,7 @@ jobs:
         run: |
           GIT_TAG=${GITHUB_REF##*/}
           VERSION=${GIT_TAG##v}
-          echo "::set-output name=version::$(echo $VERSION)"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
       - name: Publish Helm chart
         uses: stefanprodan/helm-gh-pages@master
         with:

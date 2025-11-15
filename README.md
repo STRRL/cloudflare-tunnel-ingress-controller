@@ -2,6 +2,8 @@
 
 TLDR; This project simplifies exposing Kubernetes services to the internet easily and securely using Cloudflare Tunnel.
 
+We'd love to hear how the project works for you—please take a minute to fill out the short community survey: [cloudflare-tunnel-ingress-controller feedback](https://forms.gle/GqZomrLdb1vzyVJDA).
+
 ## Prerequisites
 
 To use the Cloudflare Tunnel Ingress Controller, you need to have a Cloudflare account and a domain configured on Cloudflare. You also need to create a Cloudflare API token with the following permissions: `Zone:Zone:Read`, `Zone:DNS:Edit`, and `Account:Cloudflare Tunnel:Edit`.
@@ -18,13 +20,20 @@ Take a look on this video to see how smoothly and easily it works:
 
 Want to DIY? The following instructions would help your bootstrap a minikube Kubernetes Cluster, then expose the Kubernetes Dashboard to the internet via Cloudflare Tunnel Ingress Controller.
 
-- You should have a Cloudflare account and a domain configured on Cloudflare.
-- Create a Cloudflare API token with the following:
+- Step 0: You should have a Cloudflare account and a domain configured on Cloudflare.
+- Step 1: Create a Cloudflare API token with the following:
   - `Zone:Zone:Read`
   - `Zone:DNS:Edit`
   - `Account:Cloudflare Tunnel:Edit`
-- Fetch the Account ID from the Cloudflare dashboard, follow the instructions [here](https://developers.cloudflare.com/fundamentals/get-started/basic-tasks/find-account-and-zone-ids/).
-- Bootstrap a minikube cluster
+
+You can copy the following template URL to create the API token with the required permissions directly:
+
+```text
+https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=[{"key":"zone","type":"read"},{"key":"dns","type":"edit"},{"key":"argotunnel","type":"edit"}]&name=Cloudflare%20Tunnel%20Ingress%20Controller&accountId=*&zoneId=all
+```
+
+- Step 2: Fetch the Account ID from the Cloudflare dashboard, follow the instructions from [this cloudflare developer doc](https://developers.cloudflare.com/fundamentals/get-started/basic-tasks/find-account-and-zone-ids/).
+- Step 3: Bootstrap a minikube cluster
 
 ```bash
 minikube start
@@ -37,7 +46,7 @@ helm repo add strrl.dev https://helm.strrl.dev
 helm repo update
 ```
 
-- Install with Helm:
+- Step 4: Install cloudflare-tunnel-ingress-controller with Helm:
 
 ```bash
 helm upgrade --install --wait \
@@ -49,7 +58,7 @@ helm upgrade --install --wait \
 
 > if the tunnel does not exist, controller will create it for you.
 
-- Then enable some awesome features in minikube, like kubernetes-dashboard:
+- Step 5: Then enable some awesome features in minikube, like kubernetes-dashboard:
 
 ```bash
 minikube addons enable dashboard
@@ -67,7 +76,7 @@ kubectl -n kubernetes-dashboard \
 
 > for example, I would use `dash.strrl.cloud` as my favorite domain here.
 
-- At last, access the dashboard via the domain you just created:
+- Step 6: At last, access the dashboard via the domain you just created:
 
 ![dash.strrl.cloud](./static/dash.strrl.cloud.png)
 

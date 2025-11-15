@@ -57,8 +57,6 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ghcr.io/${{ needs.metadata.outputs.owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }}-amd64
           labels: ${{ needs.metadata.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
   build-arm64:
     needs: metadata
@@ -87,8 +85,6 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ghcr.io/${{ needs.metadata.outputs.owner }}/cloudflare-tunnel-ingress-controller:${{ needs.metadata.outputs.version }}-arm64
           labels: ${{ needs.metadata.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
   create-manifest:
     needs: [metadata, build-amd64, build-arm64]
