@@ -139,9 +139,17 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 		Type: "CNAME",
 	})
 	if err != nil {
-		return errors.Wrapf(err, "list DNS records for zone %s", zone.Name)
+		return errors.Wrapf(err, "list CNAME records for zone %s", zone.Name)
 	}
-	toCreate, toUpdate, toDelete, err := syncDNSRecord(exposures, cnameDnsRecords, t.tunnelId, t.tunnelName)
+
+	txtDnsRecords, _, err := t.cfClient.ListDNSRecords(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.ListDNSRecordsParams{
+		Type: "TXT",
+	})
+	if err != nil {
+		return errors.Wrapf(err, "list TXT records for zone %s", zone.Name)
+	}
+
+	toCreate, toUpdate, toDelete, err := syncDNSRecord(t.logger, exposures, cnameDnsRecords, txtDnsRecords, t.tunnelId, t.tunnelName)
 	if err != nil {
 		return errors.Wrap(err, "sync DNS records")
 	}
@@ -153,8 +161,7 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 			Type:    item.Type,
 			Name:    item.Hostname,
 			Content: item.Content,
-			Proxied: cloudflare.BoolPtr(true),
-			Comment: item.Comment,
+			Proxied: cloudflare.BoolPtr(item.Type == "CNAME"),
 			TTL:     1,
 		})
 		if err != nil {
@@ -163,22 +170,13 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 	}
 
 	for _, item := range toUpdate {
-
-		if item.OldRecord.Comment != renderDNSRecordComment(t.tunnelName) {
-			t.logger.Info("WARNING, the origin DNS record is not managed by this controller, it would be changed to managed record",
-				"origin-record", item.OldRecord,
-			)
-		}
-
 		t.logger.Info("update DNS record", "id", item.OldRecord.ID, "type", item.Type, "hostname", item.OldRecord.Name, "content", item.Content)
-
 		_, err := t.cfClient.UpdateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.UpdateDNSRecordParams{
 			ID:      item.OldRecord.ID,
 			Type:    item.Type,
 			Name:    item.OldRecord.Name,
 			Content: item.Content,
-			Proxied: cloudflare.BoolPtr(true),
-			Comment: &item.Comment,
+			Proxied: cloudflare.BoolPtr(item.Type == "CNAME"),
 			TTL:     1,
 		})
 		if err != nil {
