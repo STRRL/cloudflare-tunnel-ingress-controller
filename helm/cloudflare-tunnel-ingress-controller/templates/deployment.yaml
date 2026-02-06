@@ -40,6 +40,7 @@ spec:
             - --cloudflare-tunnel-name=$(CLOUDFLARE_TUNNEL_NAME)
             - --namespace=$(NAMESPACE)
             - --cloudflared-protocol={{ .Values.cloudflared.protocol }}
+            - --cluster-domain={{ .Values.clusterDomain | default "cluster.local" }}
             {{- range .Values.cloudflared.extraArgs }}
             - --cloudflared-extra-args={{ . }}
             {{- end }}

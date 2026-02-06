@@ -73,6 +73,7 @@ tolerations: []
 
 affinity: {}
 
+clusterDomain: cluster.local
 cloudflared:
   image:
     repository: cloudflare/cloudflared

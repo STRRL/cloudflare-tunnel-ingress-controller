@@ -98,7 +98,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
@@ -182,7 +182,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
 		Expect(err).Should(HaveOccurred())
 		Expect(exposure).Should(BeNil())
 	})
@@ -260,7 +260,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).Should(HaveLen(1))
 	})
@@ -338,7 +338,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
@@ -422,7 +422,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
 		Expect(err).Should(HaveOccurred())
 		Expect(exposure).Should(BeNil())
 	})
@@ -500,7 +500,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
 		Expect(err).Should(HaveOccurred())
 		Expect(exposure).Should(BeNil())
 	})
@@ -581,7 +581,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
@@ -670,7 +670,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
@@ -760,7 +760,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
