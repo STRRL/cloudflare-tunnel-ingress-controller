@@ -11,11 +11,12 @@ import (
 type IngressControllerOptions struct {
 	IngressClassName    string
 	ControllerClassName string
+	ClusterDomain       string
 	CFTunnelClient      *cloudflarecontroller.TunnelClient
 }
 
 func RegisterIngressController(logger logr.Logger, mgr manager.Manager, options IngressControllerOptions) error {
-	controller := NewIngressController(logger.WithName("ingress-controller"), mgr.GetClient(), options.IngressClassName, options.ControllerClassName, options.CFTunnelClient)
+	controller := NewIngressController(logger.WithName("ingress-controller"), mgr.GetClient(), options.IngressClassName, options.ControllerClassName, options.ClusterDomain, options.CFTunnelClient)
 	err := builder.
 		ControllerManagedBy(mgr).
 		For(&networkingv1.Ingress{}).

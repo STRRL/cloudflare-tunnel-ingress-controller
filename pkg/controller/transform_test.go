@@ -69,7 +69,7 @@ func TestGetHostFromService(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := getHostFromService(tc.service)
+			got, err := getHostFromService(tc.service, "cluster.local")
 
 			if got != tc.want {
 				t.Errorf("getHostFromService() = %q, want %q", got, tc.want)
