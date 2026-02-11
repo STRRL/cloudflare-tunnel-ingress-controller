@@ -1,0 +1,27 @@
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "go-fmt",
+    name = "go fmt",
+    language = "system",
+    entry = "gofmt -l -w",
+    types = ["go"],
+  },
+  {
+    id = "go-vet",
+    name = "go vet",
+    language = "system",
+    entry = "go vet ./...",
+    types = ["go"],
+    pass_filenames = false,
+  },
+  {
+    id = "golangci-lint",
+    name = "golangci-lint",
+    language = "system",
+    entry = "golangci-lint run --fix",
+    types = ["go"],
+    pass_filenames = false,
+  },
+]
