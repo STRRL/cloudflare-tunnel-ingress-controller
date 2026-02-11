@@ -16,6 +16,7 @@ import (
 	"github.com/joho/godotenv"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/yaml"
@@ -399,4 +400,65 @@ func buildDashboardHostname(baseDomain string) (string, error) {
 	}
 	label := fmt.Sprintf("cf-dashboard-%d", time.Now().UnixNano())
 	return fmt.Sprintf("%s.%s", label, trimmed), nil
+}
+
+func collectControllerCoverage(namespace string, releaseName string) error {
+	if repoRoot == "" {
+		return fmt.Errorf("repository root not resolved")
+	}
+
+	pods, err := kubeClient.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("app.kubernetes.io/instance=%s", releaseName),
+	})
+	if err != nil {
+		return fmt.Errorf("list controller pods: %w", err)
+	}
+	if len(pods.Items) == 0 {
+		return fmt.Errorf("no controller pods found")
+	}
+	podName := pods.Items[0].Name
+	_, _ = fmt.Fprintf(GinkgoWriter, "collecting coverage from pod %s/%s\n", namespace, podName)
+
+	signalCtx, cancelSignal := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelSignal()
+	signalCmd := exec.CommandContext(signalCtx, "kubectl", "exec", podName, "-n", namespace, "--", "kill", "-USR1", "1")
+	signalCmd.Stdout = GinkgoWriter
+	signalCmd.Stderr = GinkgoWriter
+	if err := signalCmd.Run(); err != nil {
+		return fmt.Errorf("send SIGUSR1 to controller: %w", err)
+	}
+
+	time.Sleep(2 * time.Second)
+
+	coverageDir := filepath.Join(repoRoot, "test", "e2e", "artifacts", "coverage")
+	if err := os.MkdirAll(coverageDir, 0o755); err != nil {
+		return fmt.Errorf("create coverage directory: %w", err)
+	}
+
+	extractCtx, cancelExtract := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelExtract()
+	tarCmd := exec.CommandContext(extractCtx, "kubectl", "exec", podName, "-n", namespace, "--", "tar", "-cf", "-", "-C", "/tmp/coverage", ".")
+	tarData, err := tarCmd.Output()
+	if err != nil {
+		return fmt.Errorf("extract coverage data from pod: %w", err)
+	}
+
+	untarCmd := exec.Command("tar", "-xf", "-", "-C", coverageDir)
+	untarCmd.Stdin = bytes.NewReader(tarData)
+	untarCmd.Stdout = GinkgoWriter
+	untarCmd.Stderr = GinkgoWriter
+	if err := untarCmd.Run(); err != nil {
+		return fmt.Errorf("untar coverage data: %w", err)
+	}
+
+	coverOut := filepath.Join(repoRoot, "test", "e2e", "artifacts", "e2e-cover.out")
+	covdataCmd := exec.Command("go", "tool", "covdata", "textfmt", "-i="+coverageDir, "-o="+coverOut)
+	covdataCmd.Stdout = GinkgoWriter
+	covdataCmd.Stderr = GinkgoWriter
+	if err := covdataCmd.Run(); err != nil {
+		return fmt.Errorf("convert coverage data to text format: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "e2e coverage data saved to %s\n", coverOut)
+	return nil
 }

@@ -23,7 +23,7 @@ integration-test: setup-envtest
 
 .PHONY: e2e-image
 e2e-image:
-	DOCKER_BUILDKIT=1 TARGETARCH=amd64 docker build -t $(E2E_CONTROLLER_IMAGE) -f ./image/cloudflare-tunnel-ingress-controller/Dockerfile .
+	DOCKER_BUILDKIT=1 TARGETARCH=amd64 docker build --build-arg COVER=1 --build-arg RUNTIME_BASE=gcr.io/distroless/base-debian12:debug-nonroot -t $(E2E_CONTROLLER_IMAGE) -f ./image/cloudflare-tunnel-ingress-controller/Dockerfile .
 
 .PHONY: e2e
 e2e: e2e-image

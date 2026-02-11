@@ -60,6 +60,14 @@ jobs:
         run: |
           make e2e
 
+      - name: Upload coverage reports to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./test/e2e/artifacts/e2e-cover.out
+          flags: e2e
+          token: ${{ secrets.CODECOV_TOKEN }}
+
       - name: Upload test artifacts
         if: always()
         uses: actions/upload-artifact@v4
