@@ -73,7 +73,7 @@ var _ = BeforeSuite(func() {
 	dashboardBaseDomain = os.Getenv(dashboardBaseDomainEnvKey)
 	dashboardHostname, err = buildDashboardHostname(dashboardBaseDomain)
 	Expect(err).NotTo(HaveOccurred(), "build dashboard hostname")
-	GinkgoWriter.Write([]byte(fmt.Sprintf("using dashboard hostname %s\n", dashboardHostname)))
+	_, _ = fmt.Fprintf(GinkgoWriter, "using dashboard hostname %s\n", dashboardHostname)
 
 	verifyCtx, cancel := context.WithTimeout(suiteCtx, 30*time.Second)
 	defer cancel()
@@ -100,7 +100,7 @@ var _ = BeforeSuite(func() {
 
 	tmpFile, err := os.CreateTemp("", fmt.Sprintf("%s-kubeconfig-*.yaml", minikubeProfile))
 	Expect(err).NotTo(HaveOccurred(), "failed to create kubeconfig temp file")
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 
 	_, err = tmpFile.Write(kubeconfigData)
 	Expect(err).NotTo(HaveOccurred(), "failed to write kubeconfig temp file")
@@ -118,7 +118,7 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	if kubeconfigPath != "" {
 		if err := os.Remove(kubeconfigPath); err != nil {
-			GinkgoWriter.Write([]byte(fmt.Sprintf("warning: failed to remove kubeconfig %s: %v\n", kubeconfigPath, err)))
+			_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to remove kubeconfig %s: %v\n", kubeconfigPath, err)
 		}
 	}
 
@@ -129,7 +129,7 @@ var _ = AfterSuite(func() {
 		deleteCmd.Stdout = GinkgoWriter
 		deleteCmd.Stderr = GinkgoWriter
 		if err := deleteCmd.Run(); err != nil {
-			GinkgoWriter.Write([]byte(fmt.Sprintf("warning: failed to delete minikube profile %s: %v\n", minikubeProfile, err)))
+			_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to delete minikube profile %s: %v\n", minikubeProfile, err)
 		}
 	}
 })
@@ -209,7 +209,7 @@ func verifyCloudflareToken(ctx context.Context, token string) error {
 	if err != nil {
 		return fmt.Errorf("perform token verify request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("token verify request returned status %d", resp.StatusCode)
@@ -290,11 +290,11 @@ func helmUpgradeInstall(ctx context.Context, kubeconfigPath string, releaseName 
 	if err != nil {
 		return err
 	}
-	defer os.Remove(valuesPath)
+	defer func() { _ = os.Remove(valuesPath) }()
 
-	GinkgoWriter.Write([]byte(fmt.Sprintf("helm image override: repository=%s tag=%s pullPolicy=%s\n", values.Image.Repository, values.Image.Tag, values.Image.PullPolicy)))
-	GinkgoWriter.Write([]byte(fmt.Sprintf("helm cloudflare values length: accountId=%d tunnelName=%d apiToken=%d\n",
-		len(values.Cloudflare.AccountID), len(values.Cloudflare.TunnelName), len(values.Cloudflare.APIToken))))
+	_, _ = fmt.Fprintf(GinkgoWriter, "helm image override: repository=%s tag=%s pullPolicy=%s\n", values.Image.Repository, values.Image.Tag, values.Image.PullPolicy)
+	_, _ = fmt.Fprintf(GinkgoWriter, "helm cloudflare values length: accountId=%d tunnelName=%d apiToken=%d\n",
+		len(values.Cloudflare.AccountID), len(values.Cloudflare.TunnelName), len(values.Cloudflare.APIToken))
 
 	helmArgs := []string{
 		"upgrade", "--install", releaseName, chartPath,
@@ -355,11 +355,11 @@ func writeHelmValuesFile(values controllerHelmValues) (string, error) {
 		return "", fmt.Errorf("create helm values temp file: %w", err)
 	}
 	if _, err = file.Write(data); err != nil {
-		os.Remove(file.Name())
+		_ = os.Remove(file.Name())
 		return "", fmt.Errorf("write helm values file: %w", err)
 	}
 	if err := file.Close(); err != nil {
-		os.Remove(file.Name())
+		_ = os.Remove(file.Name())
 		return "", fmt.Errorf("close helm values file: %w", err)
 	}
 	return file.Name(), nil

@@ -1,7 +1,12 @@
 E2E_CONTROLLER_IMAGE ?= cloudflare-tunnel-ingress-controller:e2e
 
+.PHONY: setup
+setup:
+	@command -v prek >/dev/null 2>&1 || { echo "prek not found, install it from https://prek.j178.dev/installation/"; exit 1; }
+	prek install
+
 .PHONY: dev
-dev:
+dev: setup
 	skaffold dev --namespace cloudflare-tunnel-ingress-controller-dev --cache-artifacts=false
 
 .PHONY: image

@@ -37,17 +37,15 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 	const testNamespace = "cloudflared-test"
 
 	BeforeEach(func() {
-		// Set required environment variables
-		os.Setenv("CLOUDFLARED_REPLICA_COUNT", "2")
-		os.Setenv("CLOUDFLARED_IMAGE", "cloudflare/cloudflared:latest")
-		os.Setenv("CLOUDFLARED_IMAGE_PULL_POLICY", "IfNotPresent")
+		Expect(os.Setenv("CLOUDFLARED_REPLICA_COUNT", "2")).To(Succeed())
+		Expect(os.Setenv("CLOUDFLARED_IMAGE", "cloudflare/cloudflared:latest")).To(Succeed())
+		Expect(os.Setenv("CLOUDFLARED_IMAGE_PULL_POLICY", "IfNotPresent")).To(Succeed())
 	})
 
 	AfterEach(func() {
-		// Clean up environment variables
-		os.Unsetenv("CLOUDFLARED_REPLICA_COUNT")
-		os.Unsetenv("CLOUDFLARED_IMAGE")
-		os.Unsetenv("CLOUDFLARED_IMAGE_PULL_POLICY")
+		Expect(os.Unsetenv("CLOUDFLARED_REPLICA_COUNT")).To(Succeed())
+		Expect(os.Unsetenv("CLOUDFLARED_IMAGE")).To(Succeed())
+		Expect(os.Unsetenv("CLOUDFLARED_IMAGE_PULL_POLICY")).To(Succeed())
 	})
 
 	It("should create a new cloudflared deployment", func() {
@@ -109,9 +107,8 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
 		Expect(err).NotTo(HaveOccurred())
 
-		// Change environment variables
-		os.Setenv("CLOUDFLARED_REPLICA_COUNT", "3")
-		os.Setenv("CLOUDFLARED_IMAGE", "cloudflare/cloudflared:2022.3.0")
+		Expect(os.Setenv("CLOUDFLARED_REPLICA_COUNT", "3")).To(Succeed())
+		Expect(os.Setenv("CLOUDFLARED_IMAGE", "cloudflare/cloudflared:2022.3.0")).To(Succeed())
 
 		// Act
 		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
