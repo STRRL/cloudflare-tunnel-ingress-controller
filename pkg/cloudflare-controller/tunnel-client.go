@@ -142,11 +142,19 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 		return errors.Wrapf(err, "list CNAME records for zone %s", zone.Name)
 	}
 
-	txtDnsRecords, _, err := t.cfClient.ListDNSRecords(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.ListDNSRecordsParams{
+	allTxtDnsRecords, _, err := t.cfClient.ListDNSRecords(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.ListDNSRecordsParams{
 		Type: "TXT",
 	})
 	if err != nil {
 		return errors.Wrapf(err, "list TXT records for zone %s", zone.Name)
+	}
+
+	// Filter to only include TXT records managed by this controller
+	var txtDnsRecords []cloudflare.DNSRecord
+	for _, record := range allTxtDnsRecords {
+		if strings.HasPrefix(record.Name, ManagedRecordTXTPrefix+".") {
+			txtDnsRecords = append(txtDnsRecords, record)
+		}
 	}
 
 	toCreate, toUpdate, toDelete, err := syncDNSRecord(t.logger, exposures, cnameDnsRecords, txtDnsRecords, t.tunnelId, t.tunnelName)
@@ -183,6 +191,10 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 			return errors.Wrapf(err, "update DNS record for zone %s, hostname %s", zone.Name, item.OldRecord.Name)
 		}
 	}
+
+	// Migrate legacy comment-based records (separate from normal sync)
+	legacyDeletes := migrateLegacyDNSRecords(t.logger, exposures, cnameDnsRecords, txtDnsRecords, t.tunnelName)
+	toDelete = append(toDelete, legacyDeletes...)
 
 	for _, item := range toDelete {
 		t.logger.Info("delete DNS record", "id", item.OldRecord.ID, "type", item.OldRecord.Type, "hostname", item.OldRecord.Name, "content", item.OldRecord.Content)

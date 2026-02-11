@@ -363,6 +363,130 @@ func Test_syncDNSRecord(t *testing.T) {
 	}
 }
 
+func Test_migrateLegacyDNSRecords(t *testing.T) {
+	type args struct {
+		logger              logr.Logger
+		exposures           []exposure.Exposure
+		existedCNAMERecords []cloudflare.DNSRecord
+		existedTXTRecords   []cloudflare.DNSRecord
+		tunnelName          string
+	}
+	tests := []struct {
+		name       string
+		args       args
+		wantDelete []DNSOperationDelete
+	}{
+		{
+			name: "delete legacy comment-based record without TXT",
+			args: args{
+				logger:    logr.Discard(),
+				exposures: nil,
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+						Comment: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
+					},
+				},
+				existedTXTRecords: nil,
+				tunnelName:        "tunnel-in-test",
+			},
+			wantDelete: []DNSOperationDelete{
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+						Comment: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
+					},
+				},
+			},
+		},
+		{
+			name: "do not delete legacy record from different tunnel",
+			args: args{
+				logger:    logr.Discard(),
+				exposures: nil,
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: "other-tunnel.cfargotunnel.com",
+						Comment: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [other-tunnel]",
+					},
+				},
+				existedTXTRecords: nil,
+				tunnelName:        "tunnel-in-test",
+			},
+			wantDelete: nil,
+		},
+		{
+			name: "skip legacy record still in active exposures",
+			args: args{
+				logger: logr.Discard(),
+				exposures: []exposure.Exposure{
+					{
+						Hostname:      "test.example.com",
+						ServiceTarget: "http://10.0.0.1:233",
+						PathPrefix:    "/",
+						IsDeleted:     false,
+					},
+				},
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+						Comment: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
+					},
+				},
+				existedTXTRecords: nil,
+				tunnelName:        "tunnel-in-test",
+			},
+			wantDelete: nil,
+		},
+		{
+			name: "skip record already tracked by TXT",
+			args: args{
+				logger:    logr.Discard(),
+				exposures: nil,
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+						Comment: "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [tunnel-in-test]",
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					},
+				},
+				tunnelName: "tunnel-in-test",
+			},
+			wantDelete: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotDelete := migrateLegacyDNSRecords(
+				tt.args.logger,
+				tt.args.exposures,
+				tt.args.existedCNAMERecords,
+				tt.args.existedTXTRecords,
+				tt.args.tunnelName,
+			)
+			if !reflect.DeepEqual(gotDelete, tt.wantDelete) {
+				t.Errorf("migrateLegacyDNSRecords() = %v, want %v", gotDelete, tt.wantDelete)
+			}
+		})
+	}
+}
+
 func Test_renderTXTContent(t *testing.T) {
 	result := renderTXTContent("my-tunnel")
 	expected := `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"my-tunnel"}`

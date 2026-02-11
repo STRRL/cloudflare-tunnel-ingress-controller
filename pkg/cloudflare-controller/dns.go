@@ -19,6 +19,10 @@ type ManagedRecordTXTContent struct {
 
 const ControllerIdentifier = "strrl.dev/cloudflare-tunnel-ingress-controller"
 
+// LegacyCommentFormat is the old comment-based ownership format.
+// Used for migration: records with this comment are recognized as managed by this controller.
+const LegacyCommentFormat = "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [%s]"
+
 type DNSOperationCreate struct {
 	Hostname string
 	Type     string
@@ -148,6 +152,62 @@ func syncDNSRecord(
 	return toCreate, toUpdate, toDelete, nil
 }
 
+// migrateLegacyDNSRecords handles migration from the old comment-based ownership to TXT-based ownership.
+// It identifies CNAME records that use the legacy comment format and are no longer in active exposures,
+// and returns delete operations for them. Records already tracked by TXT records are skipped
+// (they are handled by syncDNSRecord).
+func migrateLegacyDNSRecords(
+	logger logr.Logger,
+	exposures []exposure.Exposure,
+	existedCNAMERecords []cloudflare.DNSRecord,
+	existedTXTRecords []cloudflare.DNSRecord,
+	tunnelName string,
+) []DNSOperationDelete {
+	var effectiveExposures []exposure.Exposure
+	for _, item := range exposures {
+		if !item.IsDeleted {
+			effectiveExposures = append(effectiveExposures, item)
+		}
+	}
+
+	legacyComment := renderLegacyComment(tunnelName)
+	expectedTXTContent := renderTXTContent(tunnelName)
+
+	var toDelete []DNSOperationDelete
+	for _, cnameRecord := range existedCNAMERecords {
+		// Skip records still in active exposures
+		containsInExposures, _ := exposureContainsHostname(effectiveExposures, cnameRecord.Name)
+		if containsInExposures {
+			continue
+		}
+
+		// Skip records already tracked by TXT (handled by syncDNSRecord)
+		txtRecordName := fmt.Sprintf("%s.%s", ManagedRecordTXTPrefix, cnameRecord.Name)
+		hasTXTRecord := false
+		for _, txtRecord := range existedTXTRecords {
+			if txtRecord.Name == txtRecordName && txtRecord.Content == expectedTXTContent {
+				hasTXTRecord = true
+				break
+			}
+		}
+		if hasTXTRecord {
+			continue
+		}
+
+		// Delete if the CNAME has the legacy comment format matching the current tunnel
+		if cnameRecord.Comment == legacyComment {
+			logger.Info("migrating legacy comment-based record for deletion",
+				"hostname", cnameRecord.Name,
+			)
+			toDelete = append(toDelete, DNSOperationDelete{
+				OldRecord: cnameRecord,
+			})
+		}
+	}
+
+	return toDelete
+}
+
 func dnsRecordsContainsHostname(records []cloudflare.DNSRecord, hostname string) (bool, cloudflare.DNSRecord) {
 	for _, item := range records {
 		if item.Name == hostname {
@@ -170,6 +230,10 @@ const WellKnownTunnelDomainFormat = "%s.cfargotunnel.com"
 
 func tunnelDomain(tunnelId string) string {
 	return strings.ToLower(fmt.Sprintf(WellKnownTunnelDomainFormat, tunnelId))
+}
+
+func renderLegacyComment(tunnelName string) string {
+	return fmt.Sprintf(LegacyCommentFormat, tunnelName)
 }
 
 func renderTXTContent(tunnelName string) string {
