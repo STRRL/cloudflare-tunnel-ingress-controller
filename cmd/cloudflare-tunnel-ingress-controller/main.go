@@ -22,14 +22,14 @@ type rootCmdFlags struct {
 	// for annotation on Ingress
 	ingressClass string
 	// for IngressClass.spec.controller
-	controllerClass       string
-	logLevel              int
-	cloudflareAPIToken    string
-	cloudflareAccountId   string
-	cloudflareTunnelName  string
-	namespace             string
-	cloudflaredProtocol   string
-	cloudflaredExtraArgs  []string
+	controllerClass      string
+	logLevel             int
+	cloudflareAPIToken   string
+	cloudflareAccountId  string
+	cloudflareTunnelName string
+	namespace            string
+	cloudflaredProtocol  string
+	cloudflaredExtraArgs []string
 }
 
 func main() {
@@ -102,7 +102,7 @@ func main() {
 					select {
 					case <-done:
 						return
-					case _ = <-ticker.C:
+					case <-ticker.C:
 						err := controller.CreateOrUpdateControlledCloudflared(ctx, mgr.GetClient(), tunnelClient, options.namespace, options.cloudflaredProtocol, options.cloudflaredExtraArgs)
 						if err != nil {
 							logger.WithName("controlled-cloudflared").Error(err, "create controlled cloudflared")
