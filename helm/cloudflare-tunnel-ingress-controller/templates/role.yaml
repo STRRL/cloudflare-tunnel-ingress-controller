@@ -15,3 +15,13 @@ rules:
       - watch
       - update
       - create
+  # Required to manage the tunnel token secret (controlled-cloudflared-token)
+  # that passes the Cloudflare tunnel token to cloudflared via TUNNEL_TOKEN env var
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - create
+      - update
