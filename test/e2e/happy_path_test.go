@@ -68,7 +68,7 @@ var _ = Describe("Happy Path", func() {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
 			if err := helmUninstall(cleanupCtx, kubeconfigPath, controllerReleaseName, controllerNamespace); err != nil {
-				GinkgoWriter.Write([]byte(fmt.Sprintf("warning: failed to uninstall helm release %s: %v\n", controllerReleaseName, err)))
+				_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to uninstall helm release %s: %v\n", controllerReleaseName, err)
 			}
 		})
 
@@ -104,7 +104,7 @@ var _ = Describe("Happy Path", func() {
 			defer cancel()
 			for _, addon := range addons {
 				if err := disableMinikubeAddon(disableCtx, minikubeProfile, addon); err != nil {
-					GinkgoWriter.Write([]byte(fmt.Sprintf("warning: failed to disable addon %s: %v\n", addon, err)))
+					_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to disable addon %s: %v\n", addon, err)
 				}
 			}
 		})
@@ -177,7 +177,7 @@ var _ = Describe("Happy Path", func() {
 			deleteCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
 			if err := kubeClient.NetworkingV1().Ingresses(dashboardNamespace).Delete(deleteCtx, dashboardIngressName, metav1.DeleteOptions{}); err != nil {
-				GinkgoWriter.Write([]byte(fmt.Sprintf("warning: failed to delete ingress %s/%s: %v\n", dashboardNamespace, dashboardIngressName, err)))
+				_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to delete ingress %s/%s: %v\n", dashboardNamespace, dashboardIngressName, err)
 			}
 		})
 
@@ -210,7 +210,7 @@ var _ = Describe("Happy Path", func() {
 			if err != nil {
 				return err
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode != http.StatusOK {
 				return fmt.Errorf("unexpected status code %d", resp.StatusCode)
 			}
@@ -225,9 +225,14 @@ var _ = Describe("Happy Path", func() {
 		})
 
 		if path, err := captureDashboardScreenshot(context.Background(), dashboardURL); err != nil {
-			GinkgoWriter.Write([]byte(fmt.Sprintf("warning: failed to capture dashboard screenshot: %v\n", err)))
+			_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to capture dashboard screenshot: %v\n", err)
 		} else {
-			GinkgoWriter.Write([]byte(fmt.Sprintf("dashboard screenshot saved to %s\n", path)))
+			_, _ = fmt.Fprintf(GinkgoWriter, "dashboard screenshot saved to %s\n", path)
+		}
+
+		By("collecting coverage data from the controller pod")
+		if err := collectControllerCoverage(controllerNamespace, controllerReleaseName); err != nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to collect coverage: %v\n", err)
 		}
 	})
 })
@@ -250,11 +255,11 @@ func waitFor(description string, timeout, interval time.Duration, fn func() erro
 	Eventually(func() error {
 		err := fn()
 		if err != nil {
-			GinkgoWriter.Write([]byte(fmt.Sprintf("[%s pending %s] %v\n", description, time.Since(start).Round(time.Second), err)))
+			_, _ = fmt.Fprintf(GinkgoWriter, "[%s pending %s] %v\n", description, time.Since(start).Round(time.Second), err)
 		}
 		return err
 	}, timeout, interval).Should(Succeed())
-	GinkgoWriter.Write([]byte(fmt.Sprintf("[%s] completed in %s\n", description, time.Since(start).Round(time.Second))))
+	_, _ = fmt.Fprintf(GinkgoWriter, "[%s] completed in %s\n", description, time.Since(start).Round(time.Second))
 }
 
 func captureDashboardScreenshot(ctx context.Context, url string) (string, error) {

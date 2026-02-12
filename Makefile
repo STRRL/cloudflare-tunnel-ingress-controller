@@ -1,7 +1,12 @@
 E2E_CONTROLLER_IMAGE ?= cloudflare-tunnel-ingress-controller:e2e
 
+.PHONY: setup
+setup:
+	@command -v prek >/dev/null 2>&1 || { echo "prek not found, install it from https://prek.j178.dev/installation/"; exit 1; }
+	prek install
+
 .PHONY: dev
-dev:
+dev: setup
 	skaffold dev --namespace cloudflare-tunnel-ingress-controller-dev --cache-artifacts=false
 
 .PHONY: image
@@ -18,7 +23,7 @@ integration-test: setup-envtest
 
 .PHONY: e2e-image
 e2e-image:
-	DOCKER_BUILDKIT=1 TARGETARCH=amd64 docker build -t $(E2E_CONTROLLER_IMAGE) -f ./image/cloudflare-tunnel-ingress-controller/Dockerfile .
+	DOCKER_BUILDKIT=1 TARGETARCH=amd64 docker build --build-arg COVER=1 --build-arg RUNTIME_BASE=gcr.io/distroless/base-debian12:debug-nonroot -t $(E2E_CONTROLLER_IMAGE) -f ./image/cloudflare-tunnel-ingress-controller/Dockerfile .
 
 .PHONY: e2e
 e2e: e2e-image

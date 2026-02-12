@@ -16,11 +16,7 @@ import (
 )
 
 func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient client.Client, ingress networkingv1.Ingress, clusterDomain string) ([]exposure.Exposure, error) {
-	isDeleted := false
-
-	if ingress.DeletionTimestamp != nil {
-		isDeleted = true
-	}
+	isDeleted := ingress.DeletionTimestamp != nil
 
 	if len(ingress.Spec.TLS) > 0 {
 		logger.Info("ingress has tls specified, SSL Passthrough is not supported, it will be ignored.")
@@ -54,11 +50,12 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 		var proxySSLVerifyEnabled *bool
 
 		if proxySSLVerify, ok := getAnnotation(ingress.Annotations, AnnotationProxySSLVerify); ok {
-			if proxySSLVerify == AnnotationProxySSLVerifyOn {
+			switch proxySSLVerify {
+			case AnnotationProxySSLVerifyOn:
 				proxySSLVerifyEnabled = boolPointer(true)
-			} else if proxySSLVerify == AnnotationProxySSLVerifyOff {
+			case AnnotationProxySSLVerifyOff:
 				proxySSLVerifyEnabled = boolPointer(false)
-			} else {
+			default:
 				return nil, errors.Errorf(
 					"invalid value for annotation %s, available values: \"%s\" or \"%s\"",
 					AnnotationProxySSLVerify,

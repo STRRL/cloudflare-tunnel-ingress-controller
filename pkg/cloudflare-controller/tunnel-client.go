@@ -139,9 +139,25 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 		Type: "CNAME",
 	})
 	if err != nil {
-		return errors.Wrapf(err, "list DNS records for zone %s", zone.Name)
+		return errors.Wrapf(err, "list CNAME records for zone %s", zone.Name)
 	}
-	toCreate, toUpdate, toDelete, err := syncDNSRecord(exposures, cnameDnsRecords, t.tunnelId, t.tunnelName)
+
+	allTxtDnsRecords, _, err := t.cfClient.ListDNSRecords(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.ListDNSRecordsParams{
+		Type: "TXT",
+	})
+	if err != nil {
+		return errors.Wrapf(err, "list TXT records for zone %s", zone.Name)
+	}
+
+	// Filter to only include TXT records managed by this controller
+	var txtDnsRecords []cloudflare.DNSRecord
+	for _, record := range allTxtDnsRecords {
+		if strings.HasPrefix(record.Name, ManagedRecordTXTPrefix+".") {
+			txtDnsRecords = append(txtDnsRecords, record)
+		}
+	}
+
+	toCreate, toUpdate, toDelete, err := syncDNSRecord(t.logger, exposures, cnameDnsRecords, txtDnsRecords, t.tunnelId, t.tunnelName)
 	if err != nil {
 		return errors.Wrap(err, "sync DNS records")
 	}
@@ -153,8 +169,7 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 			Type:    item.Type,
 			Name:    item.Hostname,
 			Content: item.Content,
-			Proxied: cloudflare.BoolPtr(true),
-			Comment: item.Comment,
+			Proxied: cloudflare.BoolPtr(item.Type == "CNAME"),
 			TTL:     1,
 		})
 		if err != nil {
@@ -163,28 +178,23 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 	}
 
 	for _, item := range toUpdate {
-
-		if item.OldRecord.Comment != renderDNSRecordComment(t.tunnelName) {
-			t.logger.Info("WARNING, the origin DNS record is not managed by this controller, it would be changed to managed record",
-				"origin-record", item.OldRecord,
-			)
-		}
-
 		t.logger.Info("update DNS record", "id", item.OldRecord.ID, "type", item.Type, "hostname", item.OldRecord.Name, "content", item.Content)
-
 		_, err := t.cfClient.UpdateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.UpdateDNSRecordParams{
 			ID:      item.OldRecord.ID,
 			Type:    item.Type,
 			Name:    item.OldRecord.Name,
 			Content: item.Content,
-			Proxied: cloudflare.BoolPtr(true),
-			Comment: &item.Comment,
+			Proxied: cloudflare.BoolPtr(item.Type == "CNAME"),
 			TTL:     1,
 		})
 		if err != nil {
 			return errors.Wrapf(err, "update DNS record for zone %s, hostname %s", zone.Name, item.OldRecord.Name)
 		}
 	}
+
+	// Migrate legacy comment-based records (separate from normal sync)
+	legacyDeletes := migrateLegacyDNSRecords(t.logger, exposures, cnameDnsRecords, txtDnsRecords, t.tunnelName)
+	toDelete = append(toDelete, legacyDeletes...)
 
 	for _, item := range toDelete {
 		t.logger.Info("delete DNS record", "id", item.OldRecord.ID, "type", item.OldRecord.Type, "hostname", item.OldRecord.Name, "content", item.OldRecord.Content)

@@ -31,6 +31,9 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+# If specified, this priority class name is applied to the pods.
+# priorityClassName: ""
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: true
