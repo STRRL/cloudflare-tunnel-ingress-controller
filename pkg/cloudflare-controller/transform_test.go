@@ -196,6 +196,49 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 					NoTLSVerify: boolPointer(false),
 				},
 			},
+		}, {
+			name: "https with all options combined",
+			args: args{
+				ctx: context.Background(),
+				exposure: exposure.Exposure{
+					Hostname:              "ingress.example.com",
+					ServiceTarget:         "https://my-svc.default.svc.cluster.local:8443",
+					PathPrefix:            "/api",
+					IsDeleted:             false,
+					ProxySSLVerifyEnabled: boolPointer(true),
+					HTTPHostHeader:        ptr.To("api.internal"),
+					OriginServerName:      ptr.To("my-svc.internal"),
+				},
+			},
+			want: &cloudflare.UnvalidatedIngressRule{
+				Hostname: "ingress.example.com",
+				Path:     "/api",
+				Service:  "https://my-svc.default.svc.cluster.local:8443",
+				OriginRequest: &cloudflare.OriginRequestConfig{
+					NoTLSVerify:      boolPointer(false),
+					HTTPHostHeader:   ptr.To("api.internal"),
+					OriginServerName: ptr.To("my-svc.internal"),
+				},
+			},
+		}, {
+			name: "http backend does not set tls options",
+			args: args{
+				ctx: context.Background(),
+				exposure: exposure.Exposure{
+					Hostname:              "ingress.example.com",
+					ServiceTarget:         "http://10.0.0.1:80",
+					PathPrefix:            "/",
+					IsDeleted:             false,
+					ProxySSLVerifyEnabled: boolPointer(true),
+					OriginServerName:      ptr.To("should-be-ignored"),
+				},
+			},
+			want: &cloudflare.UnvalidatedIngressRule{
+				Hostname:      "ingress.example.com",
+				Path:          "/",
+				Service:       "http://10.0.0.1:80",
+				OriginRequest: nil,
+			},
 		},
 	}
 	for _, tt := range tests {

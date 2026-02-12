@@ -5,7 +5,8 @@ const AnnotationProxySSLVerify = "cloudflare-tunnel-ingress-controller.strrl.dev
 const AnnotationProxySSLVerifyOn = "on"
 const AnnotationProxySSLVerifyOff = "off"
 
-// AnnotationBackendProtocol is the annotation key for proxy-backend-protocol, default "http".
+// AnnotationBackendProtocol is the annotation key for backend-protocol.
+// Available values: "http" or "https" (case-insensitive), default "http".
 const AnnotationBackendProtocol = "cloudflare-tunnel-ingress-controller.strrl.dev/backend-protocol"
 
 // AnnotationHTTPHostHeader is to set the HTTP Host header for the local webserver.

@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -32,7 +33,17 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 		scheme := "http"
 
 		if backendProtocol, ok := getAnnotation(ingress.Annotations, AnnotationBackendProtocol); ok {
-			scheme = backendProtocol
+			normalized := strings.ToLower(backendProtocol)
+			switch normalized {
+			case "http", "https":
+				scheme = normalized
+			default:
+				return nil, errors.Errorf(
+					"invalid value %q for annotation %s, available values: \"http\" or \"https\"",
+					backendProtocol,
+					AnnotationBackendProtocol,
+				)
+			}
 		}
 
 		var httpHostHeader *string
