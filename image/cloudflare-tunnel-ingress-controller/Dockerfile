@@ -34,7 +34,7 @@ FROM ${RUNTIME_BASE} AS runtime-cover-0
 
 # Runtime: coverage-instrumented (debug image with shell and tar)
 FROM ${RUNTIME_BASE} AS runtime-cover-1
-RUN mkdir -p /tmp/coverage
+RUN ["/busybox/sh", "-c", "mkdir -p /tmp/coverage"]
 ENV GOCOVERDIR=/tmp/coverage
 
 # Select runtime based on COVER arg
