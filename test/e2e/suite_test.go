@@ -47,6 +47,7 @@ const (
 	tokenVerifyURL            = "https://api.cloudflare.com/client/v4/user/tokens/verify"
 	controllerImageEnvKey     = "E2E_CONTROLLER_IMAGE"
 	dashboardBaseDomainEnvKey = "E2E_BASE_DOMAIN"
+	e2eClusterDomain          = "e2e.cluster.internal"
 )
 
 type imageRef struct {
@@ -91,7 +92,7 @@ var _ = BeforeSuite(func() {
 	startCtx, cancel := context.WithTimeout(suiteCtx, 20*time.Minute)
 	defer cancel()
 
-	startCmd := exec.CommandContext(startCtx, "minikube", "start", "-p", minikubeProfile, "--wait=all")
+	startCmd := exec.CommandContext(startCtx, "minikube", "start", "-p", minikubeProfile, "--wait=all", fmt.Sprintf("--dns-domain=%s", e2eClusterDomain))
 	startCmd.Stdout = GinkgoWriter
 	startCmd.Stderr = GinkgoWriter
 	Expect(startCmd.Run()).To(Succeed(), "failed to start minikube profile %s", minikubeProfile)
@@ -257,6 +258,7 @@ type controllerHelmValues struct {
 		Tag        string `yaml:"tag"`
 		PullPolicy string `yaml:"pullPolicy"`
 	} `yaml:"image"`
+	ClusterDomain string `yaml:"clusterDomain,omitempty"`
 }
 
 func parseImageRef(ref string) (imageRef, error) {
@@ -323,6 +325,9 @@ func helmUpgradeInstall(ctx context.Context, kubeconfigPath string, releaseName 
 	}
 	if strings.TrimSpace(values.Image.PullPolicy) != "" {
 		helmArgs = append(helmArgs, "--set-string", fmt.Sprintf("image.pullPolicy=%s", values.Image.PullPolicy))
+	}
+	if strings.TrimSpace(values.ClusterDomain) != "" {
+		helmArgs = append(helmArgs, "--set-string", fmt.Sprintf("clusterDomain=%s", values.ClusterDomain))
 	}
 
 	cmd := exec.CommandContext(ctx, "helm", helmArgs...)

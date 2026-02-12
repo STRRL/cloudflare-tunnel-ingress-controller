@@ -17,6 +17,7 @@ import (
 )
 
 const IntegrationTestNamespace = "cf-tunnel-ingress-controller-test"
+const testClusterDomain = "k8s.example.internal"
 
 var pathTypePrefix = networkingv1.PathTypePrefix
 var pathTypeExact = networkingv1.PathTypeExact
@@ -98,12 +99,12 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
 		Expect(exposure[0].Hostname).Should(Equal("test.example.com"))
-		expectedTarget := fmt.Sprintf("http://%s.%s.svc.cluster.local:2333", service.Name, ns)
+		expectedTarget := fmt.Sprintf("http://%s.%s.svc.%s:2333", service.Name, ns, testClusterDomain)
 		Expect(exposure[0].ServiceTarget).Should(Equal(expectedTarget))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
@@ -182,7 +183,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
 		Expect(err).Should(HaveOccurred())
 		Expect(exposure).Should(BeNil())
 	})
@@ -260,7 +261,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).Should(HaveLen(1))
 	})
@@ -338,12 +339,12 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
 		Expect(exposure[0].Hostname).Should(Equal("test.example.com"))
-		expectedTarget := fmt.Sprintf("http://%s.%s.svc.cluster.local:2333", service.Name, ns)
+		expectedTarget := fmt.Sprintf("http://%s.%s.svc.%s:2333", service.Name, ns, testClusterDomain)
 		Expect(exposure[0].ServiceTarget).Should(Equal(expectedTarget))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
@@ -422,7 +423,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
 		Expect(err).Should(HaveOccurred())
 		Expect(exposure).Should(BeNil())
 	})
@@ -500,7 +501,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
 		Expect(err).Should(HaveOccurred())
 		Expect(exposure).Should(BeNil())
 	})
@@ -581,12 +582,12 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
 		Expect(exposure[0].Hostname).Should(Equal("test.example.com"))
-		expectedTarget := fmt.Sprintf("https://%s.%s.svc.cluster.local:2333", service.Name, ns)
+		expectedTarget := fmt.Sprintf("https://%s.%s.svc.%s:2333", service.Name, ns, testClusterDomain)
 		Expect(exposure[0].ServiceTarget).Should(Equal(expectedTarget))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
@@ -670,12 +671,12 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
 		Expect(exposure[0].Hostname).Should(Equal("test.example.com"))
-		expectedTarget := fmt.Sprintf("https://%s.%s.svc.cluster.local:2333", service.Name, ns)
+		expectedTarget := fmt.Sprintf("https://%s.%s.svc.%s:2333", service.Name, ns, testClusterDomain)
 		Expect(exposure[0].ServiceTarget).Should(Equal(expectedTarget))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())
@@ -683,6 +684,89 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(*exposure[0].ProxySSLVerifyEnabled).Should(BeFalse())
 
 	})
+	It("should resolve ingress with custom cluster domain", func() {
+		By("preparing namespace")
+		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(IntegrationTestNamespace, kubeClient)
+		ns, err := namespaceFixtures.Start(ctx)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		defer func() {
+			By("cleaning up namespace")
+			err := namespaceFixtures.Stop(ctx)
+			Expect(err).ShouldNot(HaveOccurred())
+		}()
+
+		By("preparing service")
+		service := v1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:    ns,
+				GenerateName: "test-service-",
+			},
+			Spec: v1.ServiceSpec{
+				ClusterIP: "10.0.0.30",
+				Ports: []v1.ServicePort{
+					{
+						Name:     "http",
+						Protocol: v1.ProtocolTCP,
+						Port:     8080,
+						TargetPort: intstr.IntOrString{
+							Type:   intstr.Int,
+							IntVal: 8080,
+						},
+					},
+				},
+			},
+		}
+		err = kubeClient.Create(ctx, &service)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		By("preparing ingress")
+		ingress := networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:    ns,
+				GenerateName: "test-ingress-",
+			},
+			Spec: networkingv1.IngressSpec{
+				Rules: []networkingv1.IngressRule{
+					{
+						Host: "test.example.com",
+						IngressRuleValue: networkingv1.IngressRuleValue{
+							HTTP: &networkingv1.HTTPIngressRuleValue{
+								Paths: []networkingv1.HTTPIngressPath{
+									{
+										Path:     "/",
+										PathType: &pathTypePrefix,
+										Backend: networkingv1.IngressBackend{
+											Service: &networkingv1.IngressServiceBackend{
+												Name: service.Name,
+												Port: networkingv1.ServiceBackendPort{
+													Number: 8080,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		err = kubeClient.Create(ctx, &ingress)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		By("transforming ingress to exposure with custom cluster domain")
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(exposure).ShouldNot(BeNil())
+		Expect(exposure).Should(HaveLen(1))
+		Expect(exposure[0].Hostname).Should(Equal("test.example.com"))
+		expectedTarget := fmt.Sprintf("http://%s.%s.svc.%s:8080", service.Name, ns, testClusterDomain)
+		Expect(exposure[0].ServiceTarget).Should(Equal(expectedTarget))
+		Expect(exposure[0].PathPrefix).Should(Equal("/"))
+		Expect(exposure[0].IsDeleted).Should(BeFalse())
+	})
+
 	It("should resolve https with proxy-ssl-verify enabled", func() {
 		// prepare
 		By("preparing namespace")
@@ -760,12 +844,12 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, "cluster.local")
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
 		Expect(exposure[0].Hostname).Should(Equal("test.example.com"))
-		expectedTarget := fmt.Sprintf("https://%s.%s.svc.cluster.local:2333", service.Name, ns)
+		expectedTarget := fmt.Sprintf("https://%s.%s.svc.%s:2333", service.Name, ns, testClusterDomain)
 		Expect(exposure[0].ServiceTarget).Should(Equal(expectedTarget))
 		Expect(exposure[0].PathPrefix).Should(Equal("/"))
 		Expect(exposure[0].IsDeleted).Should(BeFalse())

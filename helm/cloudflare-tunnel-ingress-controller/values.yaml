@@ -76,6 +76,9 @@ tolerations: []
 
 affinity: {}
 
+# Kubernetes cluster domain, used to construct FQDN for services
+# (e.g. <service>.<namespace>.svc.<clusterDomain>).
+# This should match the kubelet --cluster-domain flag (default: "cluster.local").
 clusterDomain: cluster.local
 cloudflared:
   image:
