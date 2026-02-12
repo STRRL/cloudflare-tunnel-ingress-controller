@@ -15,6 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const configHashAnnotation = "strrl.dev/cloudflared-config-hash"
+
 func CreateOrUpdateControlledCloudflared(
 	ctx context.Context,
 	kubeClient client.Client,
@@ -22,6 +24,8 @@ func CreateOrUpdateControlledCloudflared(
 	namespace string,
 	protocol string,
 	extraArgs []string,
+	deploymentConfig *CloudflaredDeploymentConfig,
+	configHash string,
 ) error {
 	logger := log.FromContext(ctx)
 	list := appsv1.DeploymentList{}
@@ -35,8 +39,11 @@ func CreateOrUpdateControlledCloudflared(
 		return errors.Wrapf(err, "list controlled-cloudflared-connector in namespace %s", namespace)
 	}
 
+	if deploymentConfig == nil {
+		deploymentConfig = &CloudflaredDeploymentConfig{}
+	}
+
 	if len(list.Items) > 0 {
-		// Check if the existing deployment needs to be updated
 		existingDeployment := &list.Items[0]
 		desiredReplicas, err := getDesiredReplicas()
 		if err != nil {
@@ -48,7 +55,6 @@ func CreateOrUpdateControlledCloudflared(
 			needsUpdate = true
 		}
 
-		// Get token once for all checks
 		token, err := tunnelClient.FetchTunnelToken(ctx)
 		if err != nil {
 			return errors.Wrap(err, "fetch tunnel token")
@@ -63,17 +69,25 @@ func CreateOrUpdateControlledCloudflared(
 				needsUpdate = true
 			}
 
-			// Check if command arguments have changed
 			desiredCommand := buildCloudflaredCommand(protocol, token, extraArgs)
 			if !slicesEqual(container.Command, desiredCommand) {
 				needsUpdate = true
 			}
 		}
 
-		if needsUpdate {
+		// Check if config hash has changed
+		existingHash := existingDeployment.Annotations[configHashAnnotation]
+		if existingHash != configHash {
+			needsUpdate = true
+		}
 
-			updatedDeployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, desiredReplicas, extraArgs)
+		if needsUpdate {
+			updatedDeployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, desiredReplicas, extraArgs, deploymentConfig, configHash)
 			existingDeployment.Spec = updatedDeployment.Spec
+			if existingDeployment.Annotations == nil {
+				existingDeployment.Annotations = make(map[string]string)
+			}
+			existingDeployment.Annotations[configHashAnnotation] = configHash
 			err = kubeClient.Update(ctx, existingDeployment)
 			if err != nil {
 				return errors.Wrap(err, "update controlled-cloudflared-connector deployment")
@@ -94,7 +108,7 @@ func CreateOrUpdateControlledCloudflared(
 		return errors.Wrap(err, "get desired replicas")
 	}
 
-	deployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, replicas, extraArgs)
+	deployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, replicas, extraArgs, deploymentConfig, configHash)
 	err = kubeClient.Create(ctx, deployment)
 	if err != nil {
 		return errors.Wrap(err, "create controlled-cloudflared-connector deployment")
@@ -103,10 +117,17 @@ func CreateOrUpdateControlledCloudflared(
 	return nil
 }
 
-func cloudflaredConnectDeploymentTemplating(protocol string, token string, namespace string, replicas int32, extraArgs []string) *appsv1.Deployment {
+func cloudflaredConnectDeploymentTemplating(
+	protocol string,
+	token string,
+	namespace string,
+	replicas int32,
+	extraArgs []string,
+	config *CloudflaredDeploymentConfig,
+	configHash string,
+) *appsv1.Deployment {
 	appName := "controlled-cloudflared-connector"
 
-	// Use default values if environment variables are empty
 	image := os.Getenv("CLOUDFLARED_IMAGE")
 	if image == "" {
 		image = "cloudflare/cloudflared:latest"
@@ -117,6 +138,82 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 		pullPolicy = "IfNotPresent"
 	}
 
+	if config == nil {
+		config = &CloudflaredDeploymentConfig{}
+	}
+
+	// Build pod labels: user-defined labels first, then required selector labels
+	// Selector labels are set last to prevent user overrides from breaking the Deployment
+	podLabels := map[string]string{}
+	for k, v := range config.PodLabels {
+		podLabels[k] = v
+	}
+	podLabels["app"] = appName
+	podLabels["strrl.dev/cloudflare-tunnel-ingress-controller"] = "controlled-cloudflared-connector"
+
+	// Build deployment annotations
+	deploymentAnnotations := map[string]string{}
+	if configHash != "" {
+		deploymentAnnotations[configHashAnnotation] = configHash
+	}
+
+	// Build container
+	container := v1.Container{
+		Name:            appName,
+		Image:           image,
+		ImagePullPolicy: v1.PullPolicy(pullPolicy),
+		Command:         buildCloudflaredCommand(protocol, token, extraArgs),
+	}
+
+	if config.Resources != nil {
+		container.Resources = *config.Resources
+	}
+	if config.SecurityContext != nil {
+		container.SecurityContext = config.SecurityContext
+	}
+	if len(config.VolumeMounts) > 0 {
+		container.VolumeMounts = config.VolumeMounts
+	}
+	if config.Probes != nil {
+		if config.Probes.Liveness != nil {
+			container.LivenessProbe = config.Probes.Liveness
+		}
+		if config.Probes.Readiness != nil {
+			container.ReadinessProbe = config.Probes.Readiness
+		}
+		if config.Probes.Startup != nil {
+			container.StartupProbe = config.Probes.Startup
+		}
+	}
+
+	// Build pod spec
+	podSpec := v1.PodSpec{
+		Containers:    []v1.Container{container},
+		RestartPolicy: v1.RestartPolicyAlways,
+	}
+
+	if config.PodSecurityContext != nil {
+		podSpec.SecurityContext = config.PodSecurityContext
+	}
+	if len(config.NodeSelector) > 0 {
+		podSpec.NodeSelector = config.NodeSelector
+	}
+	if len(config.Tolerations) > 0 {
+		podSpec.Tolerations = config.Tolerations
+	}
+	if config.Affinity != nil {
+		podSpec.Affinity = config.Affinity
+	}
+	if len(config.TopologySpreadConstraints) > 0 {
+		podSpec.TopologySpreadConstraints = config.TopologySpreadConstraints
+	}
+	if config.PriorityClassName != "" {
+		podSpec.PriorityClassName = config.PriorityClassName
+	}
+	if len(config.Volumes) > 0 {
+		podSpec.Volumes = config.Volumes
+	}
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      appName,
@@ -125,6 +222,7 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 				"app": appName,
 				"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
 			},
+			Annotations: deploymentAnnotations,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -136,23 +234,11 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: appName,
-					Labels: map[string]string{
-						"app": appName,
-						"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
-					},
+					Name:        appName,
+					Labels:      podLabels,
+					Annotations: config.PodAnnotations,
 				},
-				Spec: v1.PodSpec{
-					Containers: []v1.Container{
-						{
-							Name:            appName,
-							Image:           image,
-							ImagePullPolicy: v1.PullPolicy(pullPolicy),
-							Command:         buildCloudflaredCommand(protocol, token, extraArgs),
-						},
-					},
-					RestartPolicy: v1.RestartPolicyAlways,
-				},
+				Spec: podSpec,
 			},
 		},
 	}

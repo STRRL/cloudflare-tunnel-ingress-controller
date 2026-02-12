@@ -11,8 +11,9 @@ spec:
       {{- include "cloudflare-tunnel-ingress-controller.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
       annotations:
+        checksum/cloudflared-config: {{ include (print $.Template.BasePath "/cloudflared-config.yaml") . | sha256sum }}
+      {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
@@ -44,6 +45,7 @@ spec:
             {{- range .Values.cloudflared.extraArgs }}
             - --cloudflared-extra-args={{ . }}
             {{- end }}
+            - --cloudflared-deployment-config=/etc/cloudflared-config/config.json
           env:
             - name: CLOUDFLARE_API_TOKEN
               valueFrom:
@@ -85,8 +87,16 @@ spec:
               value: {{ .Values.cloudflared.image.pullPolicy | quote }}
             - name: CLOUDFLARED_REPLICA_COUNT
               value: {{ .Values.cloudflared.replicaCount | quote }}
+          volumeMounts:
+            - name: cloudflared-config
+              mountPath: /etc/cloudflared-config
+              readOnly: true
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: cloudflared-config
+          configMap:
+            name: {{ include "cloudflare-tunnel-ingress-controller.fullname" . }}-cloudflared-config
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

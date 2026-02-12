@@ -12,7 +12,9 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 )
 
 var _ cloudflarecontroller.TunnelClientInterface = &MockTunnelClient{}
@@ -49,7 +51,6 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 	})
 
 	It("should create a new cloudflared deployment", func() {
-		// Prepare
 		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
 		ns, err := namespaceFixtures.Start(ctx)
 		Expect(err).NotTo(HaveOccurred())
@@ -67,11 +68,9 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 
 		protocol := "quic"
 
-		// Act
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{}, nil, "")
 		Expect(err).NotTo(HaveOccurred())
 
-		// Assert
 		deployment := &appsv1.Deployment{}
 		err = kubeClient.Get(ctx, types.NamespacedName{
 			Namespace: ns,
@@ -85,7 +84,6 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 	})
 
 	It("should update an existing cloudflared deployment", func() {
-		// Prepare
 		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
 		ns, err := namespaceFixtures.Start(ctx)
 		Expect(err).NotTo(HaveOccurred())
@@ -103,18 +101,15 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 
 		protocol := "quic"
 
-		// Create initial deployment
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{}, nil, "")
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(os.Setenv("CLOUDFLARED_REPLICA_COUNT", "3")).To(Succeed())
 		Expect(os.Setenv("CLOUDFLARED_IMAGE", "cloudflare/cloudflared:2022.3.0")).To(Succeed())
 
-		// Act
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{}, nil, "")
 		Expect(err).NotTo(HaveOccurred())
 
-		// Assert
 		deployment := &appsv1.Deployment{}
 		err = kubeClient.Get(ctx, types.NamespacedName{
 			Namespace: ns,
@@ -127,7 +122,6 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 	})
 
 	It("should include extra args in cloudflared command", func() {
-		// Prepare
 		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
 		ns, err := namespaceFixtures.Start(ctx)
 		Expect(err).NotTo(HaveOccurred())
@@ -146,11 +140,9 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		protocol := "quic"
 		extraArgs := []string{"--post-quantum", "--edge-ip-version", "4"}
 
-		// Act
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, extraArgs)
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, extraArgs, nil, "")
 		Expect(err).NotTo(HaveOccurred())
 
-		// Assert
 		deployment := &appsv1.Deployment{}
 		err = kubeClient.Get(ctx, types.NamespacedName{
 			Namespace: ns,
@@ -162,5 +154,128 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		Expect(command).To(ContainElement("--post-quantum"))
 		Expect(command).To(ContainElement("--edge-ip-version"))
 		Expect(command).To(ContainElement("4"))
+	})
+
+	It("should apply deployment config to cloudflared deployment", func() {
+		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
+		ns, err := namespaceFixtures.Start(ctx)
+		Expect(err).NotTo(HaveOccurred())
+
+		defer func() {
+			err := namespaceFixtures.Stop(ctx)
+			Expect(err).NotTo(HaveOccurred())
+		}()
+
+		mockTunnelClient := &MockTunnelClient{
+			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
+				return "mock-token", nil
+			},
+		}
+
+		protocol := "quic"
+		deploymentConfig := &controller.CloudflaredDeploymentConfig{
+			Resources: &v1.ResourceRequirements{
+				Requests: v1.ResourceList{
+					v1.ResourceCPU:    resource.MustParse("100m"),
+					v1.ResourceMemory: resource.MustParse("128Mi"),
+				},
+				Limits: v1.ResourceList{
+					v1.ResourceCPU:    resource.MustParse("200m"),
+					v1.ResourceMemory: resource.MustParse("256Mi"),
+				},
+			},
+			SecurityContext: &v1.SecurityContext{
+				ReadOnlyRootFilesystem: ptr.To(true),
+				RunAsNonRoot:           ptr.To(true),
+			},
+			PodSecurityContext: &v1.PodSecurityContext{
+				RunAsNonRoot: ptr.To(true),
+			},
+			PodLabels: map[string]string{
+				"team": "platform",
+			},
+			PodAnnotations: map[string]string{
+				"prometheus.io/scrape": "true",
+			},
+			NodeSelector: map[string]string{
+				"kubernetes.io/os": "linux",
+			},
+			PriorityClassName: "high-priority",
+		}
+
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{}, deploymentConfig, "test-hash")
+		Expect(err).NotTo(HaveOccurred())
+
+		deployment := &appsv1.Deployment{}
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-connector",
+		}, deployment)
+		Expect(err).NotTo(HaveOccurred())
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		Expect(container.Resources.Requests.Cpu().String()).To(Equal("100m"))
+		Expect(container.Resources.Requests.Memory().String()).To(Equal("128Mi"))
+		Expect(container.Resources.Limits.Cpu().String()).To(Equal("200m"))
+		Expect(container.Resources.Limits.Memory().String()).To(Equal("256Mi"))
+
+		Expect(container.SecurityContext).NotTo(BeNil())
+		Expect(*container.SecurityContext.ReadOnlyRootFilesystem).To(BeTrue())
+		Expect(*container.SecurityContext.RunAsNonRoot).To(BeTrue())
+
+		Expect(deployment.Spec.Template.Spec.SecurityContext).NotTo(BeNil())
+		Expect(*deployment.Spec.Template.Spec.SecurityContext.RunAsNonRoot).To(BeTrue())
+
+		Expect(deployment.Spec.Template.Labels).To(HaveKeyWithValue("team", "platform"))
+		Expect(deployment.Spec.Template.Labels).To(HaveKeyWithValue("app", "controlled-cloudflared-connector"))
+		Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("prometheus.io/scrape", "true"))
+
+		Expect(deployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("kubernetes.io/os", "linux"))
+		Expect(deployment.Spec.Template.Spec.PriorityClassName).To(Equal("high-priority"))
+
+		Expect(deployment.Annotations).To(HaveKeyWithValue("strrl.dev/cloudflared-config-hash", "test-hash"))
+	})
+
+	It("should update deployment when config hash changes", func() {
+		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
+		ns, err := namespaceFixtures.Start(ctx)
+		Expect(err).NotTo(HaveOccurred())
+
+		defer func() {
+			err := namespaceFixtures.Stop(ctx)
+			Expect(err).NotTo(HaveOccurred())
+		}()
+
+		mockTunnelClient := &MockTunnelClient{
+			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
+				return "mock-token", nil
+			},
+		}
+
+		protocol := "quic"
+
+		// Create with initial config
+		config1 := &controller.CloudflaredDeploymentConfig{
+			PriorityClassName: "low-priority",
+		}
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{}, config1, "hash-v1")
+		Expect(err).NotTo(HaveOccurred())
+
+		// Update with new config (different hash)
+		config2 := &controller.CloudflaredDeploymentConfig{
+			PriorityClassName: "high-priority",
+		}
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{}, config2, "hash-v2")
+		Expect(err).NotTo(HaveOccurred())
+
+		deployment := &appsv1.Deployment{}
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-connector",
+		}, deployment)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(deployment.Spec.Template.Spec.PriorityClassName).To(Equal("high-priority"))
+		Expect(deployment.Annotations).To(HaveKeyWithValue("strrl.dev/cloudflared-config-hash", "hash-v2"))
 	})
 })

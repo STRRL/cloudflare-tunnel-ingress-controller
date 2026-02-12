@@ -23,15 +23,16 @@ type rootCmdFlags struct {
 	// for annotation on Ingress
 	ingressClass string
 	// for IngressClass.spec.controller
-	controllerClass      string
-	logLevel             int
-	cloudflareAPIToken   string
-	cloudflareAccountId  string
-	cloudflareTunnelName string
-	namespace            string
-	cloudflaredProtocol  string
-	cloudflaredExtraArgs []string
-	clusterDomain        string
+	controllerClass             string
+	logLevel                    int
+	cloudflareAPIToken          string
+	cloudflareAccountId         string
+	cloudflareTunnelName        string
+	namespace                   string
+	cloudflaredProtocol         string
+	cloudflaredExtraArgs        []string
+	clusterDomain               string
+	cloudflaredDeploymentConfig string
 }
 
 func main() {
@@ -99,6 +100,12 @@ func main() {
 				return err
 			}
 
+			deploymentConfig, configHash, err := controller.LoadCloudflaredDeploymentConfig(options.cloudflaredDeploymentConfig)
+			if err != nil {
+				logger.Error(err, "load cloudflared deployment config")
+				os.Exit(1)
+			}
+
 			ticker := time.NewTicker(10 * time.Second)
 			done := make(chan struct{})
 			defer close(done)
@@ -109,7 +116,7 @@ func main() {
 					case <-done:
 						return
 					case <-ticker.C:
-						err := controller.CreateOrUpdateControlledCloudflared(ctx, mgr.GetClient(), tunnelClient, options.namespace, options.cloudflaredProtocol, options.cloudflaredExtraArgs)
+						err := controller.CreateOrUpdateControlledCloudflared(ctx, mgr.GetClient(), tunnelClient, options.namespace, options.cloudflaredProtocol, options.cloudflaredExtraArgs, deploymentConfig, configHash)
 						if err != nil {
 							logger.WithName("controlled-cloudflared").Error(err, "create controlled cloudflared")
 						}
@@ -132,6 +139,7 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.cloudflaredProtocol, "cloudflared-protocol", options.cloudflaredProtocol, "cloudflared protocol")
 	rootCommand.PersistentFlags().StringSliceVar(&options.cloudflaredExtraArgs, "cloudflared-extra-args", options.cloudflaredExtraArgs, "extra arguments to pass to cloudflared")
 	rootCommand.PersistentFlags().StringVar(&options.clusterDomain, "cluster-domain", options.clusterDomain, "kubernetes cluster domain, used to build service FQDN (should match kubelet --cluster-domain)")
+	rootCommand.PersistentFlags().StringVar(&options.cloudflaredDeploymentConfig, "cloudflared-deployment-config", options.cloudflaredDeploymentConfig, "path to JSON file with cloudflared deployment pod template configuration")
 
 	err := rootCommand.Execute()
 	if err != nil {
