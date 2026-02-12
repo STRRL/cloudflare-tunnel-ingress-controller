@@ -229,6 +229,11 @@ var _ = Describe("Happy Path", func() {
 		} else {
 			_, _ = fmt.Fprintf(GinkgoWriter, "dashboard screenshot saved to %s\n", path)
 		}
+
+		By("collecting coverage data from the controller pod")
+		if err := collectControllerCoverage(controllerNamespace, controllerReleaseName); err != nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to collect coverage: %v\n", err)
+		}
 	})
 })
 

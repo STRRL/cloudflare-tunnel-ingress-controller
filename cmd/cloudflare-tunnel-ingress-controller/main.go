@@ -8,6 +8,7 @@ import (
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/controller"
+	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/coverage"
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
@@ -33,6 +34,8 @@ type rootCmdFlags struct {
 }
 
 func main() {
+	coverage.SetupSignalHandler()
+
 	var rootLogger = stdr.NewWithOptions(log.New(os.Stderr, "", log.LstdFlags), stdr.Options{LogCaller: stdr.All})
 
 	options := rootCmdFlags{
