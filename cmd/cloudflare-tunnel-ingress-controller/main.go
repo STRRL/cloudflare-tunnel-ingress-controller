@@ -32,6 +32,7 @@ type rootCmdFlags struct {
 	cloudflaredProtocol  string
 	cloudflaredExtraArgs []string
 	clusterDomain        string
+	leaderElect          bool
 }
 
 func main() {
@@ -81,7 +82,11 @@ func main() {
 				os.Exit(1)
 			}
 
-			mgr, err := manager.New(cfg, manager.Options{})
+			mgr, err := manager.New(cfg, manager.Options{
+				LeaderElection:          options.leaderElect,
+				LeaderElectionID:        "cloudflare-tunnel-ingress-controller.strrl.dev",
+				LeaderElectionNamespace: options.namespace,
+			})
 			if err != nil {
 				logger.Error(err, "unable to set up manager")
 				os.Exit(1)
@@ -99,11 +104,18 @@ func main() {
 				return err
 			}
 
-			ticker := time.NewTicker(10 * time.Second)
 			done := make(chan struct{})
 			defer close(done)
 
 			go func() {
+				select {
+				case <-done:
+					return
+				case <-mgr.Elected():
+				}
+
+				ticker := time.NewTicker(10 * time.Second)
+				defer ticker.Stop()
 				for {
 					select {
 					case <-done:
@@ -132,6 +144,7 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.cloudflaredProtocol, "cloudflared-protocol", options.cloudflaredProtocol, "cloudflared protocol")
 	rootCommand.PersistentFlags().StringSliceVar(&options.cloudflaredExtraArgs, "cloudflared-extra-args", options.cloudflaredExtraArgs, "extra arguments to pass to cloudflared")
 	rootCommand.PersistentFlags().StringVar(&options.clusterDomain, "cluster-domain", options.clusterDomain, "kubernetes cluster domain, used to build service FQDN (should match kubelet --cluster-domain)")
+	rootCommand.PersistentFlags().BoolVar(&options.leaderElect, "leader-elect", options.leaderElect, "enable leader election for high availability")
 
 	err := rootCommand.Execute()
 	if err != nil {

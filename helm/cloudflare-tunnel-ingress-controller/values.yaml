@@ -80,6 +80,10 @@ affinity: {}
 # (e.g. <service>.<namespace>.svc.<clusterDomain>).
 # This should match the kubelet --cluster-domain flag (default: "cluster.local").
 clusterDomain: cluster.local
+
+leaderElection:
+  enabled: false
+
 cloudflared:
   image:
     repository: cloudflare/cloudflared

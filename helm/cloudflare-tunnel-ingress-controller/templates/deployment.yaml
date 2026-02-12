@@ -44,6 +44,9 @@ spec:
             {{- range .Values.cloudflared.extraArgs }}
             - --cloudflared-extra-args={{ . }}
             {{- end }}
+            {{- if .Values.leaderElection.enabled }}
+            - --leader-elect
+            {{- end }}
           env:
             - name: CLOUDFLARE_API_TOKEN
               valueFrom:
