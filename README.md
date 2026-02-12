@@ -82,6 +82,53 @@ kubectl -n kubernetes-dashboard \
 
 - Done! Enjoy! 🎉
 
+## Annotations
+
+The following annotations can be used on Ingress resources to configure backend behavior:
+
+| Annotation | Description | Values | Default |
+|---|---|---|---|
+| `cloudflare-tunnel-ingress-controller.strrl.dev/backend-protocol` | Protocol for connecting to the backend service | `http`, `https` (case-insensitive) | `http` |
+| `cloudflare-tunnel-ingress-controller.strrl.dev/proxy-ssl-verify` | Enable TLS certificate verification for HTTPS backends | `on`, `off` | `off` |
+| `cloudflare-tunnel-ingress-controller.strrl.dev/origin-server-name` | Hostname on the origin server certificate (for TLS SNI) | any hostname | - |
+| `cloudflare-tunnel-ingress-controller.strrl.dev/http-host-header` | Override the HTTP Host header sent to the backend | any hostname | - |
+
+### HTTPS Backend
+
+If your backend service terminates TLS (e.g., a pod running nginx with HTTPS), set the `backend-protocol` annotation to `https`:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-https-backend
+  annotations:
+    cloudflare-tunnel-ingress-controller.strrl.dev/backend-protocol: "https"
+spec:
+  ingressClassName: cloudflare-tunnel
+  rules:
+    - host: myapp.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-service
+                port:
+                  number: 443
+```
+
+By default, TLS certificate verification is disabled (`NoTLSVerify: true`) for HTTPS backends, which is suitable for self-signed certificates. To enable verification, use the `proxy-ssl-verify` and `origin-server-name` annotations:
+
+```yaml
+metadata:
+  annotations:
+    cloudflare-tunnel-ingress-controller.strrl.dev/backend-protocol: "https"
+    cloudflare-tunnel-ingress-controller.strrl.dev/proxy-ssl-verify: "on"
+    cloudflare-tunnel-ingress-controller.strrl.dev/origin-server-name: "my-service.internal"
+```
+
 ## Alternative
 
 There is also an awesome project which could integrate with Cloudflare Tunnel as CRD, check it out [adyanth/cloudflare-operator](https://github.com/adyanth/cloudflare-operator)!

@@ -63,7 +63,7 @@ Pre-commit hooks are managed via [prek](https://prek.j178.dev/) (configured in `
 
 ### Supported Annotations
 - `cloudflare-tunnel-ingress-controller.strrl.dev/proxy-ssl-verify`: Enable/disable SSL verification ("on" or "off", default: "off")
-- `cloudflare-tunnel-ingress-controller.strrl.dev/backend-protocol`: Backend protocol (default: "http")
+- `cloudflare-tunnel-ingress-controller.strrl.dev/backend-protocol`: Backend protocol, "http" or "https" (default: "http", case-insensitive)
 - `cloudflare-tunnel-ingress-controller.strrl.dev/http-host-header`: Set HTTP Host header for the local webserver
 - `cloudflare-tunnel-ingress-controller.strrl.dev/origin-server-name`: Hostname on the origin server certificate
 
