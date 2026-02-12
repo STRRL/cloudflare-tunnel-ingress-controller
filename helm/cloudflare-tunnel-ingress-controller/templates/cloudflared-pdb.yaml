@@ -1,0 +1,22 @@
+{{- if .Values.cloudflared.pdb.enabled }}
+{{- if and .Values.cloudflared.pdb.minAvailable .Values.cloudflared.pdb.maxUnavailable }}
+{{- fail "cloudflared.pdb.minAvailable and cloudflared.pdb.maxUnavailable are mutually exclusive" }}
+{{- end }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: controlled-cloudflared-connector
+  labels:
+    {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.cloudflared.pdb.minAvailable }}
+  minAvailable: {{ .Values.cloudflared.pdb.minAvailable }}
+  {{- end }}
+  {{- if .Values.cloudflared.pdb.maxUnavailable }}
+  maxUnavailable: {{ .Values.cloudflared.pdb.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: controlled-cloudflared-connector
+      strrl.dev/cloudflare-tunnel-ingress-controller: controlled-cloudflared-connector
+{{- end }}
