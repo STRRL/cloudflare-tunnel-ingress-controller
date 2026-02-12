@@ -31,6 +31,7 @@ type rootCmdFlags struct {
 	namespace            string
 	cloudflaredProtocol  string
 	cloudflaredExtraArgs []string
+	clusterDomain        string
 }
 
 func main() {
@@ -45,6 +46,7 @@ func main() {
 		logLevel:            0,
 		namespace:           "default",
 		cloudflaredProtocol: "auto",
+		clusterDomain:       "cluster.local",
 	}
 
 	crlog.SetLogger(rootLogger.WithName("controller-runtime"))
@@ -90,6 +92,7 @@ func main() {
 				controller.IngressControllerOptions{
 					IngressClassName:    options.ingressClass,
 					ControllerClassName: options.controllerClass,
+					ClusterDomain:       options.clusterDomain,
 					CFTunnelClient:      tunnelClient,
 				})
 			if err != nil {
@@ -128,6 +131,7 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.namespace, "namespace", options.namespace, "namespace to execute cloudflared connector")
 	rootCommand.PersistentFlags().StringVar(&options.cloudflaredProtocol, "cloudflared-protocol", options.cloudflaredProtocol, "cloudflared protocol")
 	rootCommand.PersistentFlags().StringSliceVar(&options.cloudflaredExtraArgs, "cloudflared-extra-args", options.cloudflaredExtraArgs, "extra arguments to pass to cloudflared")
+	rootCommand.PersistentFlags().StringVar(&options.clusterDomain, "cluster-domain", options.clusterDomain, "kubernetes cluster domain, used to build service FQDN (should match kubelet --cluster-domain)")
 
 	err := rootCommand.Execute()
 	if err != nil {

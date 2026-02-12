@@ -27,11 +27,12 @@ type IngressController struct {
 	kubeClient          client.Client
 	ingressClassName    string
 	controllerClassName string
+	clusterDomain       string
 	tunnelClient        *cloudflarecontroller.TunnelClient
 }
 
-func NewIngressController(logger logr.Logger, kubeClient client.Client, ingressClassName string, controllerClassName string, tunnelClient *cloudflarecontroller.TunnelClient) *IngressController {
-	return &IngressController{logger: logger, kubeClient: kubeClient, ingressClassName: ingressClassName, controllerClassName: controllerClassName, tunnelClient: tunnelClient}
+func NewIngressController(logger logr.Logger, kubeClient client.Client, ingressClassName string, controllerClassName string, clusterDomain string, tunnelClient *cloudflarecontroller.TunnelClient) *IngressController {
+	return &IngressController{logger: logger, kubeClient: kubeClient, ingressClassName: ingressClassName, controllerClassName: controllerClassName, clusterDomain: clusterDomain, tunnelClient: tunnelClient}
 }
 
 func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -81,7 +82,7 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 	var allExposures []exposure.Exposure
 	for _, ingress := range ingresses {
 		// best effort to extract exposures from all ingresses
-		exposures, err := FromIngressToExposure(ctx, i.logger, i.kubeClient, ingress)
+		exposures, err := FromIngressToExposure(ctx, i.logger, i.kubeClient, ingress, i.clusterDomain)
 		if err != nil {
 			i.logger.Info("extract exposures from ingress, skipped", "triggered-by", request.NamespacedName, "ingress", fmt.Sprintf("%s/%s", ingress.Namespace, ingress.Name), "error", err)
 		}

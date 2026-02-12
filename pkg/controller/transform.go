@@ -15,7 +15,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient client.Client, ingress networkingv1.Ingress) ([]exposure.Exposure, error) {
+func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient client.Client, ingress networkingv1.Ingress, clusterDomain string) ([]exposure.Exposure, error) {
 	isDeleted := ingress.DeletionTimestamp != nil
 
 	if len(ingress.Spec.TLS) > 0 {
@@ -76,7 +76,7 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 				return nil, errors.Wrapf(err, "fetch service %s", namespacedName)
 			}
 
-			host, err := getHostFromService(&service)
+			host, err := getHostFromService(&service, clusterDomain)
 			if err != nil {
 				return nil, err
 			}
@@ -120,7 +120,7 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 	return result, nil
 }
 
-func getHostFromService(service *v1.Service) (string, error) {
+func getHostFromService(service *v1.Service, clusterDomain string) (string, error) {
 	if service.Spec.ClusterIP == "None" {
 		return "", errors.Errorf("service %s has None for cluster ip, headless service is not supported", client.ObjectKeyFromObject(service))
 	}
@@ -132,8 +132,8 @@ func getHostFromService(service *v1.Service) (string, error) {
 	}
 
 	// Use FQDN service name instead of cluster IP for better stability
-	// Format: <service-name>.<namespace>.svc.cluster.local
-	return fmt.Sprintf("%s.%s.svc.cluster.local", service.Name, service.Namespace), nil
+	// Format: <service-name>.<namespace>.svc.<cluster-domain>
+	return fmt.Sprintf("%s.%s.svc.%s", service.Name, service.Namespace, clusterDomain), nil
 }
 
 func getPortWithName(ports []v1.ServicePort, portName string) (bool, int32) {

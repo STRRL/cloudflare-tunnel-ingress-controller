@@ -59,6 +59,7 @@ var _ = Describe("Happy Path", func() {
 		values.Image.Repository = controllerImageRef.repository
 		values.Image.Tag = controllerImageRef.tag
 		values.Image.PullPolicy = "IfNotPresent"
+		values.ClusterDomain = e2eClusterDomain
 
 		helmCtx, cancelHelm := context.WithTimeout(suiteCtx, 10*time.Minute)
 		Expect(helmUpgradeInstall(helmCtx, kubeconfigPath, controllerReleaseName, controllerNamespace, values)).To(Succeed())
