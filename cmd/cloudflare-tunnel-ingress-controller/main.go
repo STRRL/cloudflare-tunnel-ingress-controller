@@ -32,6 +32,7 @@ type rootCmdFlags struct {
 	cloudflaredProtocol  string
 	cloudflaredExtraArgs []string
 	clusterDomain        string
+	dnsCommentTemplate   string
 }
 
 func main() {
@@ -47,6 +48,7 @@ func main() {
 		namespace:           "default",
 		cloudflaredProtocol: "auto",
 		clusterDomain:       "cluster.local",
+		dnsCommentTemplate:  "managed by cloudflare-tunnel-ingress-controller, tunnel [{{.TunnelName}}]",
 	}
 
 	crlog.SetLogger(rootLogger.WithName("controller-runtime"))
@@ -69,7 +71,7 @@ func main() {
 			var tunnelClient *cloudflarecontroller.TunnelClient
 
 			logger.V(3).Info("bootstrap tunnel client with tunnel name", "account-id", options.cloudflareAccountId, "tunnel-name", options.cloudflareTunnelName)
-			tunnelClient, err = cloudflarecontroller.BootstrapTunnelClientWithTunnelName(ctx, logger.WithName("tunnel-client"), cloudflareClient, options.cloudflareAccountId, options.cloudflareTunnelName)
+			tunnelClient, err = cloudflarecontroller.BootstrapTunnelClientWithTunnelName(ctx, logger.WithName("tunnel-client"), cloudflareClient, options.cloudflareAccountId, options.cloudflareTunnelName, options.dnsCommentTemplate)
 			if err != nil {
 				logger.Error(err, "bootstrap tunnel client with tunnel name")
 				os.Exit(1)
@@ -132,6 +134,7 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.cloudflaredProtocol, "cloudflared-protocol", options.cloudflaredProtocol, "cloudflared protocol")
 	rootCommand.PersistentFlags().StringSliceVar(&options.cloudflaredExtraArgs, "cloudflared-extra-args", options.cloudflaredExtraArgs, "extra arguments to pass to cloudflared")
 	rootCommand.PersistentFlags().StringVar(&options.clusterDomain, "cluster-domain", options.clusterDomain, "kubernetes cluster domain, used to build service FQDN (should match kubelet --cluster-domain)")
+	rootCommand.PersistentFlags().StringVar(&options.dnsCommentTemplate, "dns-comment-template", options.dnsCommentTemplate, "Go template for DNS record comments. Available variables: {{.TunnelName}}, {{.TunnelId}}, {{.Hostname}}. Set to empty string to disable. Note: Cloudflare limits comment length by plan (Free: 100, Pro/Biz/Ent: 500 chars). See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/")
 
 	err := rootCommand.Execute()
 	if err != nil {

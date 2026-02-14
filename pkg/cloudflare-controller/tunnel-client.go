@@ -1,9 +1,11 @@
 package cloudflarecontroller
 
 import (
+	"bytes"
 	"context"
 	"slices"
 	"strings"
+	"text/template"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
@@ -20,15 +22,73 @@ type TunnelClientInterface interface {
 var _ TunnelClientInterface = &TunnelClient{}
 
 type TunnelClient struct {
-	logger     logr.Logger
-	cfClient   *cloudflare.API
-	accountId  string
-	tunnelId   string
-	tunnelName string
+	logger              logr.Logger
+	cfClient            *cloudflare.API
+	accountId           string
+	tunnelId            string
+	tunnelName          string
+	dnsCommentTemplate  *template.Template // nil if disabled (empty template string)
+	dnsCommentTemplateS string             // raw template string for logging
 }
 
-func NewTunnelClient(logger logr.Logger, cfClient *cloudflare.API, accountId string, tunnelId string, tunnelName string) *TunnelClient {
-	return &TunnelClient{logger: logger, cfClient: cfClient, accountId: accountId, tunnelId: tunnelId, tunnelName: tunnelName}
+// DNSCommentTemplateData contains the variables available in the DNS comment template.
+// See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/
+// for comment length limits per Cloudflare plan (Free: 100, Pro/Business/Enterprise: 500 chars).
+type DNSCommentTemplateData struct {
+	TunnelName string // Name of the Cloudflare Tunnel
+	TunnelId   string // ID of the Cloudflare Tunnel
+	Hostname   string // DNS record hostname (e.g. "app.example.com")
+}
+
+func NewTunnelClient(logger logr.Logger, cfClient *cloudflare.API, accountId string, tunnelId string, tunnelName string, dnsCommentTemplate string) *TunnelClient {
+	tc := &TunnelClient{
+		logger:              logger,
+		cfClient:            cfClient,
+		accountId:           accountId,
+		tunnelId:            tunnelId,
+		tunnelName:          tunnelName,
+		dnsCommentTemplateS: dnsCommentTemplate,
+	}
+	if dnsCommentTemplate != "" {
+		tmpl, err := template.New("dns-comment").Parse(dnsCommentTemplate)
+		if err != nil {
+			logger.Error(err, "failed to parse dns-comment-template, DNS comments will be disabled", "template", dnsCommentTemplate)
+		} else {
+			tc.dnsCommentTemplate = tmpl
+		}
+	}
+	return tc
+}
+
+// renderDNSComment renders the DNS comment for a given hostname using the configured template.
+// Returns empty string if the template is disabled or rendering fails.
+func (t *TunnelClient) renderDNSComment(hostname string) string {
+	if t.dnsCommentTemplate == nil {
+		return ""
+	}
+	data := DNSCommentTemplateData{
+		TunnelName: t.tunnelName,
+		TunnelId:   t.tunnelId,
+		Hostname:   hostname,
+	}
+	var buf bytes.Buffer
+	if err := t.dnsCommentTemplate.Execute(&buf, data); err != nil {
+		t.logger.Error(err, "failed to render dns comment template", "hostname", hostname)
+		return ""
+	}
+	comment := buf.String()
+
+	// Warn about comment length.
+	// Cloudflare enforces per-plan limits: Free=100, Pro/Business/Enterprise=500 chars.
+	// See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/
+	if len(comment) > 100 {
+		t.logger.Info("WARNING: rendered DNS comment exceeds 100 characters (Cloudflare Free plan limit). "+
+			"Pro/Business/Enterprise plans allow up to 500 characters. "+
+			"If your plan does not support this length, the API call may fail.",
+			"hostname", hostname, "commentLength", len(comment),
+		)
+	}
+	return comment
 }
 
 func (t *TunnelClient) PutExposures(ctx context.Context, exposures []exposure.Exposure) error {
@@ -165,13 +225,22 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 
 	for _, item := range toCreate {
 		t.logger.Info("create DNS record", "type", item.Type, "hostname", item.Hostname, "content", item.Content)
-		_, err := t.cfClient.CreateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.CreateDNSRecordParams{
+		params := cloudflare.CreateDNSRecordParams{
 			Type:    item.Type,
 			Name:    item.Hostname,
 			Content: item.Content,
 			Proxied: cloudflare.BoolPtr(item.Type == "CNAME"),
 			TTL:     1,
-		})
+		}
+		// Add comment to CNAME records if template is configured.
+		// Comments are informational only; ownership is tracked via TXT records.
+		// See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/
+		if item.Type == "CNAME" {
+			if comment := t.renderDNSComment(item.Hostname); comment != "" {
+				params.Comment = comment
+			}
+		}
+		_, err := t.cfClient.CreateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), params)
 		if err != nil {
 			return errors.Wrapf(err, "create DNS record for zone %s, hostname %s", zone.Name, item.Hostname)
 		}
@@ -179,14 +248,21 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 
 	for _, item := range toUpdate {
 		t.logger.Info("update DNS record", "id", item.OldRecord.ID, "type", item.Type, "hostname", item.OldRecord.Name, "content", item.Content)
-		_, err := t.cfClient.UpdateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.UpdateDNSRecordParams{
+		params := cloudflare.UpdateDNSRecordParams{
 			ID:      item.OldRecord.ID,
 			Type:    item.Type,
 			Name:    item.OldRecord.Name,
 			Content: item.Content,
 			Proxied: cloudflare.BoolPtr(item.Type == "CNAME"),
 			TTL:     1,
-		})
+		}
+		// Add comment to CNAME records if template is configured.
+		if item.Type == "CNAME" {
+			if comment := t.renderDNSComment(item.OldRecord.Name); comment != "" {
+				params.Comment = &comment
+			}
+		}
+		_, err := t.cfClient.UpdateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), params)
 		if err != nil {
 			return errors.Wrapf(err, "update DNS record for zone %s, hostname %s", zone.Name, item.OldRecord.Name)
 		}

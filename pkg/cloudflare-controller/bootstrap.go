@@ -10,14 +10,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-func BootstrapTunnelClientWithTunnelName(ctx context.Context, logger logr.Logger, cfClient *cloudflare.API, accountId string, tunnelName string) (*TunnelClient, error) {
+func BootstrapTunnelClientWithTunnelName(ctx context.Context, logger logr.Logger, cfClient *cloudflare.API, accountId string, tunnelName string, dnsCommentTemplate string) (*TunnelClient, error) {
 	logger.V(3).Info("fetch tunnel id with tunnel name", "account-id", accountId, "tunnel-name", tunnelName)
 	tunnelId, err := GetTunnelIdFromTunnelName(ctx, logger, cfClient, tunnelName, accountId)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get tunnel id from tunnel name %s", tunnelName)
 	}
 	logger.V(3).Info("tunnel id fetched", "tunnel-id", tunnelId, "tunnel-name", tunnelName, "account-id", accountId)
-	return NewTunnelClient(logger, cfClient, accountId, tunnelId, tunnelName), nil
+	return NewTunnelClient(logger, cfClient, accountId, tunnelId, tunnelName, dnsCommentTemplate), nil
 }
 
 func GetTunnelIdFromTunnelName(ctx context.Context, logger logr.Logger, cfClient *cloudflare.API, tunnelName string, accountId string) (string, error) {
