@@ -41,6 +41,7 @@ spec:
             - --namespace=$(NAMESPACE)
             - --cloudflared-protocol={{ .Values.cloudflared.protocol }}
             - --cluster-domain={{ .Values.clusterDomain | default "cluster.local" }}
+            - --dns-comment-template={{ .Values.dnsCommentTemplate | default "" }}
             {{- range .Values.cloudflared.extraArgs }}
             - --cloudflared-extra-args={{ . }}
             {{- end }}
