@@ -79,6 +79,17 @@ affinity: {}
 # Kubernetes cluster domain, used to construct FQDN for services
 # (e.g. <service>.<namespace>.svc.<clusterDomain>).
 # This should match the kubelet --cluster-domain flag (default: "cluster.local").
+# Go template for DNS CNAME record comments. This is purely informational and
+# does NOT affect record ownership (which is tracked via TXT records).
+# Available template variables: {{.TunnelName}}, {{.TunnelId}}, {{.Hostname}}
+# Set to empty string "" to disable comments entirely.
+#
+# Note: Cloudflare enforces comment length limits per plan:
+#   Free: 100 chars | Pro/Business/Enterprise: 500 chars
+# If the rendered comment exceeds your plan's limit, the Cloudflare API will reject it.
+# See: https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/
+dnsCommentTemplate: "managed by cloudflare-tunnel-ingress-controller, tunnel [{{.TunnelName}}]"
+
 clusterDomain: cluster.local
 cloudflared:
   image:
