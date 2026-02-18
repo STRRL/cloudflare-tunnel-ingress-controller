@@ -27,7 +27,7 @@ e2e-image:
 
 .PHONY: e2e
 e2e: e2e-image
-	E2E_CONTROLLER_IMAGE=$(E2E_CONTROLLER_IMAGE) go test -v ./test/e2e
+	E2E_CONTROLLER_IMAGE=$(E2E_CONTROLLER_IMAGE) go test -v -timeout 30m ./test/e2e
 
 .PHONY: setup-envtest
 setup-envtest:

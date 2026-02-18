@@ -91,6 +91,31 @@ cloudflared:
   # Example: ["--post-quantum", "--edge-ip-version", "4"]
   extraArgs: []
 
+  # Pod template customization for the controlled-cloudflared-connector Deployment.
+  # These fields are applied to the cloudflared pods managed by the controller.
+  resources: {}
+  securityContext: {}
+  podSecurityContext: {}
+  podLabels: {}
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  # priorityClassName: ""
+  probes:
+    liveness: {}
+    readiness: {}
+    startup: {}
+  volumes: []
+  volumeMounts: []
+
+  # PodDisruptionBudget for the controlled-cloudflared-connector Deployment.
+  pdb:
+    enabled: false
+    # minAvailable: 1
+    # maxUnavailable: 1
+
 cloudflaredServiceMonitor:
   create: false
   jobLabel: ""

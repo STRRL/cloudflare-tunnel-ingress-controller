@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cloudflare-tunnel-ingress-controller.fullname" . }}-cloudflared-config
+  labels:
+    {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
+data:
+  config.json: |
+    {{- $config := dict }}
+    {{- if .Values.cloudflared.resources }}
+    {{- $_ := set $config "resources" .Values.cloudflared.resources }}
+    {{- end }}
+    {{- if .Values.cloudflared.securityContext }}
+    {{- $_ := set $config "securityContext" .Values.cloudflared.securityContext }}
+    {{- end }}
+    {{- if .Values.cloudflared.podSecurityContext }}
+    {{- $_ := set $config "podSecurityContext" .Values.cloudflared.podSecurityContext }}
+    {{- end }}
+    {{- if .Values.cloudflared.podLabels }}
+    {{- $_ := set $config "podLabels" .Values.cloudflared.podLabels }}
+    {{- end }}
+    {{- if .Values.cloudflared.podAnnotations }}
+    {{- $_ := set $config "podAnnotations" .Values.cloudflared.podAnnotations }}
+    {{- end }}
+    {{- if .Values.cloudflared.nodeSelector }}
+    {{- $_ := set $config "nodeSelector" .Values.cloudflared.nodeSelector }}
+    {{- end }}
+    {{- if .Values.cloudflared.tolerations }}
+    {{- $_ := set $config "tolerations" .Values.cloudflared.tolerations }}
+    {{- end }}
+    {{- if .Values.cloudflared.affinity }}
+    {{- $_ := set $config "affinity" .Values.cloudflared.affinity }}
+    {{- end }}
+    {{- if .Values.cloudflared.topologySpreadConstraints }}
+    {{- $_ := set $config "topologySpreadConstraints" .Values.cloudflared.topologySpreadConstraints }}
+    {{- end }}
+    {{- if .Values.cloudflared.priorityClassName }}
+    {{- $_ := set $config "priorityClassName" .Values.cloudflared.priorityClassName }}
+    {{- end }}
+    {{- if or (and .Values.cloudflared.probes .Values.cloudflared.probes.liveness) (and .Values.cloudflared.probes .Values.cloudflared.probes.readiness) (and .Values.cloudflared.probes .Values.cloudflared.probes.startup) }}
+    {{- $probes := dict }}
+    {{- if .Values.cloudflared.probes.liveness }}
+    {{- $_ := set $probes "liveness" .Values.cloudflared.probes.liveness }}
+    {{- end }}
+    {{- if .Values.cloudflared.probes.readiness }}
+    {{- $_ := set $probes "readiness" .Values.cloudflared.probes.readiness }}
+    {{- end }}
+    {{- if .Values.cloudflared.probes.startup }}
+    {{- $_ := set $probes "startup" .Values.cloudflared.probes.startup }}
+    {{- end }}
+    {{- $_ := set $config "probes" $probes }}
+    {{- end }}
+    {{- if .Values.cloudflared.volumes }}
+    {{- $_ := set $config "volumes" .Values.cloudflared.volumes }}
+    {{- end }}
+    {{- if .Values.cloudflared.volumeMounts }}
+    {{- $_ := set $config "volumeMounts" .Values.cloudflared.volumeMounts }}
+    {{- end }}
+    {{- $config | toJson | nindent 4 }}
