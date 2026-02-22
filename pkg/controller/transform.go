@@ -105,6 +105,11 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 				return nil, errors.Errorf("path type in ingress %s/%s is %s, which is not supported", ingress.GetNamespace(), ingress.GetName(), *path.PathType)
 			}
 
+			if scheme == "ssh" {
+				path = networkingv1.HTTPIngressPath{}
+				logger.Info("ssh scheme detected, ignoring path")
+			}
+
 			result = append(result, exposure.Exposure{
 				Hostname:              hostname,
 				ServiceTarget:         fmt.Sprintf("%s://%s:%d", scheme, host, port),
