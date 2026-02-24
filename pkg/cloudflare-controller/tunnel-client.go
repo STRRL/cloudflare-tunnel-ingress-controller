@@ -41,6 +41,11 @@ func (t *TunnelClient) PutExposures(ctx context.Context, exposures []exposure.Ex
 	if err != nil {
 		return errors.Wrap(err, "update DNS CNAME record")
 	}
+
+	err = t.updateAccessApplications(ctx, exposures)
+	if err != nil {
+		return errors.Wrap(err, "update access applications")
+	}
 	return nil
 }
 

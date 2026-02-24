@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -45,6 +46,16 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 
 		if name, ok := getAnnotation(ingress.Annotations, AnnotationOriginServerName); ok {
 			originServerName = ptr.To(name)
+		}
+
+		var allowedAccessGroupIDs []string
+		if raw, ok := getAnnotation(ingress.Annotations, AnnotationAllowedAccessGroup); ok {
+			allowedAccessGroupIDs = parseCommaSeparated(raw)
+		}
+
+		var deniedAccessGroupIDs []string
+		if raw, ok := getAnnotation(ingress.Annotations, AnnotationDeniedAccessGroup); ok {
+			deniedAccessGroupIDs = parseCommaSeparated(raw)
 		}
 
 		var proxySSLVerifyEnabled *bool
@@ -113,6 +124,8 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 				ProxySSLVerifyEnabled: proxySSLVerifyEnabled,
 				HTTPHostHeader:        httpHostHeader,
 				OriginServerName:      originServerName,
+				AllowedAccessGroupIDs: allowedAccessGroupIDs,
+				DeniedAccessGroupIDs:  deniedAccessGroupIDs,
 			})
 		}
 	}
@@ -152,4 +165,15 @@ func getAnnotation(annotations map[string]string, key string) (string, bool) {
 
 func boolPointer(b bool) *bool {
 	return &b
+}
+
+func parseCommaSeparated(raw string) []string {
+	var result []string
+	for _, s := range strings.Split(raw, ",") {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			result = append(result, s)
+		}
+	}
+	return result
 }
