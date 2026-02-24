@@ -16,4 +16,16 @@ type Exposure struct {
 	HTTPHostHeader *string
 	// OriginServerName is the hostname on the origin server certificate.
 	OriginServerName *string
+	// AllowedAccessGroupIDs is the list of Cloudflare Access Group IDs to allow.
+	// When non-empty, a Cloudflare Access Application is created for the hostname.
+	AllowedAccessGroupIDs []string
+	// DeniedAccessGroupIDs is the list of Cloudflare Access Group IDs to deny.
+	// Creates a higher-precedence deny policy on the Access Application.
+	DeniedAccessGroupIDs []string
+	// AccessBypass when true creates a bypass Access Application (no auth required).
+	AccessBypass bool
+	// AccessSessionDuration overrides the default session duration (e.g. "1h", "24h").
+	AccessSessionDuration string
+	// AccessAutoRedirect when non-nil, controls whether to skip the IdP selection page.
+	AccessAutoRedirect *bool
 }
