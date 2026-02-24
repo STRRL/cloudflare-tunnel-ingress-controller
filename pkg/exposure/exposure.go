@@ -22,4 +22,10 @@ type Exposure struct {
 	// DeniedAccessGroupIDs is the list of Cloudflare Access Group IDs to deny.
 	// Creates a higher-precedence deny policy on the Access Application.
 	DeniedAccessGroupIDs []string
+	// AccessBypass when true creates a bypass Access Application (no auth required).
+	AccessBypass bool
+	// AccessSessionDuration overrides the default session duration (e.g. "1h", "24h").
+	AccessSessionDuration string
+	// AccessAutoRedirect when non-nil, controls whether to skip the IdP selection page.
+	AccessAutoRedirect *bool
 }

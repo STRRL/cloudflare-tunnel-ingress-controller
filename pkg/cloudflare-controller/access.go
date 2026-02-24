@@ -30,11 +30,16 @@ func hostnameFromAccessAppName(name, tunnelName string) string {
 	return strings.TrimPrefix(name, prefix)
 }
 
+const defaultSessionDuration = "24h"
+
 // desiredAccessApp holds the desired state for an Access Application on a given hostname.
 // Group fields contain names from annotations; IDs are resolved at reconcile time.
 type desiredAccessApp struct {
 	AllowedGroupIDs []string
 	DeniedGroupIDs  []string
+	Bypass          bool
+	SessionDuration string
+	AutoRedirect    *bool
 }
 
 // resolveGroupNames maps group names to IDs using the provided lookup map.
@@ -59,19 +64,30 @@ func desiredAccessApps(exposures []exposure.Exposure) map[string]desiredAccessAp
 		if e.IsDeleted {
 			continue
 		}
-		if len(e.AllowedAccessGroupIDs) == 0 && len(e.DeniedAccessGroupIDs) == 0 {
+
+		hasGroups := len(e.AllowedAccessGroupIDs) > 0 || len(e.DeniedAccessGroupIDs) > 0
+		if !hasGroups && !e.AccessBypass {
 			continue
 		}
 
 		existing := result[e.Hostname]
 		existing.AllowedGroupIDs = unionStrings(existing.AllowedGroupIDs, e.AllowedAccessGroupIDs)
 		existing.DeniedGroupIDs = unionStrings(existing.DeniedGroupIDs, e.DeniedAccessGroupIDs)
+		if e.AccessBypass {
+			existing.Bypass = true
+		}
+		if e.AccessSessionDuration != "" {
+			existing.SessionDuration = e.AccessSessionDuration
+		}
+		if e.AccessAutoRedirect != nil {
+			existing.AutoRedirect = e.AccessAutoRedirect
+		}
 		result[e.Hostname] = existing
 	}
 
-	// Remove entries with no allowed groups — deny-only doesn't make sense without an allow
+	// Remove entries with no allowed groups and no bypass
 	for hostname, app := range result {
-		if len(app.AllowedGroupIDs) == 0 {
+		if len(app.AllowedGroupIDs) == 0 && !app.Bypass {
 			delete(result, hostname)
 		}
 	}
@@ -155,10 +171,10 @@ func (t *TunnelClient) updateAccessApplications(ctx context.Context, exposures [
 				return errors.Wrapf(err, "create access application for %s", hostname)
 			}
 		} else {
-			t.logger.V(3).Info("update access application policies", "hostname", hostname, "app-id", existingApp.ID)
-			err := t.updateAccessAppPolicies(ctx, rc, existingApp, want)
+			t.logger.V(3).Info("update access application", "hostname", hostname, "app-id", existingApp.ID)
+			err := t.updateAccessApp(ctx, rc, existingApp, want)
 			if err != nil {
-				return errors.Wrapf(err, "update access application policies for %s", hostname)
+				return errors.Wrapf(err, "update access application for %s", hostname)
 			}
 		}
 	}
@@ -177,19 +193,43 @@ func (t *TunnelClient) updateAccessApplications(ctx context.Context, exposures [
 	return nil
 }
 
-// createAccessApp creates an Access Application and its allow (and optionally deny) policies.
+// createAccessApp creates an Access Application and its policies.
 func (t *TunnelClient) createAccessApp(ctx context.Context, rc *cloudflare.ResourceContainer, hostname string, want desiredAccessApp) error {
-	app, err := t.cfClient.CreateAccessApplication(ctx, rc, cloudflare.CreateAccessApplicationParams{
+	sessionDuration := defaultSessionDuration
+	if want.SessionDuration != "" {
+		sessionDuration = want.SessionDuration
+	}
+
+	params := cloudflare.CreateAccessApplicationParams{
 		Name:            accessAppName(t.tunnelName, hostname),
 		Domain:          hostname,
 		Type:            cloudflare.SelfHosted,
-		SessionDuration: "24h",
-	})
+		SessionDuration: sessionDuration,
+	}
+	if want.AutoRedirect != nil {
+		params.AutoRedirectToIdentity = want.AutoRedirect
+	}
+
+	app, err := t.cfClient.CreateAccessApplication(ctx, rc, params)
 	if err != nil {
 		return errors.Wrap(err, "create access application")
 	}
 
-	// Create allow policy (precedence 1 = evaluated first by default, but deny at precedence 1 takes priority)
+	if want.Bypass {
+		_, err = t.cfClient.CreateAccessPolicy(ctx, rc, cloudflare.CreateAccessPolicyParams{
+			ApplicationID: app.ID,
+			Name:          "bypass",
+			Decision:      "bypass",
+			Precedence:    1,
+			Include:       []interface{}{cloudflare.AccessGroupEveryone{}},
+		})
+		if err != nil {
+			return errors.Wrap(err, "create bypass policy")
+		}
+		return nil
+	}
+
+	// Create allow policy
 	_, err = t.cfClient.CreateAccessPolicy(ctx, rc, cloudflare.CreateAccessPolicyParams{
 		ApplicationID: app.ID,
 		Name:          "allow",
@@ -201,7 +241,7 @@ func (t *TunnelClient) createAccessApp(ctx context.Context, rc *cloudflare.Resou
 		return errors.Wrap(err, "create allow policy")
 	}
 
-	// Create deny policy if deny groups are specified (higher precedence = evaluated first)
+	// Create deny policy if deny groups are specified
 	if len(want.DeniedGroupIDs) > 0 {
 		_, err = t.cfClient.CreateAccessPolicy(ctx, rc, cloudflare.CreateAccessPolicyParams{
 			ApplicationID: app.ID,
@@ -218,8 +258,29 @@ func (t *TunnelClient) createAccessApp(ctx context.Context, rc *cloudflare.Resou
 	return nil
 }
 
-// updateAccessAppPolicies updates the allow and deny policies on an existing Access Application.
-func (t *TunnelClient) updateAccessAppPolicies(ctx context.Context, rc *cloudflare.ResourceContainer, app cloudflare.AccessApplication, want desiredAccessApp) error {
+// updateAccessApp updates an existing Access Application's settings and policies.
+func (t *TunnelClient) updateAccessApp(ctx context.Context, rc *cloudflare.ResourceContainer, app cloudflare.AccessApplication, want desiredAccessApp) error {
+	// Update app-level settings (session duration, auto-redirect)
+	sessionDuration := defaultSessionDuration
+	if want.SessionDuration != "" {
+		sessionDuration = want.SessionDuration
+	}
+	updateParams := cloudflare.UpdateAccessApplicationParams{
+		ID:              app.ID,
+		Name:            app.Name,
+		Domain:          app.Domain,
+		Type:            cloudflare.SelfHosted,
+		SessionDuration: sessionDuration,
+	}
+	if want.AutoRedirect != nil {
+		updateParams.AutoRedirectToIdentity = want.AutoRedirect
+	}
+	_, err := t.cfClient.UpdateAccessApplication(ctx, rc, updateParams)
+	if err != nil {
+		return errors.Wrap(err, "update access application settings")
+	}
+
+	// Update policies
 	policies, _, err := t.cfClient.ListAccessPolicies(ctx, rc, cloudflare.ListAccessPoliciesParams{
 		ApplicationID: app.ID,
 	})
@@ -227,15 +288,44 @@ func (t *TunnelClient) updateAccessAppPolicies(ctx context.Context, rc *cloudfla
 		return errors.Wrap(err, "list access policies")
 	}
 
-	var allowPolicy *cloudflare.AccessPolicy
-	var denyPolicy *cloudflare.AccessPolicy
+	var allowPolicy, denyPolicy, bypassPolicy *cloudflare.AccessPolicy
 	for i := range policies {
 		switch policies[i].Decision {
 		case "allow":
 			allowPolicy = &policies[i]
 		case "deny":
 			denyPolicy = &policies[i]
+		case "bypass":
+			bypassPolicy = &policies[i]
 		}
+	}
+
+	if want.Bypass {
+		// Ensure bypass policy exists, remove allow/deny if present
+		if bypassPolicy == nil {
+			_, err = t.cfClient.CreateAccessPolicy(ctx, rc, cloudflare.CreateAccessPolicyParams{
+				ApplicationID: app.ID,
+				Name:          "bypass",
+				Decision:      "bypass",
+				Precedence:    1,
+				Include:       []interface{}{cloudflare.AccessGroupEveryone{}},
+			})
+			if err != nil {
+				return errors.Wrap(err, "create bypass policy")
+			}
+		}
+		if allowPolicy != nil {
+			_ = t.cfClient.DeleteAccessPolicy(ctx, rc, cloudflare.DeleteAccessPolicyParams{ApplicationID: app.ID, PolicyID: allowPolicy.ID})
+		}
+		if denyPolicy != nil {
+			_ = t.cfClient.DeleteAccessPolicy(ctx, rc, cloudflare.DeleteAccessPolicyParams{ApplicationID: app.ID, PolicyID: denyPolicy.ID})
+		}
+		return nil
+	}
+
+	// Remove bypass policy if switching away from bypass
+	if bypassPolicy != nil {
+		_ = t.cfClient.DeleteAccessPolicy(ctx, rc, cloudflare.DeleteAccessPolicyParams{ApplicationID: app.ID, PolicyID: bypassPolicy.ID})
 	}
 
 	// Update or create allow policy
@@ -291,7 +381,6 @@ func (t *TunnelClient) updateAccessAppPolicies(ctx context.Context, rc *cloudfla
 			}
 		}
 	} else if denyPolicy != nil {
-		// No deny groups desired but a deny policy exists — remove it
 		err = t.cfClient.DeleteAccessPolicy(ctx, rc, cloudflare.DeleteAccessPolicyParams{
 			ApplicationID: app.ID,
 			PolicyID:      denyPolicy.ID,

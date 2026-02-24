@@ -180,6 +180,38 @@ func Test_desiredAccessApps(t *testing.T) {
 			want: map[string]desiredAccessApp{},
 		},
 		{
+			name: "bypass creates app without groups",
+			exposures: []exposure.Exposure{
+				{
+					Hostname:     "public.example.com",
+					AccessBypass: true,
+				},
+			},
+			want: map[string]desiredAccessApp{
+				"public.example.com": {
+					Bypass: true,
+				},
+			},
+		},
+		{
+			name: "session duration and auto-redirect propagated",
+			exposures: []exposure.Exposure{
+				{
+					Hostname:              "app.example.com",
+					AllowedAccessGroupIDs: []string{"group-1"},
+					AccessSessionDuration: "1h",
+					AccessAutoRedirect:    boolPtr(true),
+				},
+			},
+			want: map[string]desiredAccessApp{
+				"app.example.com": {
+					AllowedGroupIDs: []string{"group-1"},
+					SessionDuration: "1h",
+					AutoRedirect:    boolPtr(true),
+				},
+			},
+		},
+		{
 			name: "multiple hostnames",
 			exposures: []exposure.Exposure{
 				{
@@ -267,6 +299,8 @@ func Test_resolveGroupNames(t *testing.T) {
 		t.Errorf("resolveGroupNames() = %v, want %v", got, want)
 	}
 }
+
+func boolPtr(b bool) *bool { return &b }
 
 func Test_unionStrings(t *testing.T) {
 	tests := []struct {

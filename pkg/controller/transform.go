@@ -58,6 +58,21 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 			deniedAccessGroupIDs = parseCommaSeparated(raw)
 		}
 
+		var accessBypass bool
+		if raw, ok := getAnnotation(ingress.Annotations, AnnotationAccessBypass); ok {
+			accessBypass = raw == "true"
+		}
+
+		var accessSessionDuration string
+		if raw, ok := getAnnotation(ingress.Annotations, AnnotationAccessSessionDuration); ok {
+			accessSessionDuration = raw
+		}
+
+		var accessAutoRedirect *bool
+		if raw, ok := getAnnotation(ingress.Annotations, AnnotationAccessAutoRedirect); ok {
+			accessAutoRedirect = boolPointer(raw == "true")
+		}
+
 		var proxySSLVerifyEnabled *bool
 
 		if proxySSLVerify, ok := getAnnotation(ingress.Annotations, AnnotationProxySSLVerify); ok {
@@ -126,6 +141,9 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 				OriginServerName:      originServerName,
 				AllowedAccessGroupIDs: allowedAccessGroupIDs,
 				DeniedAccessGroupIDs:  deniedAccessGroupIDs,
+				AccessBypass:          accessBypass,
+				AccessSessionDuration: accessSessionDuration,
+				AccessAutoRedirect:    accessAutoRedirect,
 			})
 		}
 	}

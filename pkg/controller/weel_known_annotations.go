@@ -19,3 +19,12 @@ const AnnotationAllowedAccessGroup = "cloudflare-tunnel-ingress-controller.strrl
 
 // AnnotationDeniedAccessGroup is a comma-separated list of Cloudflare Access Group IDs to deny.
 const AnnotationDeniedAccessGroup = "cloudflare-tunnel-ingress-controller.strrl.dev/cloudflare-access-denied-group"
+
+// AnnotationAccessBypass when set to "true", creates a bypass Access Application for the hostname.
+const AnnotationAccessBypass = "cloudflare-tunnel-ingress-controller.strrl.dev/cloudflare-access-bypass"
+
+// AnnotationAccessSessionDuration sets the session duration for the Access Application (e.g. "1h", "24h").
+const AnnotationAccessSessionDuration = "cloudflare-tunnel-ingress-controller.strrl.dev/cloudflare-access-session-duration"
+
+// AnnotationAccessAutoRedirect when "true", skips the IdP selection page and redirects directly to the provider.
+const AnnotationAccessAutoRedirect = "cloudflare-tunnel-ingress-controller.strrl.dev/cloudflare-access-auto-redirect"
