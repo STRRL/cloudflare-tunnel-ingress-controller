@@ -16,4 +16,10 @@ type Exposure struct {
 	HTTPHostHeader *string
 	// OriginServerName is the hostname on the origin server certificate.
 	OriginServerName *string
+	// AllowedAccessGroupIDs is the list of Cloudflare Access Group IDs to allow.
+	// When non-empty, a Cloudflare Access Application is created for the hostname.
+	AllowedAccessGroupIDs []string
+	// DeniedAccessGroupIDs is the list of Cloudflare Access Group IDs to deny.
+	// Creates a higher-precedence deny policy on the Access Application.
+	DeniedAccessGroupIDs []string
 }

@@ -13,3 +13,9 @@ const AnnotationHTTPHostHeader = "cloudflare-tunnel-ingress-controller.strrl.dev
 
 // AnnotationOriginServerName is the hostname on the origin server certificate.
 const AnnotationOriginServerName = "cloudflare-tunnel-ingress-controller.strrl.dev/origin-server-name"
+
+// AnnotationAllowedAccessGroup is a comma-separated list of Cloudflare Access Group IDs to allow.
+const AnnotationAllowedAccessGroup = "cloudflare-tunnel-ingress-controller.strrl.dev/cloudflare-access-allowed-group"
+
+// AnnotationDeniedAccessGroup is a comma-separated list of Cloudflare Access Group IDs to deny.
+const AnnotationDeniedAccessGroup = "cloudflare-tunnel-ingress-controller.strrl.dev/cloudflare-access-denied-group"
