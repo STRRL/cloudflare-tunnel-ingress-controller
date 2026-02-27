@@ -60,7 +60,7 @@ func main() {
 			logger := options.logger
 			logger.Info("logging verbosity", "level", options.logLevel)
 
-			logger.V(3).Info("build cloudflare client with API Token", "api-token", options.cloudflareAPIToken)
+			logger.V(3).Info("build cloudflare client with API Token", "api-token", "<redacted>")
 			cloudflareClient, err := cloudflare.NewWithAPIToken(options.cloudflareAPIToken)
 			if err != nil {
 				logger.Error(err, "create cloudflare client")
