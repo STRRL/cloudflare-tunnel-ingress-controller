@@ -9,6 +9,7 @@ import (
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 type TunnelClientInterface interface {
@@ -163,45 +164,66 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 	}
 	t.logger.V(3).Info("sync DNS records", "to-create", toCreate, "to-update", toUpdate, "to-delete", toDelete)
 
-	for _, item := range toCreate {
-		t.logger.Info("create DNS record", "type", item.Type, "hostname", item.Hostname, "content", item.Content)
-		_, err := t.cfClient.CreateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.CreateDNSRecordParams{
-			Type:    item.Type,
-			Name:    item.Hostname,
-			Content: item.Content,
-			Proxied: cloudflare.BoolPtr(item.Type == "CNAME"),
-			TTL:     1,
-		})
-		if err != nil {
-			return errors.Wrapf(err, "create DNS record for zone %s, hostname %s", zone.Name, item.Hostname)
-		}
-	}
-
-	for _, item := range toUpdate {
-		t.logger.Info("update DNS record", "id", item.OldRecord.ID, "type", item.Type, "hostname", item.OldRecord.Name, "content", item.Content)
-		_, err := t.cfClient.UpdateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.UpdateDNSRecordParams{
-			ID:      item.OldRecord.ID,
-			Type:    item.Type,
-			Name:    item.OldRecord.Name,
-			Content: item.Content,
-			Proxied: cloudflare.BoolPtr(item.Type == "CNAME"),
-			TTL:     1,
-		})
-		if err != nil {
-			return errors.Wrapf(err, "update DNS record for zone %s, hostname %s", zone.Name, item.OldRecord.Name)
-		}
-	}
-
 	// Migrate legacy comment-based records (separate from normal sync)
 	legacyDeletes := migrateLegacyDNSRecords(t.logger, exposures, cnameDnsRecords, txtDnsRecords, t.tunnelName)
 	toDelete = append(toDelete, legacyDeletes...)
 
+	// Configure concurrency limit
+	concurrencyLimit := 10
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(concurrencyLimit)
+
+	for _, item := range toCreate {
+		item := item // capture loop variable
+		g.Go(func() error {
+			t.logger.Info("create DNS record", "type", item.Type, "hostname", item.Hostname, "content", item.Content)
+			_, err := t.cfClient.CreateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.CreateDNSRecordParams{
+				Type:    item.Type,
+				Name:    item.Hostname,
+				Content: item.Content,
+				Proxied: cloudflare.BoolPtr(item.Type == "CNAME"),
+				TTL:     1,
+			})
+			if err != nil {
+				return errors.Wrapf(err, "create DNS record for zone %s, hostname %s", zone.Name, item.Hostname)
+			}
+			return nil
+		})
+	}
+
+	for _, item := range toUpdate {
+		item := item // capture loop variable
+		g.Go(func() error {
+			t.logger.Info("update DNS record", "id", item.OldRecord.ID, "type", item.Type, "hostname", item.OldRecord.Name, "content", item.Content)
+			_, err := t.cfClient.UpdateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.UpdateDNSRecordParams{
+				ID:      item.OldRecord.ID,
+				Type:    item.Type,
+				Name:    item.OldRecord.Name,
+				Content: item.Content,
+				Proxied: cloudflare.BoolPtr(item.Type == "CNAME"),
+				TTL:     1,
+			})
+			if err != nil {
+				return errors.Wrapf(err, "update DNS record for zone %s, hostname %s", zone.Name, item.OldRecord.Name)
+			}
+			return nil
+		})
+	}
+
 	for _, item := range toDelete {
-		t.logger.Info("delete DNS record", "id", item.OldRecord.ID, "type", item.OldRecord.Type, "hostname", item.OldRecord.Name, "content", item.OldRecord.Content)
-		err := t.cfClient.DeleteDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), item.OldRecord.ID)
-		if err != nil {
-			return errors.Wrapf(err, "delete DNS record for zone %s, hostname %s", zone.Name, item.OldRecord.Name)
-		}
+		item := item // capture loop variable
+		g.Go(func() error {
+			t.logger.Info("delete DNS record", "id", item.OldRecord.ID, "type", item.OldRecord.Type, "hostname", item.OldRecord.Name, "content", item.OldRecord.Content)
+			err := t.cfClient.DeleteDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), item.OldRecord.ID)
+			if err != nil {
+				return errors.Wrapf(err, "delete DNS record for zone %s, hostname %s", zone.Name, item.OldRecord.Name)
+			}
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	return nil
