@@ -64,8 +64,23 @@ func CreateOrUpdateControlledCloudflared(
 			}
 
 			// Check if command arguments have changed
-			desiredCommand := buildCloudflaredCommand(protocol, token, extraArgs)
+			desiredCommand := buildCloudflaredCommand(protocol, extraArgs)
 			if !slicesEqual(container.Command, desiredCommand) {
+				needsUpdate = true
+			}
+
+			// Check if token has changed
+			hasTokenEnv := false
+			for _, env := range container.Env {
+				if env.Name == "TUNNEL_TOKEN" {
+					hasTokenEnv = true
+					if env.Value != token {
+						needsUpdate = true
+					}
+					break
+				}
+			}
+			if !hasTokenEnv {
 				needsUpdate = true
 			}
 		}
@@ -148,7 +163,13 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 							Name:            appName,
 							Image:           image,
 							ImagePullPolicy: v1.PullPolicy(pullPolicy),
-							Command:         buildCloudflaredCommand(protocol, token, extraArgs),
+							Command:         buildCloudflaredCommand(protocol, extraArgs),
+							Env: []v1.EnvVar{
+								{
+									Name:  "TUNNEL_TOKEN",
+									Value: token,
+								},
+							},
 						},
 					},
 					RestartPolicy: v1.RestartPolicyAlways,
@@ -170,7 +191,7 @@ func getDesiredReplicas() (int32, error) {
 	return int32(replicas), nil
 }
 
-func buildCloudflaredCommand(protocol string, token string, extraArgs []string) []string {
+func buildCloudflaredCommand(protocol string, extraArgs []string) []string {
 	command := []string{
 		"cloudflared",
 		"--protocol",
@@ -184,8 +205,8 @@ func buildCloudflaredCommand(protocol string, token string, extraArgs []string) 
 		command = append(command, extraArgs...)
 	}
 
-	// Add metrics, run subcommand and token
-	command = append(command, "--metrics", "0.0.0.0:44483", "run", "--token", token)
+	// Add metrics, run subcommand
+	command = append(command, "--metrics", "0.0.0.0:44483", "run")
 
 	return command
 }
