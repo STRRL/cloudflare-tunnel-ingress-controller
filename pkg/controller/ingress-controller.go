@@ -143,7 +143,7 @@ func (i *IngressController) isControlledByThisController(ctx context.Context, ta
 		controlledIngressClassNames = append(controlledIngressClassNames, controlledIngressClass.Name)
 	}
 
-	if stringSliceContains(controlledIngressClassNames, *target.Spec.IngressClassName) {
+	if slices.Contains(controlledIngressClassNames, *target.Spec.IngressClassName) {
 		return true, nil
 	}
 
@@ -197,7 +197,7 @@ func (i *IngressController) listControlledIngresses(ctx context.Context) ([]netw
 				return
 			}
 
-			if stringSliceContains(controlledIngressClassNames, *ingress.Spec.IngressClassName) {
+			if slices.Contains(controlledIngressClassNames, *ingress.Spec.IngressClassName) {
 				result = append(result, ingress)
 				return
 			}
@@ -208,7 +208,7 @@ func (i *IngressController) listControlledIngresses(ctx context.Context) ([]netw
 }
 
 func (i *IngressController) attachFinalizer(ctx context.Context, ingress networkingv1.Ingress) error {
-	if stringSliceContains(ingress.Finalizers, IngressControllerFinalizer) {
+	if slices.Contains(ingress.Finalizers, IngressControllerFinalizer) {
 		return nil
 	}
 	ingress.Finalizers = append(ingress.Finalizers, IngressControllerFinalizer)
@@ -220,10 +220,12 @@ func (i *IngressController) attachFinalizer(ctx context.Context, ingress network
 }
 
 func (i *IngressController) cleanFinalizer(ctx context.Context, ingress networkingv1.Ingress) error {
-	if !stringSliceContains(ingress.Finalizers, IngressControllerFinalizer) {
+	if !slices.Contains(ingress.Finalizers, IngressControllerFinalizer) {
 		return nil
 	}
-	ingress.Finalizers = removeStringFromSlice(ingress.Finalizers, IngressControllerFinalizer)
+	ingress.Finalizers = slices.DeleteFunc(ingress.Finalizers, func(f string) bool {
+		return f == IngressControllerFinalizer
+	})
 	err := i.kubeClient.Update(ctx, &ingress)
 	if err != nil {
 		return errors.Wrapf(err, "clean finalizer for %s/%s", ingress.Namespace, ingress.Name)
@@ -231,21 +233,4 @@ func (i *IngressController) cleanFinalizer(ctx context.Context, ingress networki
 	return nil
 }
 
-func removeStringFromSlice(finalizers []string, finalizer string) []string {
-	var result []string
-	for _, f := range finalizers {
-		if f != finalizer {
-			result = append(result, f)
-		}
-	}
-	return result
-}
 
-func stringSliceContains(slice []string, element string) bool {
-	for _, sliceElement := range slice {
-		if sliceElement == element {
-			return true
-		}
-	}
-	return false
-}
