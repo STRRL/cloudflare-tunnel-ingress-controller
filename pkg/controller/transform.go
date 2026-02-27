@@ -73,6 +73,10 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 			}
 
 			var service *v1.Service
+			// Check local cache to avoid redundant client.Get calls.
+			// Even with a cached client (controller-runtime default), Get() performs a deep copy
+			// of the object. For Ingresses with many paths pointing to the same Service,
+			// this avoids unnecessary allocations and CPU usage.
 			if cached, ok := serviceCache[namespacedName]; ok {
 				service = cached
 			} else {
