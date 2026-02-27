@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"os"
+	"slices"
 	"strconv"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
@@ -65,7 +66,7 @@ func CreateOrUpdateControlledCloudflared(
 
 			// Check if command arguments have changed
 			desiredCommand := buildCloudflaredCommand(protocol, token, extraArgs)
-			if !slicesEqual(container.Command, desiredCommand) {
+			if !slices.Equal(container.Command, desiredCommand) {
 				needsUpdate = true
 			}
 		}
@@ -190,14 +191,3 @@ func buildCloudflaredCommand(protocol string, token string, extraArgs []string) 
 	return command
 }
 
-func slicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i, v := range a {
-		if v != b[i] {
-			return false
-		}
-	}
-	return true
-}
