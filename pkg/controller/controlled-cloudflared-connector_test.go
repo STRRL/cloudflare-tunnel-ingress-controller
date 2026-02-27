@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 )
 
 func TestBuildCloudflaredCommand(t *testing.T) {
@@ -96,6 +98,89 @@ func TestBuildCloudflaredCommand(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := buildCloudflaredCommand(tt.protocol, tt.token, tt.extraArgs)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestCloudflaredConnectDeploymentTemplating(t *testing.T) {
+	tests := []struct {
+		name            string
+		protocol        string
+		token           string
+		namespace       string
+		replicas        int32
+		extraArgs       []string
+		envVars         map[string]string
+		expectedImage   string
+		expectedPullPol v1.PullPolicy
+	}{
+		{
+			name:            "default values",
+			protocol:        "auto",
+			token:           "test-token",
+			namespace:       "test-ns",
+			replicas:        2,
+			extraArgs:       []string{"--post-quantum"},
+			envVars:         map[string]string{},
+			expectedImage:   "cloudflare/cloudflared:latest",
+			expectedPullPol: v1.PullIfNotPresent,
+		},
+		{
+			name:      "custom environment variables",
+			protocol:  "quic",
+			token:     "another-token",
+			namespace: "custom-ns",
+			replicas:  3,
+			extraArgs: []string{},
+			envVars: map[string]string{
+				"CLOUDFLARED_IMAGE":              "my-custom-image:v1",
+				"CLOUDFLARED_IMAGE_PULL_POLICY": "Always",
+			},
+			expectedImage:   "my-custom-image:v1",
+			expectedPullPol: v1.PullAlways,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save and restore environment variables
+			for k, v := range tt.envVars {
+				t.Setenv(k, v)
+			}
+			// If not provided in tt.envVars, ensure they are cleared to test defaults
+			if _, ok := tt.envVars["CLOUDFLARED_IMAGE"]; !ok {
+				t.Setenv("CLOUDFLARED_IMAGE", "")
+			}
+			if _, ok := tt.envVars["CLOUDFLARED_IMAGE_PULL_POLICY"]; !ok {
+				t.Setenv("CLOUDFLARED_IMAGE_PULL_POLICY", "")
+			}
+
+			deployment := cloudflaredConnectDeploymentTemplating(tt.protocol, tt.token, tt.namespace, tt.replicas, tt.extraArgs)
+
+			assert.NotNil(t, deployment)
+			assert.Equal(t, "controlled-cloudflared-connector", deployment.Name)
+			assert.Equal(t, tt.namespace, deployment.Namespace)
+			assert.Equal(t, tt.replicas, *deployment.Spec.Replicas)
+
+			// Labels
+			expectedLabels := map[string]string{
+				"app": "controlled-cloudflared-connector",
+				"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
+			}
+			assert.Equal(t, expectedLabels, deployment.Labels)
+			assert.Equal(t, expectedLabels, deployment.Spec.Selector.MatchLabels)
+			assert.Equal(t, expectedLabels, deployment.Spec.Template.Labels)
+
+			// Container
+			assert.Len(t, deployment.Spec.Template.Spec.Containers, 1)
+			container := deployment.Spec.Template.Spec.Containers[0]
+			assert.Equal(t, "controlled-cloudflared-connector", container.Name)
+			assert.Equal(t, tt.expectedImage, container.Image)
+			assert.Equal(t, tt.expectedPullPol, container.ImagePullPolicy)
+
+			// Command
+			expectedCommand := buildCloudflaredCommand(tt.protocol, tt.token, tt.extraArgs)
+			assert.Equal(t, expectedCommand, container.Command)
 		})
 	}
 }
