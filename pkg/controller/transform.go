@@ -52,9 +52,9 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 		if proxySSLVerify, ok := getAnnotation(ingress.Annotations, AnnotationProxySSLVerify); ok {
 			switch proxySSLVerify {
 			case AnnotationProxySSLVerifyOn:
-				proxySSLVerifyEnabled = boolPointer(true)
+				proxySSLVerifyEnabled = ptr.To(true)
 			case AnnotationProxySSLVerifyOff:
-				proxySSLVerifyEnabled = boolPointer(false)
+				proxySSLVerifyEnabled = ptr.To(false)
 			default:
 				return nil, errors.Errorf(
 					"invalid value for annotation %s, available values: \"%s\" or \"%s\"",
@@ -148,8 +148,4 @@ func getPortWithName(ports []v1.ServicePort, portName string) (bool, int32) {
 func getAnnotation(annotations map[string]string, key string) (string, bool) {
 	value, ok := annotations[key]
 	return value, ok
-}
-
-func boolPointer(b bool) *bool {
-	return &b
 }

@@ -109,7 +109,7 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 				Path:     "/",
 				Service:  "https://10.0.0.1:443",
 				OriginRequest: &cloudflare.OriginRequestConfig{
-					NoTLSVerify:      boolPointer(true),
+					NoTLSVerify:      ptr.To(true),
 					OriginServerName: ptr.To("bar.internal"),
 				},
 			},
@@ -132,7 +132,7 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 				Path:     "/",
 				Service:  "https://10.0.0.1:443",
 				OriginRequest: &cloudflare.OriginRequestConfig{
-					NoTLSVerify:      boolPointer(true),
+					NoTLSVerify:      ptr.To(true),
 					HTTPHostHeader:   ptr.To("foo.internal"),
 					OriginServerName: ptr.To("bar.internal"),
 				},
@@ -153,7 +153,7 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 				Path:     "/",
 				Service:  "https://10.0.0.1:443",
 				OriginRequest: &cloudflare.OriginRequestConfig{
-					NoTLSVerify: boolPointer(true),
+					NoTLSVerify: ptr.To(true),
 				},
 			},
 		}, {
@@ -165,7 +165,7 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 					ServiceTarget:         "https://10.0.0.1:443",
 					PathPrefix:            "/",
 					IsDeleted:             false,
-					ProxySSLVerifyEnabled: boolPointer(false),
+					ProxySSLVerifyEnabled: ptr.To(false),
 				},
 			},
 			want: &cloudflare.UnvalidatedIngressRule{
@@ -173,7 +173,7 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 				Path:     "/",
 				Service:  "https://10.0.0.1:443",
 				OriginRequest: &cloudflare.OriginRequestConfig{
-					NoTLSVerify: boolPointer(true),
+					NoTLSVerify: ptr.To(true),
 				},
 			},
 		}, {
@@ -185,7 +185,7 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 					ServiceTarget:         "https://10.0.0.1:443",
 					PathPrefix:            "/",
 					IsDeleted:             false,
-					ProxySSLVerifyEnabled: boolPointer(true),
+					ProxySSLVerifyEnabled: ptr.To(true),
 				},
 			},
 			want: &cloudflare.UnvalidatedIngressRule{
@@ -193,7 +193,7 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 				Path:     "/",
 				Service:  "https://10.0.0.1:443",
 				OriginRequest: &cloudflare.OriginRequestConfig{
-					NoTLSVerify: boolPointer(false),
+					NoTLSVerify: ptr.To(false),
 				},
 			},
 		},
