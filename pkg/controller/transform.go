@@ -22,7 +22,6 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 		logger.Info("ingress has tls specified, SSL Passthrough is not supported, it will be ignored.")
 	}
 
-	serviceCache := make(map[types.NamespacedName]*v1.Service)
 	var result []exposure.Exposure
 	for _, rule := range ingress.Spec.Rules {
 		if rule.Host == "" {
@@ -71,24 +70,13 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 				Namespace: ingress.GetNamespace(),
 				Name:      path.Backend.Service.Name,
 			}
-
-			var service *v1.Service
-			// Check local cache to avoid redundant client.Get calls.
-			// Even with a cached client (controller-runtime default), Get() performs a deep copy
-			// of the object. For Ingresses with many paths pointing to the same Service,
-			// this avoids unnecessary allocations and CPU usage.
-			if cached, ok := serviceCache[namespacedName]; ok {
-				service = cached
-			} else {
-				service = &v1.Service{}
-				err := kubeClient.Get(ctx, namespacedName, service)
-				if err != nil {
-					return nil, errors.Wrapf(err, "fetch service %s", namespacedName)
-				}
-				serviceCache[namespacedName] = service
+			service := v1.Service{}
+			err := kubeClient.Get(ctx, namespacedName, &service)
+			if err != nil {
+				return nil, errors.Wrapf(err, "fetch service %s", namespacedName)
 			}
 
-			host, err := getHostFromService(service, clusterDomain)
+			host, err := getHostFromService(&service, clusterDomain)
 			if err != nil {
 				return nil, err
 			}
