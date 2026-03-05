@@ -69,7 +69,7 @@ func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures [
 	// sort the rules: non-wildcard hostnames before wildcard hostnames (wildcards are fallbacks),
 	// then alphabetically by hostname, then by path length in descending order
 	// to ensure "precedence will be given first to the longest matching path".
-	slices.SortFunc(ingressRules, compareIngressRules)
+	slices.SortFunc(ingressRules, sortIngressRules)
 
 	// at last, append a default 404 service as default route
 	ingressRules = append(ingressRules, cloudflare.UnvalidatedIngressRule{
@@ -228,10 +228,10 @@ func (t *TunnelClient) FetchTunnelToken(ctx context.Context) (string, error) {
 	return t.cfClient.GetTunnelToken(ctx, cloudflare.ResourceIdentifier(t.accountId), t.tunnelId)
 }
 
-// compareIngressRules defines the sort order for Cloudflare tunnel ingress rules:
+// sortIngressRules defines the sort order for Cloudflare tunnel ingress rules:
 // non-wildcard hostnames before wildcard hostnames (wildcards act as fallbacks),
 // then alphabetically by hostname, then by path length in descending order.
-func compareIngressRules(a, b cloudflare.UnvalidatedIngressRule) int {
+func sortIngressRules(a, b cloudflare.UnvalidatedIngressRule) int {
 	aIsWildcard := strings.HasPrefix(a.Hostname, "*.")
 	bIsWildcard := strings.HasPrefix(b.Hostname, "*.")
 	if aIsWildcard != bIsWildcard {

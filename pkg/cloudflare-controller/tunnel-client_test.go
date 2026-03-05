@@ -7,7 +7,7 @@ import (
 	"github.com/cloudflare/cloudflare-go"
 )
 
-func Test_compareIngressRules(t *testing.T) {
+func Test_sortIngressRules(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     []cloudflare.UnvalidatedIngressRule
@@ -71,7 +71,7 @@ func Test_compareIngressRules(t *testing.T) {
 			rules := make([]cloudflare.UnvalidatedIngressRule, len(tt.input))
 			copy(rules, tt.input)
 
-			slices.SortFunc(rules, compareIngressRules)
+			slices.SortFunc(rules, sortIngressRules)
 
 			for i, rule := range rules {
 				if rule.Hostname != tt.wantOrder[i] {
