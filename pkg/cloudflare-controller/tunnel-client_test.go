@@ -47,6 +47,14 @@ func Test_compareIngressRules(t *testing.T) {
 			wantOrder: []string{"app.example.com", "app.example.com"},
 		},
 		{
+			name: "single character subdomain sorts before wildcard",
+			input: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "*.example.com", Path: "/"},
+				{Hostname: "x.example.com", Path: "/"},
+			},
+			wantOrder: []string{"x.example.com", "*.example.com"},
+		},
+		{
 			name: "wildcard and explicit with different domains",
 			input: []cloudflare.UnvalidatedIngressRule{
 				{Hostname: "*.b.example.com", Path: "/"},
