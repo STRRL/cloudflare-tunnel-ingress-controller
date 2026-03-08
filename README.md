@@ -4,6 +4,13 @@ TLDR; This project simplifies exposing Kubernetes services to the internet easil
 
 We'd love to hear how the project works for you—please take a minute to fill out the short community survey: [cloudflare-tunnel-ingress-controller feedback](https://forms.gle/GqZomrLdb1vzyVJDA).
 
+## Sponsor
+
+If this project saves you time or helps your team, consider sponsoring its development:
+
+[![Polar.sh](https://img.shields.io/badge/Sponsor-Polar.sh-blue?logo=polar)](https://polar.sh/STRRL)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/STRRL?logo=githubsponsors&label=GitHub%20Sponsors)](https://github.com/sponsors/STRRL)
+
 ## Prerequisites
 
 To use the Cloudflare Tunnel Ingress Controller, you need to have a Cloudflare account and a domain configured on Cloudflare. You also need to create a Cloudflare API token with the following permissions: `Zone:Zone:Read`, `Zone:DNS:Edit`, and `Account:Cloudflare Tunnel:Edit`.
