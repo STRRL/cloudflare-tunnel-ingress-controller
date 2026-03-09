@@ -2,6 +2,7 @@ package cloudflarecontroller
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -82,7 +83,17 @@ func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures [
 
 	t.logger.V(3).Info("update cloudflare tunnel config", "ingress-rules", ingressRules)
 
-	_, err := t.cfClient.UpdateTunnelConfiguration(ctx,
+	current, err := t.cfClient.GetTunnelConfiguration(ctx, cloudflare.ResourceIdentifier(t.accountId), t.tunnelId)
+	if err != nil {
+		return errors.Wrap(err, "get cloudflare tunnel config")
+	}
+
+	if reflect.DeepEqual(normalizeIngressRules(current.Config.Ingress), ingressRules) {
+		t.logger.V(3).Info("cloudflare tunnel config unchanged, skipping update")
+		return nil
+	}
+
+	_, err = t.cfClient.UpdateTunnelConfiguration(ctx,
 		cloudflare.ResourceIdentifier(t.accountId),
 		cloudflare.TunnelConfigurationParams{
 			TunnelID: t.tunnelId,
@@ -205,6 +216,32 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 	}
 
 	return nil
+}
+
+// normalizeIngressRules returns a copy of rules in canonical order: non-default rules
+// sorted by hostname (case-insensitive) then path length descending, with the
+// http_status:404 catchall last. This mirrors the ordering applied when building
+// ingressRules, allowing a safe DeepEqual comparison regardless of API return order.
+func normalizeIngressRules(rules []cloudflare.UnvalidatedIngressRule) []cloudflare.UnvalidatedIngressRule {
+	var normalized []cloudflare.UnvalidatedIngressRule
+	var hasDefault bool
+	for _, r := range rules {
+		if r.Service == "http_status:404" && r.Hostname == "" && r.Path == "" {
+			hasDefault = true
+		} else {
+			normalized = append(normalized, r)
+		}
+	}
+	slices.SortFunc(normalized, func(a, b cloudflare.UnvalidatedIngressRule) int {
+		if v := strings.Compare(strings.ToLower(a.Hostname), strings.ToLower(b.Hostname)); v != 0 {
+			return v
+		}
+		return len(b.Path) - len(a.Path)
+	})
+	if hasDefault {
+		normalized = append(normalized, cloudflare.UnvalidatedIngressRule{Service: "http_status:404"})
+	}
+	return normalized
 }
 
 func zoneBelongedByExposure(exposure exposure.Exposure, zones []string) (bool, string) {
