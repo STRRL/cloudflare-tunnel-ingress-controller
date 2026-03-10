@@ -2,6 +2,7 @@ package cloudflarecontroller
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -82,7 +83,17 @@ func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures [
 
 	t.logger.V(3).Info("update cloudflare tunnel config", "ingress-rules", ingressRules)
 
-	_, err := t.cfClient.UpdateTunnelConfiguration(ctx,
+	current, err := t.cfClient.GetTunnelConfiguration(ctx, cloudflare.ResourceIdentifier(t.accountId), t.tunnelId)
+	if err != nil {
+		return errors.Wrap(err, "get cloudflare tunnel config")
+	}
+
+	if reflect.DeepEqual(current.Config.Ingress, ingressRules) {
+		t.logger.V(3).Info("cloudflare tunnel config unchanged, skipping update")
+		return nil
+	}
+
+	_, err = t.cfClient.UpdateTunnelConfiguration(ctx,
 		cloudflare.ResourceIdentifier(t.accountId),
 		cloudflare.TunnelConfigurationParams{
 			TunnelID: t.tunnelId,
