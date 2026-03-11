@@ -89,7 +89,7 @@ func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures [
 	}
 
 	if reflect.DeepEqual(current.Config.Ingress, ingressRules) {
-		t.logger.V(3).Info("cloudflare tunnel config unchanged, skipping update")
+		t.logger.Info("cloudflare tunnel config unchanged, skipping update")
 		return nil
 	}
 
