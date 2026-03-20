@@ -79,6 +79,7 @@ affinity: {}
 # Kubernetes cluster domain, used to construct FQDN for services
 # (e.g. <service>.<namespace>.svc.<clusterDomain>).
 # This should match the kubelet --cluster-domain flag (default: "cluster.local").
+
 # Go template for DNS CNAME record comments. This is purely informational and
 # does NOT affect record ownership (which is tracked via TXT records).
 # Available template variables: {{.TunnelName}}, {{.TunnelId}}, {{.Hostname}}

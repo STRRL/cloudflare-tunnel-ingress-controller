@@ -23,13 +23,12 @@ type TunnelClientInterface interface {
 var _ TunnelClientInterface = &TunnelClient{}
 
 type TunnelClient struct {
-	logger              logr.Logger
-	cfClient            *cloudflare.API
-	accountId           string
-	tunnelId            string
-	tunnelName          string
-	dnsCommentTemplate  *template.Template // nil if disabled (empty template string)
-	dnsCommentTemplateS string             // raw template string for logging
+	logger             logr.Logger
+	cfClient           *cloudflare.API
+	accountId          string
+	tunnelId           string
+	tunnelName         string
+	dnsCommentTemplate *template.Template // nil if disabled (empty template string)
 }
 
 // DNSCommentTemplateData contains the variables available in the DNS comment template.
@@ -43,12 +42,11 @@ type DNSCommentTemplateData struct {
 
 func NewTunnelClient(logger logr.Logger, cfClient *cloudflare.API, accountId string, tunnelId string, tunnelName string, dnsCommentTemplate string) *TunnelClient {
 	tc := &TunnelClient{
-		logger:              logger,
-		cfClient:            cfClient,
-		accountId:           accountId,
-		tunnelId:            tunnelId,
-		tunnelName:          tunnelName,
-		dnsCommentTemplateS: dnsCommentTemplate,
+		logger:     logger,
+		cfClient:   cfClient,
+		accountId:  accountId,
+		tunnelId:   tunnelId,
+		tunnelName: tunnelName,
 	}
 	if dnsCommentTemplate != "" {
 		tmpl, err := template.New("dns-comment").Parse(dnsCommentTemplate)
@@ -83,9 +81,7 @@ func (t *TunnelClient) renderDNSComment(hostname string) string {
 	// Cloudflare enforces per-plan limits: Free=100, Pro/Business/Enterprise=500 chars.
 	// See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/
 	if len(comment) > 100 {
-		t.logger.Info("WARNING: rendered DNS comment exceeds 100 characters (Cloudflare Free plan limit). "+
-			"Pro/Business/Enterprise plans allow up to 500 characters. "+
-			"If your plan does not support this length, the API call may fail.",
+		t.logger.Info("rendered DNS comment exceeds 100 characters (Cloudflare Free plan limit, Pro/Business/Enterprise allow 500)",
 			"hostname", hostname, "commentLength", len(comment),
 		)
 	}
