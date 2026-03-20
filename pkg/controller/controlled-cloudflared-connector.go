@@ -2,12 +2,11 @@ package controller
 
 import (
 	"context"
-	"os"
 	"slices"
-	"strconv"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,10 +56,10 @@ func CreateOrUpdateControlledCloudflared(
 
 		if len(existingDeployment.Spec.Template.Spec.Containers) > 0 {
 			container := &existingDeployment.Spec.Template.Spec.Containers[0]
-			if container.Image != os.Getenv("CLOUDFLARED_IMAGE") {
+			if container.Image != viper.GetString("cloudflared-image") {
 				needsUpdate = true
 			}
-			if string(container.ImagePullPolicy) != os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY") {
+			if string(container.ImagePullPolicy) != viper.GetString("cloudflared-image-pull-policy") {
 				needsUpdate = true
 			}
 
@@ -107,16 +106,8 @@ func CreateOrUpdateControlledCloudflared(
 func cloudflaredConnectDeploymentTemplating(protocol string, token string, namespace string, replicas int32, extraArgs []string) *appsv1.Deployment {
 	appName := "controlled-cloudflared-connector"
 
-	// Use default values if environment variables are empty
-	image := os.Getenv("CLOUDFLARED_IMAGE")
-	if image == "" {
-		image = "cloudflare/cloudflared:latest"
-	}
-
-	pullPolicy := os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY")
-	if pullPolicy == "" {
-		pullPolicy = "IfNotPresent"
-	}
+	image := viper.GetString("cloudflared-image")
+	pullPolicy := viper.GetString("cloudflared-image-pull-policy")
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -160,15 +151,7 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 }
 
 func getDesiredReplicas() (int32, error) {
-	replicaCount := os.Getenv("CLOUDFLARED_REPLICA_COUNT")
-	if replicaCount == "" {
-		return 1, nil
-	}
-	replicas, err := strconv.ParseInt(replicaCount, 10, 32)
-	if err != nil {
-		return 0, errors.Wrap(err, "invalid replica count")
-	}
-	return int32(replicas), nil
+	return int32(viper.GetInt("cloudflared-replica-count")), nil
 }
 
 func buildCloudflaredCommand(protocol string, token string, extraArgs []string) []string {

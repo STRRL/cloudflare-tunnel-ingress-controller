@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
@@ -13,6 +14,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -58,6 +60,19 @@ func main() {
 		Use: "tunnel-controller",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
+
+			options.cloudflareAPIToken = viper.GetString("cloudflare-api-token")
+			options.cloudflareAccountId = viper.GetString("cloudflare-account-id")
+			options.cloudflareTunnelName = viper.GetString("cloudflare-tunnel-name")
+			options.ingressClass = viper.GetString("ingress-class")
+			options.controllerClass = viper.GetString("controller-class")
+			options.logLevel = viper.GetInt("log-level")
+			options.namespace = viper.GetString("namespace")
+			options.cloudflaredProtocol = viper.GetString("cloudflared-protocol")
+			options.cloudflaredExtraArgs = viper.GetStringSlice("cloudflared-extra-args")
+			options.clusterDomain = viper.GetString("cluster-domain")
+			options.leaderElect = viper.GetBool("leader-elect")
+
 			stdr.SetVerbosity(options.logLevel)
 			logger := options.logger
 			logger.Info("logging verbosity", "level", options.logLevel)
@@ -148,6 +163,16 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.clusterDomain, "cluster-domain", options.clusterDomain, "kubernetes cluster domain, used to build service FQDN (should match kubelet --cluster-domain)")
 	rootCommand.PersistentFlags().BoolVar(&options.leaderElect, "leader-elect", options.leaderElect, "enable leader election for high availability")
 	rootCommand.PersistentFlags().StringVar(&options.dnsCommentTemplate, "dns-comment-template", options.dnsCommentTemplate, "Go template for DNS record comments. Available variables: {{.TunnelName}}, {{.TunnelId}}, {{.Hostname}}. Set to empty string to disable. Note: Cloudflare limits comment length by plan (Free: 100, Pro/Biz/Ent: 500 chars). See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/")
+
+	viper.SetDefault("cloudflared-image", "cloudflare/cloudflared:latest")
+	viper.SetDefault("cloudflared-image-pull-policy", "IfNotPresent")
+	viper.SetDefault("cloudflared-replica-count", 1)
+
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+	if err := viper.BindPFlags(rootCommand.PersistentFlags()); err != nil {
+		log.Fatalf("failed to bind flags to viper: %v", err)
+	}
 
 	err := rootCommand.Execute()
 	if err != nil {
