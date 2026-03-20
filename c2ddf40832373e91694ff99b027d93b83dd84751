@@ -1,0 +1,23 @@
+pkg/cloudflare-controller/tunnel_client_test.go
+  9219cbc1f2bcafe2 1-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.15",
+  "base_commit_sha": "c2ddf40832373e91694ff99b027d93b83dd84751",
+  "prompts": {
+    "9219cbc1f2bcafe2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e1d460d0-31e8-415c-b7d8-13280e73c330",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Zhiqiang ZHOU <im@strrl.dev>",
+      "messages": [],
+      "total_additions": 94,
+      "total_deletions": 0,
+      "accepted_lines": 94,
+      "overriden_lines": 0
+    }
+  }
+}
