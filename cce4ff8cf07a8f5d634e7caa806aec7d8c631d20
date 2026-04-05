@@ -1,0 +1,27 @@
+helm/cloudflare-tunnel-ingress-controller/values.yaml
+  9219cbc1f2bcafe2 82
+helm/cloudflare-tunnel-ingress-controller/templates/deployment.yaml
+  9219cbc1f2bcafe2 44
+pkg/cloudflare-controller/tunnel-client.go
+  9219cbc1f2bcafe2 83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.15",
+  "base_commit_sha": "cce4ff8cf07a8f5d634e7caa806aec7d8c631d20",
+  "prompts": {
+    "9219cbc1f2bcafe2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e1d460d0-31e8-415c-b7d8-13280e73c330",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Zhiqiang ZHOU <im@strrl.dev>",
+      "messages": [],
+      "total_additions": 9,
+      "total_deletions": 12,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    }
+  }
+}
