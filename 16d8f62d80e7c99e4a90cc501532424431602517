@@ -1,0 +1,23 @@
+image/cloudflare-tunnel-ingress-controller/Dockerfile
+  e45db5b1993696b7 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "16d8f62d80e7c99e4a90cc501532424431602517",
+  "prompts": {
+    "e45db5b1993696b7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c404bf10-a044-4892-b5ed-3c909ea5ca22",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Zhiqiang ZHOU",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
