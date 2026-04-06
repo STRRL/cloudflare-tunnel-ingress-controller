@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"os"
+	"reflect"
 	"slices"
 	"strconv"
 
@@ -69,6 +70,12 @@ func CreateOrUpdateControlledCloudflared(
 			if !slices.Equal(container.Command, desiredCommand) {
 				needsUpdate = true
 			}
+		}
+
+		// Check if anti-affinity needs to be added or removed
+		desiredAffinity := buildPodAntiAffinity("controlled-cloudflared-connector", desiredReplicas)
+		if !affinityEqual(existingDeployment.Spec.Template.Spec.Affinity, desiredAffinity) {
+			needsUpdate = true
 		}
 
 		if needsUpdate {
@@ -144,6 +151,7 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 					},
 				},
 				Spec: v1.PodSpec{
+					Affinity:  buildPodAntiAffinity(appName, replicas),
 					Containers: []v1.Container{
 						{
 							Name:            appName,
@@ -157,6 +165,39 @@ func cloudflaredConnectDeploymentTemplating(protocol string, token string, names
 			},
 		},
 	}
+}
+
+// buildPodAntiAffinity returns a pod anti-affinity that spreads pods across nodes.
+// Returns nil when replicas <= 1 (no point scheduling constraints for a single pod).
+func buildPodAntiAffinity(appName string, replicas int32) *v1.Affinity {
+	if replicas <= 1 {
+		return nil
+	}
+	return &v1.Affinity{
+		PodAntiAffinity: &v1.PodAntiAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
+				{
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"app": appName,
+						},
+					},
+					TopologyKey: "kubernetes.io/hostname",
+				},
+			},
+		},
+	}
+}
+
+// affinityEqual compares two Affinity pointers for equality.
+func affinityEqual(a, b *v1.Affinity) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return reflect.DeepEqual(a, b)
 }
 
 func getDesiredReplicas() (int32, error) {
@@ -190,4 +231,3 @@ func buildCloudflaredCommand(protocol string, token string, extraArgs []string) 
 
 	return command
 }
-
