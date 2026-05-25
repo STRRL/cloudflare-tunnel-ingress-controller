@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/chromedp/chromedp v0.14.2
-	github.com/cloudflare/cloudflare-go v0.116.0
+	github.com/cloudflare/cloudflare-go v0.117.0
 	github.com/go-logr/logr v1.4.3
 	github.com/go-logr/stdr v1.2.2
 	github.com/joho/godotenv v1.5.1
