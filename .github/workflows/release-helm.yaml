@@ -11,7 +11,7 @@ jobs:
   release-chart:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       - name: "Extract Version"
         id: extract_version
         run: |
@@ -19,7 +19,7 @@ jobs:
           VERSION=${GIT_TAG##v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
       - name: Publish Helm chart
-        uses: stefanprodan/helm-gh-pages@master
+        uses: stefanprodan/helm-gh-pages@89c6698c192e70ed0e495bee7d3d1ca5b477fe82
         with:
           token: ${{ secrets.HELM_TOKEN }}
           charts_dir: helm
