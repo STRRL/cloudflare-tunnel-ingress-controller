@@ -1,9 +1,12 @@
 package controller
 
 import (
+	"context"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -127,5 +130,32 @@ func TestGetHostFromService(t *testing.T) {
 				t.Errorf("getHostFromService() returns unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestFromIngressToExposureNilHTTP(t *testing.T) {
+	// An Ingress rule may set a host while leaving HTTP nil (valid for
+	// TLS/SNI-only routing). Previously this dereferenced the nil pointer
+	// and panicked; it must return an error instead.
+	ingress := networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "tls-only",
+		},
+		Spec: networkingv1.IngressSpec{
+			Rules: []networkingv1.IngressRule{
+				{
+					Host: "example.com",
+					IngressRuleValue: networkingv1.IngressRuleValue{
+						HTTP: nil,
+					},
+				},
+			},
+		},
+	}
+
+	_, err := FromIngressToExposure(context.Background(), logr.Discard(), nil, ingress, "cluster.local")
+	if err == nil {
+		t.Fatalf("expected an error for a rule with nil HTTP, got nil")
 	}
 }
