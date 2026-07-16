@@ -7,6 +7,7 @@ import (
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/pkg/errors"
+	"k8s.io/utils/ptr"
 )
 
 func fromExposureToCloudflareIngress(ctx context.Context, exposure exposure.Exposure) (*cloudflare.UnvalidatedIngressRule, error) {
@@ -33,9 +34,9 @@ func fromExposureToCloudflareIngress(ctx context.Context, exposure exposure.Expo
 		}
 		result.OriginRequest.OriginServerName = exposure.OriginServerName
 		if exposure.ProxySSLVerifyEnabled == nil {
-			result.OriginRequest.NoTLSVerify = boolPointer(true)
+			result.OriginRequest.NoTLSVerify = ptr.To(true)
 		} else {
-			result.OriginRequest.NoTLSVerify = boolPointer(!*exposure.ProxySSLVerifyEnabled)
+			result.OriginRequest.NoTLSVerify = ptr.To(!*exposure.ProxySSLVerifyEnabled)
 		}
 	}
 

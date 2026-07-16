@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"os"
+	"slices"
 	"strconv"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
@@ -31,7 +32,7 @@ func CreateOrUpdateControlledCloudflared(
 		return errors.Wrap(err, "fetch tunnel token")
 	}
 
-	err = createOrUpdateTunnelTokenSecret(ctx, kubeClient, namespace, token)
+	tokenSecretVersion, err := createOrUpdateTunnelTokenSecret(ctx, kubeClient, namespace, token)
 	if err != nil {
 		return errors.Wrap(err, "create or update tunnel token secret")
 	}
@@ -69,13 +70,16 @@ func CreateOrUpdateControlledCloudflared(
 			}
 
 			desiredCommand := buildCloudflaredCommand(protocol, extraArgs)
-			if !slicesEqual(container.Command, desiredCommand) {
+			if !slices.Equal(container.Command, desiredCommand) {
 				needsUpdate = true
 			}
 		}
+		if existingDeployment.Spec.Template.Annotations[tunnelTokenSecretVersionAnnotation] != tokenSecretVersion {
+			needsUpdate = true
+		}
 
 		if needsUpdate {
-			updatedDeployment := cloudflaredConnectDeploymentTemplating(protocol, namespace, desiredReplicas, extraArgs)
+			updatedDeployment := cloudflaredConnectDeploymentTemplating(protocol, tokenSecretVersion, namespace, desiredReplicas, extraArgs)
 			existingDeployment.Spec = updatedDeployment.Spec
 			err = kubeClient.Update(ctx, existingDeployment)
 			if err != nil {
@@ -92,7 +96,7 @@ func CreateOrUpdateControlledCloudflared(
 		return errors.Wrap(err, "get desired replicas")
 	}
 
-	deployment := cloudflaredConnectDeploymentTemplating(protocol, namespace, replicas, extraArgs)
+	deployment := cloudflaredConnectDeploymentTemplating(protocol, tokenSecretVersion, namespace, replicas, extraArgs)
 	err = kubeClient.Create(ctx, deployment)
 	if err != nil {
 		return errors.Wrap(err, "create controlled-cloudflared-connector deployment")
@@ -106,7 +110,7 @@ func createOrUpdateTunnelTokenSecret(
 	kubeClient client.Client,
 	namespace string,
 	token string,
-) error {
+) (string, error) {
 	logger := log.FromContext(ctx)
 
 	existingSecret := &v1.Secret{}
@@ -130,33 +134,34 @@ func createOrUpdateTunnelTokenSecret(
 
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
-			return errors.Wrap(err, "get tunnel token secret")
+			return "", errors.Wrap(err, "get tunnel token secret")
 		}
 		err = kubeClient.Create(ctx, desiredSecret)
 		if err != nil {
-			return errors.Wrap(err, "create tunnel token secret")
+			return "", errors.Wrap(err, "create tunnel token secret")
 		}
 		logger.Info("Created tunnel token secret", "namespace", namespace)
-		return nil
+		return desiredSecret.ResourceVersion, nil
 	}
 
 	if string(existingSecret.Data[tunnelTokenSecretKey]) == token {
-		return nil
+		return existingSecret.ResourceVersion, nil
 	}
 
 	existingSecret.StringData = desiredSecret.StringData
 	err = kubeClient.Update(ctx, existingSecret)
 	if err != nil {
-		return errors.Wrap(err, "update tunnel token secret")
+		return "", errors.Wrap(err, "update tunnel token secret")
 	}
 	logger.Info("Updated tunnel token secret", "namespace", namespace)
-	return nil
+	return existingSecret.ResourceVersion, nil
 }
 
 const tunnelTokenSecretName = "controlled-cloudflared-token"
 const tunnelTokenSecretKey = "tunnel-token"
+const tunnelTokenSecretVersionAnnotation = "strrl.dev/cloudflare-tunnel-token-secret-version"
 
-func cloudflaredConnectDeploymentTemplating(protocol string, namespace string, replicas int32, extraArgs []string) *appsv1.Deployment {
+func cloudflaredConnectDeploymentTemplating(protocol string, tokenSecretVersion string, namespace string, replicas int32, extraArgs []string) *appsv1.Deployment {
 	appName := "controlled-cloudflared-connector"
 
 	// Use default values if environment variables are empty
@@ -190,6 +195,9 @@ func cloudflaredConnectDeploymentTemplating(protocol string, namespace string, r
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: appName,
+					Annotations: map[string]string{
+						tunnelTokenSecretVersionAnnotation: tokenSecretVersion,
+					},
 					Labels: map[string]string{
 						"app": appName,
 						"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
@@ -255,16 +263,4 @@ func buildCloudflaredCommand(protocol string, extraArgs []string) []string {
 	command = append(command, "--metrics", "0.0.0.0:44483", "run")
 
 	return command
-}
-
-func slicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i, v := range a {
-		if v != b[i] {
-			return false
-		}
-	}
-	return true
 }

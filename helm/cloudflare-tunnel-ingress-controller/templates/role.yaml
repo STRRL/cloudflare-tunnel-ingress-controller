@@ -15,8 +15,6 @@ rules:
       - watch
       - update
       - create
-  # Required to manage the tunnel token secret (controlled-cloudflared-token)
-  # that passes the Cloudflare tunnel token to cloudflared via TUNNEL_TOKEN env var
   - apiGroups:
       - ""
     resources:
@@ -25,3 +23,22 @@ rules:
       - get
       - create
       - update
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
