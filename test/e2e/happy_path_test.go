@@ -66,6 +66,9 @@ var _ = Describe("Happy Path", func() {
 		cancelHelm()
 
 		DeferCleanup(func() {
+			if os.Getenv("E2E_KEEP_MINIKUBE") == "true" {
+				return
+			}
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
 			if err := helmUninstall(cleanupCtx, kubeconfigPath, controllerReleaseName, controllerNamespace); err != nil {
@@ -101,6 +104,9 @@ var _ = Describe("Happy Path", func() {
 		}
 
 		DeferCleanup(func() {
+			if os.Getenv("E2E_KEEP_MINIKUBE") == "true" {
+				return
+			}
 			disableCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
 			for _, addon := range addons {
@@ -175,6 +181,9 @@ var _ = Describe("Happy Path", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		DeferCleanup(func() {
+			if os.Getenv("E2E_KEEP_MINIKUBE") == "true" {
+				return
+			}
 			deleteCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
 			if err := kubeClient.NetworkingV1().Ingresses(dashboardNamespace).Delete(deleteCtx, dashboardIngressName, metav1.DeleteOptions{}); err != nil {
