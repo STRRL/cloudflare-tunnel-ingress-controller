@@ -14,6 +14,7 @@ import (
 	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
@@ -155,9 +156,13 @@ func main() {
 
 func buildManagerOptions(options rootCmdFlags) manager.Options {
 	return manager.Options{
-		Client: client.Options{
-			Cache: &client.CacheOptions{
-				DisableFor: []client.Object{&corev1.Secret{}},
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				&corev1.Secret{}: {
+					Namespaces: map[string]cache.Config{
+						options.namespace: {},
+					},
+				},
 			},
 		},
 		LeaderElection:          options.leaderElect,

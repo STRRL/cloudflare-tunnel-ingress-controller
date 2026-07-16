@@ -6,22 +6,29 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func TestManagerOptionsDisableSecretCache(t *testing.T) {
+func TestManagerOptionsScopeSecretCacheToControllerNamespace(t *testing.T) {
 	options := buildManagerOptions(rootCmdFlags{
 		leaderElect: true,
 		namespace:   "controller-system",
 	})
 
-	if options.Client.Cache == nil {
-		t.Fatal("manager client cache options must be configured")
+	if options.Client.Cache != nil {
+		t.Fatal("manager client cache bypass must not be configured")
 	}
 
-	disabledObjects := options.Client.Cache.DisableFor
-	if len(disabledObjects) != 1 {
-		t.Fatalf("expected one cache-disabled object, got %d", len(disabledObjects))
+	if len(options.Cache.ByObject) != 1 {
+		t.Fatalf("expected one object-specific cache, got %d", len(options.Cache.ByObject))
 	}
 
-	if _, ok := disabledObjects[0].(*corev1.Secret); !ok {
-		t.Fatalf("expected Secret cache to be disabled, got %T", disabledObjects[0])
+	for object, objectCache := range options.Cache.ByObject {
+		if _, ok := object.(*corev1.Secret); !ok {
+			t.Fatalf("expected Secret cache configuration, got %T", object)
+		}
+		if len(objectCache.Namespaces) != 1 {
+			t.Fatalf("expected one cached namespace, got %d", len(objectCache.Namespaces))
+		}
+		if _, ok := objectCache.Namespaces["controller-system"]; !ok {
+			t.Fatal("controller namespace is not cached for Secrets")
+		}
 	}
 }
