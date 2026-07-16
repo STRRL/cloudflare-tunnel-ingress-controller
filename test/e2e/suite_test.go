@@ -124,7 +124,7 @@ var _ = AfterSuite(func() {
 		}
 	}
 
-	if minikubeProfile != "" {
+	if minikubeProfile != "" && os.Getenv("E2E_KEEP_MINIKUBE") != "true" {
 		deleteCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		deleteCmd := exec.CommandContext(deleteCtx, "minikube", "delete", "-p", minikubeProfile)
