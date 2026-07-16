@@ -28,6 +28,14 @@ var _ = Describe("Happy Path", func() {
 		dashboardIngressName  = "dashboard-via-cloudflare"
 	)
 
+	JustAfterEach(func() {
+		profileCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if err := collectE2EProfile(profileCtx); err != nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to collect E2E profile: %v\n", err)
+		}
+	})
+
 	It("exposes the Kubernetes dashboard via Cloudflare Tunnel", func() {
 		By("ensuring the minikube node becomes Ready")
 		waitFor("nodes ready", 10*time.Minute, 10*time.Second, func() error {
@@ -66,9 +74,6 @@ var _ = Describe("Happy Path", func() {
 		cancelHelm()
 
 		DeferCleanup(func() {
-			if os.Getenv("E2E_KEEP_MINIKUBE") == "true" {
-				return
-			}
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
 			if err := helmUninstall(cleanupCtx, kubeconfigPath, controllerReleaseName, controllerNamespace); err != nil {
@@ -104,9 +109,6 @@ var _ = Describe("Happy Path", func() {
 		}
 
 		DeferCleanup(func() {
-			if os.Getenv("E2E_KEEP_MINIKUBE") == "true" {
-				return
-			}
 			disableCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
 			for _, addon := range addons {
@@ -181,9 +183,6 @@ var _ = Describe("Happy Path", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		DeferCleanup(func() {
-			if os.Getenv("E2E_KEEP_MINIKUBE") == "true" {
-				return
-			}
 			deleteCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
 			if err := kubeClient.NetworkingV1().Ingresses(dashboardNamespace).Delete(deleteCtx, dashboardIngressName, metav1.DeleteOptions{}); err != nil {

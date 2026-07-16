@@ -29,10 +29,6 @@ e2e-image:
 e2e: e2e-image
 	E2E_CONTROLLER_IMAGE=$(E2E_CONTROLLER_IMAGE) go test -timeout 30m -v ./test/e2e
 
-.PHONY: e2e-profile
-e2e-profile:
-	bash ./hack/collect-e2e-profile.sh
-
 .PHONY: setup-envtest
 setup-envtest:
 	bash ./hack/install-setup-envtest.sh

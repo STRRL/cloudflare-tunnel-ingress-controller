@@ -124,7 +124,7 @@ var _ = AfterSuite(func() {
 		}
 	}
 
-	if minikubeProfile != "" && os.Getenv("E2E_KEEP_MINIKUBE") != "true" {
+	if minikubeProfile != "" {
 		deleteCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		deleteCmd := exec.CommandContext(deleteCtx, "minikube", "delete", "-p", minikubeProfile)
@@ -135,6 +135,18 @@ var _ = AfterSuite(func() {
 		}
 	}
 })
+
+func collectE2EProfile(ctx context.Context) error {
+	if repoRoot == "" {
+		return fmt.Errorf("repository root not resolved")
+	}
+
+	cmd := exec.CommandContext(ctx, "bash", filepath.Join(repoRoot, "hack", "collect-e2e-profile.sh"))
+	cmd.Dir = repoRoot
+	cmd.Stdout = GinkgoWriter
+	cmd.Stderr = GinkgoWriter
+	return cmd.Run()
+}
 
 func missingEnvVars(keys []string) []string {
 	var missing []string
