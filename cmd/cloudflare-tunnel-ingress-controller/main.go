@@ -13,6 +13,8 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -84,11 +86,7 @@ func main() {
 				os.Exit(1)
 			}
 
-			mgr, err := manager.New(cfg, manager.Options{
-				LeaderElection:          options.leaderElect,
-				LeaderElectionID:        "cloudflare-tunnel-ingress-controller.strrl.dev",
-				LeaderElectionNamespace: options.namespace,
-			})
+			mgr, err := manager.New(cfg, buildManagerOptions(options))
 			if err != nil {
 				logger.Error(err, "unable to set up manager")
 				os.Exit(1)
@@ -152,5 +150,18 @@ func main() {
 	err := rootCommand.Execute()
 	if err != nil {
 		panic(err)
+	}
+}
+
+func buildManagerOptions(options rootCmdFlags) manager.Options {
+	return manager.Options{
+		Client: client.Options{
+			Cache: &client.CacheOptions{
+				DisableFor: []client.Object{&corev1.Secret{}},
+			},
+		},
+		LeaderElection:          options.leaderElect,
+		LeaderElectionID:        "cloudflare-tunnel-ingress-controller.strrl.dev",
+		LeaderElectionNamespace: options.namespace,
 	}
 }
