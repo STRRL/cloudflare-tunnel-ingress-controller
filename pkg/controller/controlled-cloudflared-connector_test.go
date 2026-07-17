@@ -86,3 +86,22 @@ func TestBuildCloudflaredCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestGetDesiredReplicas(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		t.Setenv("CLOUDFLARED_REPLICA_COUNT", "")
+
+		replicas, err := getDesiredReplicas()
+
+		assert.NoError(t, err)
+		assert.Equal(t, int32(1), replicas)
+	})
+
+	t.Run("invalid", func(t *testing.T) {
+		t.Setenv("CLOUDFLARED_REPLICA_COUNT", "invalid")
+
+		_, err := getDesiredReplicas()
+
+		assert.Error(t, err)
+	})
+}
