@@ -29,10 +29,10 @@ var _ = Describe("Happy Path", func() {
 	)
 
 	JustAfterEach(func() {
-		profileCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		dumpCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
-		if err := collectE2EProfile(profileCtx); err != nil {
-			_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to collect E2E profile: %v\n", err)
+		if err := collectE2EDump(dumpCtx); err != nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to collect E2E dump: %v\n", err)
 		}
 	})
 

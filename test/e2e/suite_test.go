@@ -136,12 +136,12 @@ var _ = AfterSuite(func() {
 	}
 })
 
-func collectE2EProfile(ctx context.Context) error {
+func collectE2EDump(ctx context.Context) error {
 	if repoRoot == "" {
 		return fmt.Errorf("repository root not resolved")
 	}
 
-	cmd := exec.CommandContext(ctx, "bash", filepath.Join(repoRoot, "hack", "collect-e2e-profile.sh"))
+	cmd := exec.CommandContext(ctx, "bash", filepath.Join(repoRoot, "hack", "collect-e2e-dump.sh"))
 	cmd.Dir = repoRoot
 	cmd.Stdout = GinkgoWriter
 	cmd.Stderr = GinkgoWriter

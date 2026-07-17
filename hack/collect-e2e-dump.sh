@@ -3,9 +3,9 @@
 set -u
 set -o pipefail
 
-PROFILE_DIRECTORY=${PROFILE_DIRECTORY:-test/e2e/artifacts/cluster-profile}
-MANIFEST_DIRECTORY="$PROFILE_DIRECTORY/manifests"
-LOG_DIRECTORY="$PROFILE_DIRECTORY/logs"
+DUMP_DIRECTORY=${DUMP_DIRECTORY:-test/e2e/artifacts/cluster-dump}
+MANIFEST_DIRECTORY="$DUMP_DIRECTORY/manifests"
+LOG_DIRECTORY="$DUMP_DIRECTORY/logs"
 
 mkdir -p "$MANIFEST_DIRECTORY" "$LOG_DIRECTORY"
 
@@ -17,7 +17,7 @@ capture() {
 
 kubectl cluster-info dump \
     --all-namespaces \
-    --output-directory "$PROFILE_DIRECTORY/cluster-info" \
+    --output-directory "$DUMP_DIRECTORY/cluster-info" \
     -o yaml || true
 
 capture "$MANIFEST_DIRECTORY/resources.txt" kubectl get all -A -o wide
