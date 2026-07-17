@@ -86,3 +86,11 @@ func TestBuildCloudflaredCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestGetDesiredReplicasDefaultsToOne(t *testing.T) {
+	t.Setenv("CLOUDFLARED_REPLICA_COUNT", "")
+
+	replicas, err := getDesiredReplicas()
+	assert.NoError(t, err)
+	assert.Equal(t, int32(1), replicas)
+}
