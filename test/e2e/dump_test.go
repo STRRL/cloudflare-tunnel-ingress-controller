@@ -122,6 +122,8 @@ func writeRedactedSecrets(ctx context.Context, outputPath string) error {
 	for i := range secrets.Items {
 		secrets.Items[i].Data = nil
 		secrets.Items[i].StringData = nil
+		secrets.Items[i].Annotations = nil
+		secrets.Items[i].ManagedFields = nil
 	}
 
 	data, err := json.MarshalIndent(secrets, "", "  ")
