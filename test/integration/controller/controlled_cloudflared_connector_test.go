@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"os"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
@@ -46,6 +47,30 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		Expect(os.Unsetenv("CLOUDFLARED_REPLICA_COUNT")).To(Succeed())
 		Expect(os.Unsetenv("CLOUDFLARED_IMAGE")).To(Succeed())
 		Expect(os.Unsetenv("CLOUDFLARED_IMAGE_PULL_POLICY")).To(Succeed())
+	})
+
+	It("should return an error when fetching the tunnel token fails", func() {
+		mockTunnelClient := &MockTunnelClient{
+			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
+				return "", errors.New("fetch failed")
+			},
+		}
+
+		err := controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, testNamespace, "quic", nil)
+
+		Expect(err).To(MatchError(ContainSubstring("fetch tunnel token")))
+	})
+
+	It("should return an error when the tunnel token secret cannot be created", func() {
+		mockTunnelClient := &MockTunnelClient{
+			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
+				return "mock-token", nil
+			},
+		}
+
+		err := controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, "missing-namespace", "quic", nil)
+
+		Expect(err).To(MatchError(ContainSubstring("create or update tunnel token secret")))
 	})
 
 	It("should create a new cloudflared deployment", func() {
