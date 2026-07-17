@@ -79,7 +79,13 @@ func CreateOrUpdateControlledCloudflared(
 		}
 
 		if needsUpdate {
-			updatedDeployment := cloudflaredConnectDeploymentTemplating(protocol, tokenSecretVersion, namespace, desiredReplicas, extraArgs)
+			updatedDeployment := controlledCloudflaredDeployment{
+				protocol:           protocol,
+				tokenSecretVersion: tokenSecretVersion,
+				namespace:          namespace,
+				replicas:           desiredReplicas,
+				extraArgs:          extraArgs,
+			}.build()
 			existingDeployment.Spec = updatedDeployment.Spec
 			err = kubeClient.Update(ctx, existingDeployment)
 			if err != nil {
@@ -96,7 +102,13 @@ func CreateOrUpdateControlledCloudflared(
 		return errors.Wrap(err, "get desired replicas")
 	}
 
-	deployment := cloudflaredConnectDeploymentTemplating(protocol, tokenSecretVersion, namespace, replicas, extraArgs)
+	deployment := controlledCloudflaredDeployment{
+		protocol:           protocol,
+		tokenSecretVersion: tokenSecretVersion,
+		namespace:          namespace,
+		replicas:           replicas,
+		extraArgs:          extraArgs,
+	}.build()
 	err = kubeClient.Create(ctx, deployment)
 	if err != nil {
 		return errors.Wrap(err, "create controlled-cloudflared-connector deployment")
@@ -160,77 +172,6 @@ func createOrUpdateTunnelTokenSecret(
 const tunnelTokenSecretName = "controlled-cloudflared-token"
 const tunnelTokenSecretKey = "tunnel-token"
 const tunnelTokenSecretVersionAnnotation = "strrl.dev/cloudflare-tunnel-token-secret-version"
-
-func cloudflaredConnectDeploymentTemplating(protocol string, tokenSecretVersion string, namespace string, replicas int32, extraArgs []string) *appsv1.Deployment {
-	appName := "controlled-cloudflared-connector"
-
-	// Use default values if environment variables are empty
-	image := os.Getenv("CLOUDFLARED_IMAGE")
-	if image == "" {
-		image = "cloudflare/cloudflared:latest"
-	}
-
-	pullPolicy := os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY")
-	if pullPolicy == "" {
-		pullPolicy = "IfNotPresent"
-	}
-
-	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      appName,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app": appName,
-				"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
-			},
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": appName,
-					"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
-				},
-			},
-			Template: v1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: appName,
-					Annotations: map[string]string{
-						tunnelTokenSecretVersionAnnotation: tokenSecretVersion,
-					},
-					Labels: map[string]string{
-						"app": appName,
-						"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
-					},
-				},
-				Spec: v1.PodSpec{
-					Containers: []v1.Container{
-						{
-							Name:            appName,
-							Image:           image,
-							ImagePullPolicy: v1.PullPolicy(pullPolicy),
-							Command:         buildCloudflaredCommand(protocol, extraArgs),
-							Env: []v1.EnvVar{
-								{
-									Name: "TUNNEL_TOKEN",
-									ValueFrom: &v1.EnvVarSource{
-										SecretKeyRef: &v1.SecretKeySelector{
-											LocalObjectReference: v1.LocalObjectReference{
-												Name: tunnelTokenSecretName,
-											},
-											Key: tunnelTokenSecretKey,
-										},
-									},
-								},
-							},
-						},
-					},
-					RestartPolicy: v1.RestartPolicyAlways,
-				},
-			},
-		},
-	}
-}
 
 func getDesiredReplicas() (int32, error) {
 	replicaCount := os.Getenv("CLOUDFLARED_REPLICA_COUNT")

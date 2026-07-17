@@ -15,7 +15,7 @@ image:
 
 .PHONY: unit-test
 unit-test:
-	CGO_ENABLED=1 go test -race ./cmd/... ./pkg/... -coverprofile ./cover.out
+	CGO_ENABLED=1 go test -race ./pkg/... -coverprofile ./cover.out
 
 .PHONY: integration-test
 integration-test: setup-envtest

@@ -87,7 +87,20 @@ func main() {
 				os.Exit(1)
 			}
 
-			mgr, err := manager.New(cfg, buildManagerOptions(options))
+			mgr, err := manager.New(cfg, manager.Options{
+				Cache: cache.Options{
+					ByObject: map[client.Object]cache.ByObject{
+						&corev1.Secret{}: {
+							Namespaces: map[string]cache.Config{
+								options.namespace: {},
+							},
+						},
+					},
+				},
+				LeaderElection:          options.leaderElect,
+				LeaderElectionID:        "cloudflare-tunnel-ingress-controller.strrl.dev",
+				LeaderElectionNamespace: options.namespace,
+			})
 			if err != nil {
 				logger.Error(err, "unable to set up manager")
 				os.Exit(1)
@@ -151,22 +164,5 @@ func main() {
 	err := rootCommand.Execute()
 	if err != nil {
 		panic(err)
-	}
-}
-
-func buildManagerOptions(options rootCmdFlags) manager.Options {
-	return manager.Options{
-		Cache: cache.Options{
-			ByObject: map[client.Object]cache.ByObject{
-				&corev1.Secret{}: {
-					Namespaces: map[string]cache.Config{
-						options.namespace: {},
-					},
-				},
-			},
-		},
-		LeaderElection:          options.leaderElect,
-		LeaderElectionID:        "cloudflare-tunnel-ingress-controller.strrl.dev",
-		LeaderElectionNamespace: options.namespace,
 	}
 }
