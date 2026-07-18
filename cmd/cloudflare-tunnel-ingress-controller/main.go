@@ -13,6 +13,9 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -85,6 +88,15 @@ func main() {
 			}
 
 			mgr, err := manager.New(cfg, manager.Options{
+				Cache: cache.Options{
+					ByObject: map[client.Object]cache.ByObject{
+						&corev1.Secret{}: {
+							Namespaces: map[string]cache.Config{
+								options.namespace: {},
+							},
+						},
+					},
+				},
 				LeaderElection:          options.leaderElect,
 				LeaderElectionID:        "cloudflare-tunnel-ingress-controller.strrl.dev",
 				LeaderElectionNamespace: options.namespace,

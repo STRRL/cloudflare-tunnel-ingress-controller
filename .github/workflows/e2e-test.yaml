@@ -58,7 +58,7 @@ jobs:
 
       - name: Run e2e tests
         run: |
-          make e2e
+          bash ./test/e2e/e2e.sh
 
       - name: Upload coverage reports to Codecov
         if: always()

@@ -5,6 +5,7 @@ These tests spin up a temporary minikube cluster, deploy the latest built contro
 ## Prerequisites
 - `docker` and `minikube` are installed and can access local container images
 - `helm` is available (used to install the controller via Helm Chart)
+- `kubectl` and `jq` are available for diagnostic collection
 - `.env.e2e` is located in the repository root, containing:
   - `CLOUDFLARE_API_TOKEN`
   - `CLOUDFLARE_ACCOUNT_ID`
@@ -20,7 +21,7 @@ During test execution, random subdomains will be generated based on `E2E_BASE_DO
 make e2e
 ```
 
-`make e2e` will first build `E2E_CONTROLLER_IMAGE`, then run `go test ./test/e2e`. During the test:
+`make e2e` will first build `E2E_CONTROLLER_IMAGE`, then run `test/e2e/e2e.sh`. During the test:
 1. Start a uniquely named minikube profile;
 2. Validate the Cloudflare Token;
 3. Install the controller via Helm Chart;
@@ -28,7 +29,7 @@ make e2e
 5. Poll Cloudflare until the Dashboard is accessible via HTTPS;
 6. If available, capture a screenshot of the Dashboard page and save it to `test/e2e/artifacts/`.
 
-After the test completes, the temporary kubeconfig and minikube profile will be automatically deleted. If the run is interrupted, you can manually execute:
+When the test exits, `e2e.sh` collects cluster resources and logs into `test/e2e/artifacts/cluster-dump`, then deletes the temporary kubeconfig and minikube profile. If cleanup is interrupted, you can manually execute:
 ```bash
 minikube delete -p <profile>
 ```

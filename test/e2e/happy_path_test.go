@@ -65,14 +65,6 @@ var _ = Describe("Happy Path", func() {
 		Expect(helmUpgradeInstall(helmCtx, kubeconfigPath, controllerReleaseName, controllerNamespace, values)).To(Succeed())
 		cancelHelm()
 
-		DeferCleanup(func() {
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-			defer cancel()
-			if err := helmUninstall(cleanupCtx, kubeconfigPath, controllerReleaseName, controllerNamespace); err != nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to uninstall helm release %s: %v\n", controllerReleaseName, err)
-			}
-		})
-
 		By("waiting for the controller deployment to become Available")
 		waitFor("controller deployment ready", 10*time.Minute, 10*time.Second, func() error {
 			deployments, err := kubeClient.AppsV1().Deployments(controllerNamespace).List(context.Background(), metav1.ListOptions{
@@ -99,16 +91,6 @@ var _ = Describe("Happy Path", func() {
 			Expect(enableMinikubeAddon(enableCtx, minikubeProfile, addon)).To(Succeed(), fmt.Sprintf("enable addon %s", addon))
 			cancelEnable()
 		}
-
-		DeferCleanup(func() {
-			disableCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-			defer cancel()
-			for _, addon := range addons {
-				if err := disableMinikubeAddon(disableCtx, minikubeProfile, addon); err != nil {
-					_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to disable addon %s: %v\n", addon, err)
-				}
-			}
-		})
 
 		By("waiting for the dashboard deployment to be Ready")
 		waitFor("dashboard deployment ready", 10*time.Minute, 10*time.Second, func() error {
@@ -173,14 +155,6 @@ var _ = Describe("Happy Path", func() {
 
 		_, err := kubeClient.NetworkingV1().Ingresses(dashboardNamespace).Create(context.Background(), ingress, metav1.CreateOptions{})
 		Expect(err).NotTo(HaveOccurred())
-
-		DeferCleanup(func() {
-			deleteCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-			defer cancel()
-			if err := kubeClient.NetworkingV1().Ingresses(dashboardNamespace).Delete(deleteCtx, dashboardIngressName, metav1.DeleteOptions{}); err != nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to delete ingress %s/%s: %v\n", dashboardNamespace, dashboardIngressName, err)
-			}
-		})
 
 		By("waiting for the ingress status to include the Cloudflare tunnel hostname")
 		waitFor("ingress status hostname", 10*time.Minute, 10*time.Second, func() error {

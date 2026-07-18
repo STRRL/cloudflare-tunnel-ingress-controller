@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"os"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
@@ -48,6 +49,30 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		Expect(os.Unsetenv("CLOUDFLARED_IMAGE_PULL_POLICY")).To(Succeed())
 	})
 
+	It("should return an error when fetching the tunnel token fails", func() {
+		mockTunnelClient := &MockTunnelClient{
+			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
+				return "", errors.New("fetch failed")
+			},
+		}
+
+		err := controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, testNamespace, "quic", nil)
+
+		Expect(err).To(MatchError(ContainSubstring("fetch tunnel token")))
+	})
+
+	It("should return an error when the tunnel token secret cannot be created", func() {
+		mockTunnelClient := &MockTunnelClient{
+			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
+				return "mock-token", nil
+			},
+		}
+
+		err := controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, "missing-namespace", "quic", nil)
+
+		Expect(err).To(MatchError(ContainSubstring("create or update tunnel token secret")))
+	})
+
 	It("should create a new cloudflared deployment", func() {
 		// Prepare
 		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
@@ -71,7 +96,7 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
 		Expect(err).NotTo(HaveOccurred())
 
-		// Assert
+		// Assert deployment
 		deployment := &appsv1.Deployment{}
 		err = kubeClient.Get(ctx, types.NamespacedName{
 			Namespace: ns,
@@ -82,6 +107,28 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		Expect(*deployment.Spec.Replicas).To(Equal(int32(2)))
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal("cloudflare/cloudflared:latest"))
 		Expect(deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy).To(Equal(v1.PullPolicy("IfNotPresent")))
+
+		// Assert TUNNEL_TOKEN env var references the secret
+		container := deployment.Spec.Template.Spec.Containers[0]
+		Expect(container.Env).To(HaveLen(1))
+		Expect(container.Env[0].Name).To(Equal("TUNNEL_TOKEN"))
+		Expect(container.Env[0].ValueFrom).NotTo(BeNil())
+		Expect(container.Env[0].ValueFrom.SecretKeyRef).NotTo(BeNil())
+		Expect(container.Env[0].ValueFrom.SecretKeyRef.Name).To(Equal("controlled-cloudflared-token"))
+		Expect(container.Env[0].ValueFrom.SecretKeyRef.Key).To(Equal("tunnel-token"))
+
+		// Assert token is NOT in command args
+		Expect(container.Command).NotTo(ContainElement("--token"))
+		Expect(container.Command).NotTo(ContainElement("mock-token"))
+
+		// Assert secret was created with the token
+		secret := &v1.Secret{}
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-token",
+		}, secret)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(secret.Data["tunnel-token"])).To(Equal("mock-token"))
 	})
 
 	It("should update an existing cloudflared deployment", func() {
@@ -162,5 +209,72 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		Expect(command).To(ContainElement("--post-quantum"))
 		Expect(command).To(ContainElement("--edge-ip-version"))
 		Expect(command).To(ContainElement("4"))
+	})
+
+	It("should update the secret and restart cloudflared when token changes", func() {
+		// Prepare
+		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
+		ns, err := namespaceFixtures.Start(ctx)
+		Expect(err).NotTo(HaveOccurred())
+
+		defer func() {
+			err := namespaceFixtures.Stop(ctx)
+			Expect(err).NotTo(HaveOccurred())
+		}()
+
+		currentToken := "initial-token"
+		mockTunnelClient := &MockTunnelClient{
+			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
+				return currentToken, nil
+			},
+		}
+
+		protocol := "quic"
+
+		// Create initial deployment with first token
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify initial secret
+		secret := &v1.Secret{}
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-token",
+		}, secret)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(secret.Data["tunnel-token"])).To(Equal("initial-token"))
+
+		deployment := &appsv1.Deployment{}
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-connector",
+		}, deployment)
+		Expect(err).NotTo(HaveOccurred())
+		initialSecretVersion := deployment.Spec.Template.Annotations["strrl.dev/cloudflare-tunnel-token-secret-version"]
+		Expect(initialSecretVersion).To(Equal(secret.ResourceVersion))
+
+		// Change token
+		currentToken = "updated-token"
+
+		// Act
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Assert secret was updated
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-token",
+		}, secret)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(secret.Data["tunnel-token"])).To(Equal("updated-token"))
+
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-connector",
+		}, deployment)
+		Expect(err).NotTo(HaveOccurred())
+		updatedSecretVersion := deployment.Spec.Template.Annotations["strrl.dev/cloudflare-tunnel-token-secret-version"]
+		Expect(updatedSecretVersion).To(Equal(secret.ResourceVersion))
+		Expect(updatedSecretVersion).NotTo(Equal(initialSecretVersion))
 	})
 })

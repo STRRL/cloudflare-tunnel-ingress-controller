@@ -40,6 +40,8 @@ var requiredEnvVars = []string{
 	"CLOUDFLARE_TUNNEL_NAME",
 	controllerImageEnvKey,
 	dashboardBaseDomainEnvKey,
+	e2eKubeconfigEnvKey,
+	e2eMinikubeProfileEnvKey,
 }
 
 const (
@@ -47,6 +49,8 @@ const (
 	tokenVerifyURL            = "https://api.cloudflare.com/client/v4/user/tokens/verify"
 	controllerImageEnvKey     = "E2E_CONTROLLER_IMAGE"
 	dashboardBaseDomainEnvKey = "E2E_BASE_DOMAIN"
+	e2eKubeconfigEnvKey       = "E2E_KUBECONFIG"
+	e2eMinikubeProfileEnvKey  = "E2E_MINIKUBE_PROFILE"
 	e2eClusterDomain          = "e2e.cluster.internal"
 )
 
@@ -87,7 +91,8 @@ var _ = BeforeSuite(func() {
 	_, err = exec.LookPath("helm")
 	Expect(err).NotTo(HaveOccurred(), "helm binary must be installed and on PATH")
 
-	minikubeProfile = fmt.Sprintf("cf-ic-e2e-%d", time.Now().UnixNano())
+	minikubeProfile = os.Getenv(e2eMinikubeProfileEnvKey)
+	kubeconfigPath = os.Getenv(e2eKubeconfigEnvKey)
 
 	startCtx, cancel := context.WithTimeout(suiteCtx, 20*time.Minute)
 	defer cancel()
@@ -100,14 +105,9 @@ var _ = BeforeSuite(func() {
 	kubeconfigData, err := fetchKubeconfig(suiteCtx, minikubeProfile)
 	Expect(err).NotTo(HaveOccurred(), "failed to fetch kubeconfig for profile %s", minikubeProfile)
 
-	tmpFile, err := os.CreateTemp("", fmt.Sprintf("%s-kubeconfig-*.yaml", minikubeProfile))
-	Expect(err).NotTo(HaveOccurred(), "failed to create kubeconfig temp file")
-	defer func() { _ = tmpFile.Close() }()
-
-	_, err = tmpFile.Write(kubeconfigData)
+	err = os.WriteFile(kubeconfigPath, kubeconfigData, 0o600)
 	Expect(err).NotTo(HaveOccurred(), "failed to write kubeconfig temp file")
 
-	kubeconfigPath = tmpFile.Name()
 	Expect(os.Setenv("KUBECONFIG", kubeconfigPath)).To(Succeed())
 
 	restConfig, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
@@ -115,25 +115,6 @@ var _ = BeforeSuite(func() {
 
 	kubeClient, err = kubernetes.NewForConfig(restConfig)
 	Expect(err).NotTo(HaveOccurred(), "failed to init kube client")
-})
-
-var _ = AfterSuite(func() {
-	if kubeconfigPath != "" {
-		if err := os.Remove(kubeconfigPath); err != nil {
-			_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to remove kubeconfig %s: %v\n", kubeconfigPath, err)
-		}
-	}
-
-	if minikubeProfile != "" {
-		deleteCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
-		deleteCmd := exec.CommandContext(deleteCtx, "minikube", "delete", "-p", minikubeProfile)
-		deleteCmd.Stdout = GinkgoWriter
-		deleteCmd.Stderr = GinkgoWriter
-		if err := deleteCmd.Run(); err != nil {
-			_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to delete minikube profile %s: %v\n", minikubeProfile, err)
-		}
-	}
 })
 
 func missingEnvVars(keys []string) []string {
@@ -340,17 +321,6 @@ func helmUpgradeInstall(ctx context.Context, kubeconfigPath string, releaseName 
 	return nil
 }
 
-func helmUninstall(ctx context.Context, kubeconfigPath string, releaseName string, namespace string) error {
-	cmd := exec.CommandContext(ctx, "helm", "uninstall", releaseName, "--namespace", namespace, "--wait")
-	cmd.Stdout = GinkgoWriter
-	cmd.Stderr = GinkgoWriter
-	cmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("helm uninstall %s: %w", releaseName, err)
-	}
-	return nil
-}
-
 func writeHelmValuesFile(values controllerHelmValues) (string, error) {
 	data, err := yaml.Marshal(values)
 	if err != nil {
@@ -377,16 +347,6 @@ func enableMinikubeAddon(ctx context.Context, profile string, addon string) erro
 	cmd.Stderr = GinkgoWriter
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("enable minikube addon %s: %w", addon, err)
-	}
-	return nil
-}
-
-func disableMinikubeAddon(ctx context.Context, profile string, addon string) error {
-	cmd := exec.CommandContext(ctx, "minikube", "-p", profile, "addons", "disable", addon)
-	cmd.Stdout = GinkgoWriter
-	cmd.Stderr = GinkgoWriter
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("disable minikube addon %s: %w", addon, err)
 	}
 	return nil
 }

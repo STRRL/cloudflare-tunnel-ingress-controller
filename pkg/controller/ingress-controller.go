@@ -232,5 +232,3 @@ func (i *IngressController) cleanFinalizer(ctx context.Context, ingress networki
 	}
 	return nil
 }
-
-
