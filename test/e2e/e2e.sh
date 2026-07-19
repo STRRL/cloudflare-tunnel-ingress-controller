@@ -38,6 +38,10 @@ finish() {
         --namespace default \
         --ignore-not-found=true \
         --wait=true
+    kubectl delete ingress dns-managed-via-cloudflare \
+        --namespace default \
+        --ignore-not-found=true \
+        --wait=true
     minikube -p "$E2E_MINIKUBE_PROFILE" addons disable dashboard
     minikube -p "$E2E_MINIKUBE_PROFILE" addons disable metrics-server
     helm uninstall cf-ic-e2e \
