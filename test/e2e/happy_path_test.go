@@ -186,7 +186,7 @@ var _ = Describe("Happy Path", func() {
 		})
 
 		By("waiting for Cloudflare to serve the dashboard over HTTPS")
-		client := &http.Client{Timeout: 30 * time.Second}
+		client := newEdgeHTTPClient()
 		dashboardURL := fmt.Sprintf("https://%s/", dashboardHostname)
 		waitFor("cloudflare https availability", 15*time.Minute, 20*time.Second, func() error {
 			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, dashboardURL, nil)
@@ -356,6 +356,30 @@ var _ = Describe("Happy Path", func() {
 		}
 	})
 })
+
+// newEdgeHTTPClient resolves via 1.1.1.1 directly instead of the local stub
+// resolver. Records are created by the controller while the test runs, and
+// systemd-resolved would otherwise cache the initial NXDOMAIN for up to the
+// zone's negative TTL, keeping probes failing long after the record exists.
+func newEdgeHTTPClient() *http.Client {
+	resolver := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			dialer := net.Dialer{Timeout: 5 * time.Second}
+			return dialer.DialContext(ctx, "udp", "1.1.1.1:53")
+		},
+	}
+	dialer := &net.Dialer{
+		Timeout:  10 * time.Second,
+		Resolver: resolver,
+	}
+	return &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			DialContext: dialer.DialContext,
+		},
+	}
+}
 
 func createHTTPEcho(namespace string, name string, text string) error {
 	labels := map[string]string{"app": name}
