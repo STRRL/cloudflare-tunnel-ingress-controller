@@ -38,6 +38,9 @@ var _ = Describe("Happy Path", func() {
 		exactEchoName         = "e2e-echo-exact"
 		fallbackEchoName      = "e2e-echo-fallback"
 		wildcardIngressName   = "wildcard-routing-via-cloudflare"
+		dnsEchoNamespace      = "default"
+		dnsEchoName           = "e2e-echo-dns"
+		dnsIngressName        = "dns-managed-via-cloudflare"
 	)
 
 	It("exposes the Kubernetes dashboard via Cloudflare Tunnel", func() {
@@ -348,6 +351,96 @@ var _ = Describe("Happy Path", func() {
 		By("verifying an unmatched subdomain falls back to the wildcard backend")
 		waitFor("wildcard fallback routing", 15*time.Minute, 20*time.Second, func() error {
 			return expectHTTPBody(client, fmt.Sprintf("https://%s/", probeHostname), "wildcard-backend")
+		})
+
+		By("exposing an echo service with managed DNS records")
+		Expect(createHTTPEcho(dnsEchoNamespace, dnsEchoName, "dns-managed-backend")).To(Succeed())
+		waitFor(fmt.Sprintf("%s deployment ready", dnsEchoName), 5*time.Minute, 5*time.Second, func() error {
+			deployment, err := kubeClient.AppsV1().Deployments(dnsEchoNamespace).Get(context.Background(), dnsEchoName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			if !isDeploymentAvailable(*deployment) {
+				return fmt.Errorf("%s deployment has %d available replicas", dnsEchoName, deployment.Status.AvailableReplicas)
+			}
+			return nil
+		})
+
+		dnsHostname, err := buildTestHostname("cf-dns", dashboardBaseDomain)
+		Expect(err).NotTo(HaveOccurred())
+		ownershipTXTName := "_ctic_managed." + dnsHostname
+
+		_ = kubeClient.NetworkingV1().Ingresses(dnsEchoNamespace).Delete(context.Background(), dnsIngressName, metav1.DeleteOptions{})
+		dnsIngress := &networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      dnsIngressName,
+				Namespace: dnsEchoNamespace,
+			},
+			Spec: networkingv1.IngressSpec{
+				IngressClassName: ptr.To("cloudflare-tunnel"),
+				Rules: []networkingv1.IngressRule{
+					echoIngressRule(dnsHostname, dnsEchoName, &pathType),
+				},
+			},
+		}
+		_, err = kubeClient.NetworkingV1().Ingresses(dnsEchoNamespace).Create(context.Background(), dnsIngress, metav1.CreateOptions{})
+		Expect(err).NotTo(HaveOccurred())
+
+		By("verifying the controller created the CNAME and ownership TXT records")
+		cfAPI, err := newCloudflareAPI()
+		Expect(err).NotTo(HaveOccurred())
+		zoneID, err := findZoneID(context.Background(), cfAPI, dnsHostname)
+		Expect(err).NotTo(HaveOccurred())
+
+		waitFor("managed DNS records created", 10*time.Minute, 10*time.Second, func() error {
+			cnameExists, err := dnsRecordExists(context.Background(), cfAPI, zoneID, "CNAME", dnsHostname)
+			if err != nil {
+				return err
+			}
+			if !cnameExists {
+				return fmt.Errorf("CNAME record for %s not created yet", dnsHostname)
+			}
+			txtExists, err := dnsRecordExists(context.Background(), cfAPI, zoneID, "TXT", ownershipTXTName)
+			if err != nil {
+				return err
+			}
+			if !txtExists {
+				return fmt.Errorf("ownership TXT record for %s not created yet", dnsHostname)
+			}
+			return nil
+		})
+
+		By("disabling DNS management on the ingress via annotation")
+		waitFor("annotate ingress", 2*time.Minute, 5*time.Second, func() error {
+			current, err := kubeClient.NetworkingV1().Ingresses(dnsEchoNamespace).Get(context.Background(), dnsIngressName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			if current.Annotations == nil {
+				current.Annotations = map[string]string{}
+			}
+			current.Annotations["cloudflare-tunnel-ingress-controller.strrl.dev/disable-dns-management"] = "true"
+			_, err = kubeClient.NetworkingV1().Ingresses(dnsEchoNamespace).Update(context.Background(), current, metav1.UpdateOptions{})
+			return err
+		})
+
+		By("verifying the controller relinquished its DNS records")
+		waitFor("managed DNS records relinquished", 10*time.Minute, 10*time.Second, func() error {
+			cnameExists, err := dnsRecordExists(context.Background(), cfAPI, zoneID, "CNAME", dnsHostname)
+			if err != nil {
+				return err
+			}
+			if cnameExists {
+				return fmt.Errorf("CNAME record for %s still present", dnsHostname)
+			}
+			txtExists, err := dnsRecordExists(context.Background(), cfAPI, zoneID, "TXT", ownershipTXTName)
+			if err != nil {
+				return err
+			}
+			if txtExists {
+				return fmt.Errorf("ownership TXT record for %s still present", dnsHostname)
+			}
+			return nil
 		})
 
 		By("collecting coverage data from the controller pod")
