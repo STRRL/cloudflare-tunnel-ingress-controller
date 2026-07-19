@@ -31,3 +31,4 @@ cover.out
 .env
 .env.*
 test/e2e/artifacts/
+.env.e2e
