@@ -2,12 +2,14 @@ package controller
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/go-logr/logr"
 	"k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -155,12 +157,22 @@ func TestFromIngressToExposureNilHTTP(t *testing.T) {
 		},
 	}
 
-	exposures, err := FromIngressToExposure(context.Background(), logr.Discard(), nil, ingress, "cluster.local")
+	recorder := record.NewFakeRecorder(8)
+	exposures, err := FromIngressToExposure(context.Background(), logr.Discard(), nil, recorder, ingress, "cluster.local")
 	if err != nil {
 		t.Fatalf("expected a rule with nil HTTP to be skipped, got error: %v", err)
 	}
 	if len(exposures) != 0 {
 		t.Fatalf("expected no exposures for a rule with nil HTTP, got %d", len(exposures))
+	}
+
+	select {
+	case event := <-recorder.Events:
+		if !strings.Contains(event, EventReasonRuleSkipped) {
+			t.Fatalf("expected a %s event, got %q", EventReasonRuleSkipped, event)
+		}
+	default:
+		t.Fatalf("expected a %s event to be recorded", EventReasonRuleSkipped)
 	}
 }
 
@@ -215,7 +227,7 @@ func TestFromIngressToExposureNilHTTPKeepsOtherRules(t *testing.T) {
 	}
 	kubeClient := fake.NewClientBuilder().WithObjects(&service).Build()
 
-	exposures, err := FromIngressToExposure(context.Background(), logr.Discard(), kubeClient, ingress, "cluster.local")
+	exposures, err := FromIngressToExposure(context.Background(), logr.Discard(), kubeClient, record.NewFakeRecorder(8), ingress, "cluster.local")
 	if err != nil {
 		t.Fatalf("expected the host-only rule to be skipped, got error: %v", err)
 	}

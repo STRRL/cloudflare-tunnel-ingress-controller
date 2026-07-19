@@ -14,6 +14,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/tools/record"
 )
 
 const IntegrationTestNamespace = "cf-tunnel-ingress-controller-test"
@@ -25,6 +26,7 @@ var pathTypeImplementationSpecific = networkingv1.PathTypeImplementationSpecific
 
 var _ = Describe("transform ingress to exposure", func() {
 	logger := stdr.NewWithOptions(log.New(os.Stderr, "", log.LstdFlags), stdr.Options{LogCaller: stdr.All})
+	recorder := record.NewFakeRecorder(100)
 
 	It("should resolve ingress with PathType Prefix", func() {
 		// prepare
@@ -99,7 +101,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, recorder, ingress, testClusterDomain)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
@@ -183,7 +185,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, recorder, ingress, testClusterDomain)
 		Expect(err).Should(HaveOccurred())
 		Expect(exposure).Should(BeNil())
 	})
@@ -261,7 +263,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, recorder, ingress, testClusterDomain)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).Should(HaveLen(1))
 	})
@@ -339,7 +341,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, recorder, ingress, testClusterDomain)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
@@ -423,7 +425,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, recorder, ingress, testClusterDomain)
 		Expect(err).Should(HaveOccurred())
 		Expect(exposure).Should(BeNil())
 	})
@@ -501,7 +503,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, recorder, ingress, testClusterDomain)
 		Expect(err).Should(HaveOccurred())
 		Expect(exposure).Should(BeNil())
 	})
@@ -582,7 +584,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, recorder, ingress, testClusterDomain)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
@@ -671,7 +673,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, recorder, ingress, testClusterDomain)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
@@ -756,7 +758,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure with custom cluster domain")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, recorder, ingress, testClusterDomain)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
@@ -844,7 +846,7 @@ var _ = Describe("transform ingress to exposure", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("transforming ingress to exposure")
-		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, ingress, testClusterDomain)
+		exposure, err := controller.FromIngressToExposure(ctx, logger, kubeClient, recorder, ingress, testClusterDomain)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(exposure).ShouldNot(BeNil())
 		Expect(exposure).Should(HaveLen(1))
