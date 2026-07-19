@@ -18,9 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: './go.mod'
 
@@ -31,7 +31,7 @@ jobs:
           cloudflared --version
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
         with:
           version: 'latest'
 
@@ -68,7 +68,7 @@ jobs:
 
       - name: Upload coverage reports to Codecov
         if: always()
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: ./test/e2e/artifacts/e2e-cover.out
           flags: e2e
@@ -76,7 +76,7 @@ jobs:
 
       - name: Upload test artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-artifacts-${{ github.run_number }}-${{ github.run_attempt }}
           path: test/e2e/artifacts/
