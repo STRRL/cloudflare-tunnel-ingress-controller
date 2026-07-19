@@ -34,6 +34,10 @@ var _ = Describe("Happy Path", func() {
 		redisPort             = int32(6379)
 		tcpIngressName        = "redis-via-cloudflare-tcp"
 		redisLocalAddr        = "127.0.0.1:16379"
+		wildcardNamespace     = "default"
+		exactEchoName         = "e2e-echo-exact"
+		fallbackEchoName      = "e2e-echo-fallback"
+		wildcardIngressName   = "wildcard-routing-via-cloudflare"
 	)
 
 	It("exposes the Kubernetes dashboard via Cloudflare Tunnel", func() {
@@ -291,12 +295,160 @@ var _ = Describe("Happy Path", func() {
 			return redisPing(redisLocalAddr)
 		})
 
+		By("deploying echo services for wildcard routing verification")
+		Expect(createHTTPEcho(wildcardNamespace, exactEchoName, "exact-backend")).To(Succeed())
+		Expect(createHTTPEcho(wildcardNamespace, fallbackEchoName, "wildcard-backend")).To(Succeed())
+		for _, echoName := range []string{exactEchoName, fallbackEchoName} {
+			waitFor(fmt.Sprintf("%s deployment ready", echoName), 5*time.Minute, 5*time.Second, func() error {
+				deployment, err := kubeClient.AppsV1().Deployments(wildcardNamespace).Get(context.Background(), echoName, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+				if !isDeploymentAvailable(*deployment) {
+					return fmt.Errorf("%s deployment has %d available replicas", echoName, deployment.Status.AvailableReplicas)
+				}
+				return nil
+			})
+		}
+
+		By("creating an Ingress mixing a wildcard rule with an exact-host rule")
+		wildcardScope, err := buildTestHostname("cf-wc", dashboardBaseDomain)
+		Expect(err).NotTo(HaveOccurred())
+		exactEchoHostname := "app." + wildcardScope
+		wildcardHostname := "*." + wildcardScope
+		probeHostname := "anything-else." + wildcardScope
+
+		_ = kubeClient.NetworkingV1().Ingresses(wildcardNamespace).Delete(context.Background(), wildcardIngressName, metav1.DeleteOptions{})
+		wildcardIngress := &networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      wildcardIngressName,
+				Namespace: wildcardNamespace,
+			},
+			Spec: networkingv1.IngressSpec{
+				IngressClassName: ptr.To("cloudflare-tunnel"),
+				Rules: []networkingv1.IngressRule{
+					// the wildcard rule intentionally comes first in the
+					// spec, rule order must not affect routing priority
+					echoIngressRule(wildcardHostname, fallbackEchoName, &pathType),
+					echoIngressRule(exactEchoHostname, exactEchoName, &pathType),
+				},
+			},
+		}
+		_, err = kubeClient.NetworkingV1().Ingresses(wildcardNamespace).Create(context.Background(), wildcardIngress, metav1.CreateOptions{})
+		Expect(err).NotTo(HaveOccurred())
+
+		By("verifying the exact host is served by its own backend, not the wildcard")
+		waitFor("exact host routing", 15*time.Minute, 20*time.Second, func() error {
+			return expectHTTPBody(client, fmt.Sprintf("https://%s/", exactEchoHostname), "exact-backend")
+		})
+
+		By("verifying an unmatched subdomain falls back to the wildcard backend")
+		waitFor("wildcard fallback routing", 15*time.Minute, 20*time.Second, func() error {
+			return expectHTTPBody(client, fmt.Sprintf("https://%s/", probeHostname), "wildcard-backend")
+		})
+
 		By("collecting coverage data from the controller pod")
 		if err := collectControllerCoverage(controllerNamespace, controllerReleaseName); err != nil {
 			_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to collect coverage: %v\n", err)
 		}
 	})
 })
+
+func createHTTPEcho(namespace string, name string, text string) error {
+	labels := map[string]string{"app": name}
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: ptr.To(int32(1)),
+			Selector: &metav1.LabelSelector{MatchLabels: labels},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: labels},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "http-echo",
+							Image: "hashicorp/http-echo:1.0",
+							Args:  []string{fmt.Sprintf("-text=%s", text)},
+							Ports: []corev1.ContainerPort{{ContainerPort: 5678}},
+						},
+					},
+				},
+			},
+		},
+	}
+	if _, err := kubeClient.AppsV1().Deployments(namespace).Create(context.Background(), deployment, metav1.CreateOptions{}); err != nil {
+		return fmt.Errorf("create %s deployment: %w", name, err)
+	}
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: labels,
+			Ports: []corev1.ServicePort{
+				{
+					Port:       80,
+					TargetPort: intstr.FromInt32(5678),
+				},
+			},
+		},
+	}
+	if _, err := kubeClient.CoreV1().Services(namespace).Create(context.Background(), service, metav1.CreateOptions{}); err != nil {
+		return fmt.Errorf("create %s service: %w", name, err)
+	}
+	return nil
+}
+
+func echoIngressRule(host string, serviceName string, pathType *networkingv1.PathType) networkingv1.IngressRule {
+	return networkingv1.IngressRule{
+		Host: host,
+		IngressRuleValue: networkingv1.IngressRuleValue{
+			HTTP: &networkingv1.HTTPIngressRuleValue{
+				Paths: []networkingv1.HTTPIngressPath{
+					{
+						Path:     "/",
+						PathType: pathType,
+						Backend: networkingv1.IngressBackend{
+							Service: &networkingv1.IngressServiceBackend{
+								Name: serviceName,
+								Port: networkingv1.ServiceBackendPort{Number: 80},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func expectHTTPBody(client *http.Client, url string, marker string) error {
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(string(body), marker) {
+		return fmt.Errorf("response body %q does not contain %q", strings.TrimSpace(string(body)), marker)
+	}
+	return nil
+}
 
 func createRedis(namespace string, name string) error {
 	labels := map[string]string{"app": name}

@@ -323,8 +323,21 @@ func sortIngressRules(a, b cloudflare.UnvalidatedIngressRule) int {
 		}
 		return -1
 	}
+	// a broader wildcard suffix-matches everything a more specific one
+	// covers, so wildcards with more labels must come first:
+	// *.internal.example.com before *.example.com
+	if aIsWildcard {
+		if v := strings.Count(b.Hostname, ".") - strings.Count(a.Hostname, "."); v != 0 {
+			return v
+		}
+	}
 	if v := strings.Compare(strings.ToLower(a.Hostname), strings.ToLower(b.Hostname)); v != 0 {
 		return v
 	}
-	return len(b.Path) - len(a.Path)
+	if v := len(b.Path) - len(a.Path); v != 0 {
+		return v
+	}
+	// lexical fallback keeps the comparator a total order, the rule list
+	// must be deterministic or reconciles would push spurious updates
+	return strings.Compare(a.Path, b.Path)
 }
