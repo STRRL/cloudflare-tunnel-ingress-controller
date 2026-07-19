@@ -17,8 +17,13 @@ func fromExposureToCloudflareIngress(ctx context.Context, exposure exposure.Expo
 
 	result := cloudflare.UnvalidatedIngressRule{
 		Hostname: exposure.Hostname,
-		Path:     exposure.PathPrefix,
 		Service:  exposure.ServiceTarget,
+	}
+
+	// path based routing only applies to http(s), non http protocols
+	// like ssh, rdp or tcp must not carry a path in the tunnel rule
+	if strings.HasPrefix(exposure.ServiceTarget, "http://") || strings.HasPrefix(exposure.ServiceTarget, "https://") {
+		result.Path = exposure.PathPrefix
 	}
 
 	if exposure.HTTPHostHeader != nil {

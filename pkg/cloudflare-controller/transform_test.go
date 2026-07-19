@@ -52,6 +52,44 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "ssh scheme drops path",
+			args: args{
+				ctx: context.Background(),
+				exposure: exposure.Exposure{
+					Hostname:      "ssh.example.com",
+					ServiceTarget: "ssh://10.0.0.1:22",
+					PathPrefix:    "/*",
+					IsDeleted:     false,
+				},
+			},
+			want: &cloudflare.UnvalidatedIngressRule{
+				Hostname:      "ssh.example.com",
+				Path:          "",
+				Service:       "ssh://10.0.0.1:22",
+				OriginRequest: nil,
+			},
+			wantErr: false,
+		},
+		{
+			name: "tcp scheme drops path",
+			args: args{
+				ctx: context.Background(),
+				exposure: exposure.Exposure{
+					Hostname:      "tcp.example.com",
+					ServiceTarget: "tcp://10.0.0.1:5432",
+					PathPrefix:    "/",
+					IsDeleted:     false,
+				},
+			},
+			want: &cloudflare.UnvalidatedIngressRule{
+				Hostname:      "tcp.example.com",
+				Path:          "",
+				Service:       "tcp://10.0.0.1:5432",
+				OriginRequest: nil,
+			},
+			wantErr: false,
+		},
+		{
 			name: "contains path",
 			args: args{
 				ctx: context.Background(),

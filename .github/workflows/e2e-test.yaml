@@ -24,6 +24,12 @@ jobs:
         with:
           go-version-file: './go.mod'
 
+      - name: Install cloudflared
+        run: |
+          curl -fsSL -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          sudo install /tmp/cloudflared /usr/local/bin/cloudflared
+          cloudflared --version
+
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
