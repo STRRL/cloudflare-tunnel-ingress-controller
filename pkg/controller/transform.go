@@ -28,8 +28,14 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 			return nil, errors.Errorf("host in ingress %s/%s is empty", ingress.GetNamespace(), ingress.GetName())
 		}
 
+		// rule.HTTP is optional in the Ingress API, a rule may carry only a
+		// host, skip it and keep processing the remaining rules
 		if rule.HTTP == nil {
-			return nil, errors.Errorf("ingress rule for host %s has no http paths defined", rule.Host)
+			logger.Info("ingress rule has no http section, skipped",
+				"ingress", fmt.Sprintf("%s/%s", ingress.GetNamespace(), ingress.GetName()),
+				"host", rule.Host,
+			)
+			continue
 		}
 
 		hostname := rule.Host
