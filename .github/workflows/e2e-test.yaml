@@ -13,6 +13,13 @@ on:
 
 permissions: read-all
 
+# All e2e runs share one Cloudflare tunnel and zone. Two controllers running
+# at once treat each other's records as orphans and delete them in a loop,
+# so runs must be strictly serialized.
+concurrency:
+  group: e2e-shared-cloudflare-tunnel
+  cancel-in-progress: false
+
 jobs:
   e2e-test:
     runs-on: ubuntu-latest
