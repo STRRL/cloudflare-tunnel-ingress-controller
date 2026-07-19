@@ -32,6 +32,7 @@ var (
 	controllerImageRef  imageRef
 	dashboardBaseDomain string
 	dashboardHostname   string
+	tcpHostname         string
 )
 
 var requiredEnvVars = []string{
@@ -77,9 +78,12 @@ var _ = BeforeSuite(func() {
 	controllerImageRef, err = parseImageRef(controllerImage)
 	Expect(err).NotTo(HaveOccurred(), "parse controller image reference")
 	dashboardBaseDomain = os.Getenv(dashboardBaseDomainEnvKey)
-	dashboardHostname, err = buildDashboardHostname(dashboardBaseDomain)
+	dashboardHostname, err = buildTestHostname("cf-dashboard", dashboardBaseDomain)
 	Expect(err).NotTo(HaveOccurred(), "build dashboard hostname")
 	_, _ = fmt.Fprintf(GinkgoWriter, "using dashboard hostname %s\n", dashboardHostname)
+	tcpHostname, err = buildTestHostname("cf-tcp", dashboardBaseDomain)
+	Expect(err).NotTo(HaveOccurred(), "build tcp hostname")
+	_, _ = fmt.Fprintf(GinkgoWriter, "using tcp hostname %s\n", tcpHostname)
 
 	verifyCtx, cancel := context.WithTimeout(suiteCtx, 30*time.Second)
 	defer cancel()
@@ -90,6 +94,9 @@ var _ = BeforeSuite(func() {
 
 	_, err = exec.LookPath("helm")
 	Expect(err).NotTo(HaveOccurred(), "helm binary must be installed and on PATH")
+
+	_, err = exec.LookPath("cloudflared")
+	Expect(err).NotTo(HaveOccurred(), "cloudflared binary must be installed and on PATH")
 
 	minikubeProfile = os.Getenv(e2eMinikubeProfileEnvKey)
 	kubeconfigPath = os.Getenv(e2eKubeconfigEnvKey)
@@ -351,7 +358,7 @@ func enableMinikubeAddon(ctx context.Context, profile string, addon string) erro
 	return nil
 }
 
-func buildDashboardHostname(baseDomain string) (string, error) {
+func buildTestHostname(prefix string, baseDomain string) (string, error) {
 	trimmed := strings.TrimSpace(baseDomain)
 	trimmed = strings.TrimPrefix(trimmed, "https://")
 	trimmed = strings.TrimPrefix(trimmed, "http://")
@@ -363,7 +370,7 @@ func buildDashboardHostname(baseDomain string) (string, error) {
 	if strings.Contains(trimmed, "/") {
 		return "", fmt.Errorf("base domain %s must not contain path", trimmed)
 	}
-	label := fmt.Sprintf("cf-dashboard-%d", time.Now().UnixNano())
+	label := fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano())
 	return fmt.Sprintf("%s.%s", label, trimmed), nil
 }
 

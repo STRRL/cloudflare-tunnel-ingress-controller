@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -17,6 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 )
 
@@ -26,6 +29,11 @@ var _ = Describe("Happy Path", func() {
 		controllerReleaseName = "cf-ic-e2e"
 		dashboardNamespace    = "kubernetes-dashboard"
 		dashboardIngressName  = "dashboard-via-cloudflare"
+		redisNamespace        = "default"
+		redisName             = "e2e-redis"
+		redisPort             = int32(6379)
+		tcpIngressName        = "redis-via-cloudflare-tcp"
+		redisLocalAddr        = "127.0.0.1:16379"
 	)
 
 	It("exposes the Kubernetes dashboard via Cloudflare Tunnel", func() {
@@ -205,12 +213,167 @@ var _ = Describe("Happy Path", func() {
 			_, _ = fmt.Fprintf(GinkgoWriter, "dashboard screenshot saved to %s\n", path)
 		}
 
+		By("deploying a redis instance for the tcp exposure")
+		Expect(createRedis(redisNamespace, redisName)).To(Succeed())
+		waitFor("redis deployment ready", 5*time.Minute, 5*time.Second, func() error {
+			deployment, err := kubeClient.AppsV1().Deployments(redisNamespace).Get(context.Background(), redisName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			if !isDeploymentAvailable(*deployment) {
+				return fmt.Errorf("redis deployment has %d available replicas", deployment.Status.AvailableReplicas)
+			}
+			return nil
+		})
+
+		By("creating an Ingress exposing redis with backend-protocol tcp")
+		_ = kubeClient.NetworkingV1().Ingresses(redisNamespace).Delete(context.Background(), tcpIngressName, metav1.DeleteOptions{})
+		tcpIngress := &networkingv1.Ingress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      tcpIngressName,
+				Namespace: redisNamespace,
+				Annotations: map[string]string{
+					"cloudflare-tunnel-ingress-controller.strrl.dev/backend-protocol": "tcp",
+				},
+			},
+			Spec: networkingv1.IngressSpec{
+				IngressClassName: ptr.To("cloudflare-tunnel"),
+				Rules: []networkingv1.IngressRule{
+					{
+						Host: tcpHostname,
+						IngressRuleValue: networkingv1.IngressRuleValue{
+							HTTP: &networkingv1.HTTPIngressRuleValue{
+								Paths: []networkingv1.HTTPIngressPath{
+									{
+										Path:     "/",
+										PathType: &pathType,
+										Backend: networkingv1.IngressBackend{
+											Service: &networkingv1.IngressServiceBackend{
+												Name: redisName,
+												Port: networkingv1.ServiceBackendPort{Number: redisPort},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		_, err = kubeClient.NetworkingV1().Ingresses(redisNamespace).Create(context.Background(), tcpIngress, metav1.CreateOptions{})
+		Expect(err).NotTo(HaveOccurred())
+
+		By("waiting for the tcp ingress status to include the Cloudflare tunnel hostname")
+		waitFor("tcp ingress status hostname", 10*time.Minute, 10*time.Second, func() error {
+			current, err := kubeClient.NetworkingV1().Ingresses(redisNamespace).Get(context.Background(), tcpIngressName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			if len(current.Status.LoadBalancer.Ingress) == 0 {
+				return fmt.Errorf("tcp ingress status has no entries yet")
+			}
+			return nil
+		})
+
+		By("reaching redis through the tunnel via cloudflared access tcp")
+		accessCtx, cancelAccess := context.WithCancel(suiteCtx)
+		accessCmd := exec.CommandContext(accessCtx, "cloudflared", "access", "tcp", "--hostname", tcpHostname, "--url", redisLocalAddr)
+		accessCmd.Stdout = GinkgoWriter
+		accessCmd.Stderr = GinkgoWriter
+		Expect(accessCmd.Start()).To(Succeed())
+		defer func() {
+			cancelAccess()
+			_ = accessCmd.Wait()
+		}()
+
+		waitFor("redis PING via tunnel", 15*time.Minute, 20*time.Second, func() error {
+			return redisPing(redisLocalAddr)
+		})
+
 		By("collecting coverage data from the controller pod")
 		if err := collectControllerCoverage(controllerNamespace, controllerReleaseName); err != nil {
 			_, _ = fmt.Fprintf(GinkgoWriter, "warning: failed to collect coverage: %v\n", err)
 		}
 	})
 })
+
+func createRedis(namespace string, name string) error {
+	labels := map[string]string{"app": name}
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: ptr.To(int32(1)),
+			Selector: &metav1.LabelSelector{MatchLabels: labels},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: labels},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "redis",
+							Image: "redis:7-alpine",
+							Ports: []corev1.ContainerPort{{ContainerPort: 6379}},
+						},
+					},
+				},
+			},
+		},
+	}
+	if _, err := kubeClient.AppsV1().Deployments(namespace).Create(context.Background(), deployment, metav1.CreateOptions{}); err != nil {
+		return fmt.Errorf("create redis deployment: %w", err)
+	}
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: labels,
+			Ports: []corev1.ServicePort{
+				{
+					Port:       6379,
+					TargetPort: intstr.FromInt32(6379),
+				},
+			},
+		},
+	}
+	if _, err := kubeClient.CoreV1().Services(namespace).Create(context.Background(), service, metav1.CreateOptions{}); err != nil {
+		return fmt.Errorf("create redis service: %w", err)
+	}
+	return nil
+}
+
+// redisPing dials the local forwarder opened by cloudflared access tcp and
+// performs a real PING round-trip through the Cloudflare edge and the tunnel.
+func redisPing(addr string) error {
+	conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+
+	if err := conn.SetDeadline(time.Now().Add(15 * time.Second)); err != nil {
+		return err
+	}
+	if _, err := conn.Write([]byte("PING\r\n")); err != nil {
+		return err
+	}
+	buffer := make([]byte, 64)
+	n, err := conn.Read(buffer)
+	if err != nil {
+		return err
+	}
+	response := strings.TrimSpace(string(buffer[:n]))
+	if response != "+PONG" {
+		return fmt.Errorf("unexpected redis response %q", response)
+	}
+	return nil
+}
 
 func isNodeReady(node corev1.Node) bool {
 	for _, condition := range node.Status.Conditions {
