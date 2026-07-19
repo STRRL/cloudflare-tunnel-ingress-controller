@@ -312,11 +312,14 @@ var _ = Describe("Happy Path", func() {
 		}
 
 		By("creating an Ingress mixing a wildcard rule with an exact-host rule")
-		wildcardScope, err := buildTestHostname("cf-wc", dashboardBaseDomain)
+		// all hosts stay one label below the base domain, Universal SSL only
+		// covers the zone apex and first-level subdomains, deeper names need
+		// paid certificates and would fail the TLS handshake in this test
+		exactEchoHostname, err := buildTestHostname("cf-wc-exact", dashboardBaseDomain)
 		Expect(err).NotTo(HaveOccurred())
-		exactEchoHostname := "app." + wildcardScope
-		wildcardHostname := "*." + wildcardScope
-		probeHostname := "anything-else." + wildcardScope
+		probeHostname, err := buildTestHostname("cf-wc-probe", dashboardBaseDomain)
+		Expect(err).NotTo(HaveOccurred())
+		wildcardHostname := "*." + strings.SplitN(exactEchoHostname, ".", 2)[1]
 
 		_ = kubeClient.NetworkingV1().Ingresses(wildcardNamespace).Delete(context.Background(), wildcardIngressName, metav1.DeleteOptions{})
 		wildcardIngress := &networkingv1.Ingress{
