@@ -30,7 +30,7 @@ jobs:
           version: 'latest'
 
       - name: Start minikube
-        uses: medyagh/setup-minikube@latest
+        uses: medyagh/setup-minikube@v0
         with:
           driver: docker
           container-runtime: docker
