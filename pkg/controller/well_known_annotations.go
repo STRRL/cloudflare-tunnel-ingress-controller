@@ -13,3 +13,11 @@ const AnnotationHTTPHostHeader = "cloudflare-tunnel-ingress-controller.strrl.dev
 
 // AnnotationOriginServerName is the hostname on the origin server certificate.
 const AnnotationOriginServerName = "cloudflare-tunnel-ingress-controller.strrl.dev/origin-server-name"
+
+// AnnotationDisableDNSManagement disables Cloudflare DNS record (CNAME/TXT) management
+// for this ingress, while still configuring the tunnel ingress rule. This allows DNS to be
+// delegated to an external system, e.g. external-dns or a Cloudflare Load Balancer that
+// targets the tunnel directly. Available values: "true" or "false", default "false".
+const AnnotationDisableDNSManagement = "cloudflare-tunnel-ingress-controller.strrl.dev/disable-dns-management"
+const AnnotationDisableDNSManagementTrue = "true"
+const AnnotationDisableDNSManagementFalse = "false"

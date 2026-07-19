@@ -179,6 +179,12 @@ func (t *TunnelClient) updateDNSCNAMERecord(ctx context.Context, exposures []exp
 		ok, zone := zoneBelongedByExposure(item, zoneNames)
 		if ok {
 			exposuresByZone[zone] = append(exposuresByZone[zone], item)
+		} else if item.DisableDNSManagement {
+			// DNS management is delegated externally for this exposure; its hostname
+			// may live in a zone not managed by this Cloudflare account, so don't
+			// require a zone match and skip it from DNS reconciliation.
+			t.logger.V(3).Info("DNS management disabled for exposure, skipping DNS reconciliation", "hostname", item.Hostname)
+			continue
 		} else {
 			return errors.Errorf("hostname %s not belong to any zone", item.Hostname)
 		}

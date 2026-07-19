@@ -71,6 +71,13 @@ func syncDNSRecord(
 
 	// Create or update CNAME/TXT records for active exposures
 	for _, item := range effectiveExposures {
+		// DNS management is delegated externally for this exposure: skip creating or
+		// updating its records. It stays in effectiveExposures so the deletion pass
+		// below still treats its hostname as known and leaves existing records alone.
+		if item.DisableDNSManagement {
+			continue
+		}
+
 		txtRecordName := fmt.Sprintf("%s.%s", ManagedRecordTXTPrefix, item.Hostname)
 
 		// Handle CNAME record

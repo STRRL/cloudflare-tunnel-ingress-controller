@@ -66,6 +66,24 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 			originServerName = ptr.To(name)
 		}
 
+		disableDNSManagement := false
+
+		if value, ok := getAnnotation(ingress.Annotations, AnnotationDisableDNSManagement); ok {
+			switch value {
+			case AnnotationDisableDNSManagementTrue:
+				disableDNSManagement = true
+			case AnnotationDisableDNSManagementFalse:
+				disableDNSManagement = false
+			default:
+				return nil, errors.Errorf(
+					"invalid value for annotation %s, available values: \"%s\" or \"%s\"",
+					AnnotationDisableDNSManagement,
+					AnnotationDisableDNSManagementTrue,
+					AnnotationDisableDNSManagementFalse,
+				)
+			}
+		}
+
 		var proxySSLVerifyEnabled *bool
 
 		if proxySSLVerify, ok := getAnnotation(ingress.Annotations, AnnotationProxySSLVerify); ok {
@@ -132,6 +150,7 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 				ProxySSLVerifyEnabled: proxySSLVerifyEnabled,
 				HTTPHostHeader:        httpHostHeader,
 				OriginServerName:      originServerName,
+				DisableDNSManagement:  disableDNSManagement,
 			})
 		}
 	}

@@ -335,6 +335,64 @@ func Test_syncDNSRecord(t *testing.T) {
 			wantDelete: nil,
 			wantErr:    false,
 		},
+		{
+			name: "exposure with DNS management disabled creates no records",
+			args: args{
+				logger: logr.Discard(),
+				exposures: []exposure.Exposure{
+					{
+						Hostname:             "test.example.com",
+						ServiceTarget:        "http://10.0.0.1:233",
+						PathPrefix:           "/",
+						IsDeleted:            false,
+						DisableDNSManagement: true,
+					},
+				},
+				existedCNAMERecords: nil,
+				existedTXTRecords:   nil,
+				tunnelId:            WhateverTunnelId,
+				tunnelName:          "tunnel-in-test",
+			},
+			wantCreate: nil,
+			wantUpdate: nil,
+			wantDelete: nil,
+			wantErr:    false,
+		},
+		{
+			name: "exposure with DNS management disabled does not delete existing record",
+			args: args{
+				logger: logr.Discard(),
+				exposures: []exposure.Exposure{
+					{
+						Hostname:             "test.example.com",
+						ServiceTarget:        "http://10.0.0.1:233",
+						PathPrefix:           "/",
+						IsDeleted:            false,
+						DisableDNSManagement: true,
+					},
+				},
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					},
+				},
+				tunnelId:   WhateverTunnelId,
+				tunnelName: "tunnel-in-test",
+			},
+			wantCreate: nil,
+			wantUpdate: nil,
+			wantDelete: nil,
+			wantErr:    false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
