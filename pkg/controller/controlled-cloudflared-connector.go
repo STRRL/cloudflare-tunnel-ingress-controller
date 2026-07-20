@@ -81,6 +81,11 @@ func CreateOrUpdateControlledCloudflared(
 			needsUpdate = true
 		}
 
+		desiredAffinity := buildPodAntiAffinity("controlled-cloudflared-connector", config.Replicas)
+		if !affinityEqual(existingDeployment.Spec.Template.Spec.Affinity, desiredAffinity) {
+			needsUpdate = true
+		}
+
 		if needsUpdate {
 			updatedDeployment := controlledCloudflaredDeployment{
 				config:             config,
