@@ -82,6 +82,33 @@ kubectl -n kubernetes-dashboard \
 
 - Done! Enjoy! 🎉
 
+## Configuration
+
+The controller reads configuration from CLI flags and environment variables, with precedence: CLI flags > environment variables > built in defaults. Every flag maps to an environment variable by uppercasing the flag name and replacing `-` with `_`. This is handy for local debugging with an `.env` file, since flags and environment variables share a single config loading path.
+
+| Flag | Environment variable | Default |
+| --- | --- | --- |
+| `--cloudflare-api-token` | `CLOUDFLARE_API_TOKEN` | (required) |
+| `--cloudflare-account-id` | `CLOUDFLARE_ACCOUNT_ID` | (required) |
+| `--cloudflare-tunnel-name` | `CLOUDFLARE_TUNNEL_NAME` | (required) |
+| `--ingress-class` | `INGRESS_CLASS` | `cloudflare-tunnel` |
+| `--controller-class` | `CONTROLLER_CLASS` | `strrl.dev/cloudflare-tunnel-ingress-controller` |
+| `--log-level` | `LOG_LEVEL` | `0` |
+| `--namespace` | `NAMESPACE` | `default` |
+| `--cloudflared-protocol` | `CLOUDFLARED_PROTOCOL` | `auto` |
+| `--cloudflared-extra-args` | `CLOUDFLARED_EXTRA_ARGS` | (empty) |
+| `--cluster-domain` | `CLUSTER_DOMAIN` | `cluster.local` |
+| `--leader-elect` | `LEADER_ELECT` | `false` |
+| `--dns-comment-template` | `DNS_COMMENT_TEMPLATE` | `managed by cloudflare-tunnel-ingress-controller, tunnel [{{.TunnelName}}]` |
+
+The managed cloudflared connector deployment is configured with environment variables only:
+
+| Environment variable | Default |
+| --- | --- |
+| `CLOUDFLARED_IMAGE` | `cloudflare/cloudflared:latest` |
+| `CLOUDFLARED_IMAGE_PULL_POLICY` | `IfNotPresent` |
+| `CLOUDFLARED_REPLICA_COUNT` | `1` |
+
 ## Alternative
 
 There is also an awesome project which could integrate with Cloudflare Tunnel as CRD, check it out [adyanth/cloudflare-operator](https://github.com/adyanth/cloudflare-operator)!
