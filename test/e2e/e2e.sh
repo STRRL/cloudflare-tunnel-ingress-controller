@@ -27,7 +27,8 @@ finish() {
     DUMP_DIRECTORY="$E2E_DUMP_DIRECTORY" \
         bash "$SCRIPT_DIRECTORY/dump.sh"
     # scenario ingresses are cleaned up by the godog After hooks, delete any
-    # leftovers from aborted runs so the controller relinquishes tunnel state
+    # leftovers from aborted runs so the controller removes their tunnel
+    # rules and DNS records before the release is uninstalled
     kubectl delete ingress --all --all-namespaces --wait=true
     minikube -p "$E2E_MINIKUBE_PROFILE" addons disable dashboard
     minikube -p "$E2E_MINIKUBE_PROFILE" addons disable metrics-server

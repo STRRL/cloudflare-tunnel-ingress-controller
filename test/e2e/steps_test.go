@@ -94,11 +94,11 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^an http echo service "([^"]*)" replying "([^"]*)" is deployed$`, anHTTPEchoServiceIsDeployed)
 	ctx.Step(`^an ingress routes a wildcard hostname to "([^"]*)" before an exact hostname to "([^"]*)"$`, anIngressRoutesWildcardBeforeExact)
 	ctx.Step(`^the exact hostname eventually serves "([^"]*)"$`, theExactHostnameServes)
-	ctx.Step(`^an unmatched sibling hostname eventually serves "([^"]*)"$`, theProbeHostnameServes)
+	ctx.Step(`^any other hostname under the wildcard eventually serves "([^"]*)"$`, theProbeHostnameServes)
 
 	ctx.Step(`^an ingress exposes "([^"]*)" at a generated hostname$`, anIngressExposesEchoService)
 	ctx.Step(`^the controller eventually creates the CNAME and ownership TXT records$`, theControllerCreatesDNSRecords)
-	ctx.Step(`^DNS management is disabled on the ingress via annotation$`, dnsManagementIsDisabled)
+	ctx.Step(`^DNS management is turned off on the ingress via annotation$`, dnsManagementIsDisabled)
 	ctx.Step(`^the controller eventually deletes the CNAME and ownership TXT records$`, theControllerDeletesDNSRecords)
 }
 
@@ -386,7 +386,7 @@ func theControllerDeletesDNSRecords(ctx context.Context) error {
 	}
 
 	txtName := "_ctic_managed." + w.hostname
-	return waitFor("managed DNS records relinquished", 10*time.Minute, 10*time.Second, func() error {
+	return waitFor("managed DNS records deleted", 10*time.Minute, 10*time.Second, func() error {
 		cnameExists, err := dnsRecordExists(context.Background(), w.cfAPI, w.zoneID, "CNAME", w.hostname)
 		if err != nil {
 			return err
