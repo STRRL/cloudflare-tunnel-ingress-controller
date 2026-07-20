@@ -2,12 +2,12 @@ package controller
 
 import (
 	"context"
-	"os"
 	"slices"
 	"strconv"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -62,10 +62,10 @@ func CreateOrUpdateControlledCloudflared(
 
 		if len(existingDeployment.Spec.Template.Spec.Containers) > 0 {
 			container := &existingDeployment.Spec.Template.Spec.Containers[0]
-			if container.Image != os.Getenv("CLOUDFLARED_IMAGE") {
+			if container.Image != cloudflaredImage() {
 				needsUpdate = true
 			}
-			if string(container.ImagePullPolicy) != os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY") {
+			if string(container.ImagePullPolicy) != cloudflaredImagePullPolicy() {
 				needsUpdate = true
 			}
 
@@ -174,11 +174,11 @@ const tunnelTokenSecretKey = "tunnel-token"
 const tunnelTokenSecretVersionAnnotation = "strrl.dev/cloudflare-tunnel-token-secret-version"
 
 func getDesiredReplicas() (int32, error) {
-	replicaCount := os.Getenv("CLOUDFLARED_REPLICA_COUNT")
-	if replicaCount == "" {
+	raw := viper.GetString("cloudflared-replica-count")
+	if raw == "" {
 		return 1, nil
 	}
-	replicas, err := strconv.ParseInt(replicaCount, 10, 32)
+	replicas, err := strconv.ParseInt(raw, 10, 32)
 	if err != nil {
 		return 0, errors.Wrap(err, "invalid replica count")
 	}

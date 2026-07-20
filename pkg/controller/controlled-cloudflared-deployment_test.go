@@ -3,14 +3,15 @@ package controller
 import (
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 )
 
 func TestControlledCloudflaredDeploymentBuild(t *testing.T) {
-	t.Setenv("CLOUDFLARED_IMAGE", "")
-	t.Setenv("CLOUDFLARED_IMAGE_PULL_POLICY", "")
+	viper.Reset()
+	t.Cleanup(viper.Reset)
 
 	deployment := controlledCloudflaredDeployment{
 		protocol:           "quic",
@@ -49,8 +50,9 @@ func TestControlledCloudflaredDeploymentBuild(t *testing.T) {
 }
 
 func TestControlledCloudflaredDeploymentBuildUsesConfiguredImage(t *testing.T) {
-	t.Setenv("CLOUDFLARED_IMAGE", "cloudflare/cloudflared:2026.7.0")
-	t.Setenv("CLOUDFLARED_IMAGE_PULL_POLICY", "Always")
+	viper.Set("cloudflared-image", "cloudflare/cloudflared:2026.7.0")
+	viper.Set("cloudflared-image-pull-policy", "Always")
+	t.Cleanup(viper.Reset)
 
 	deployment := controlledCloudflaredDeployment{}.build()
 	container := deployment.Spec.Template.Spec.Containers[0]

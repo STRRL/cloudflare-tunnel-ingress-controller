@@ -1,12 +1,25 @@
 package controller
 
 import (
-	"os"
-
+	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func cloudflaredImage() string {
+	if image := viper.GetString("cloudflared-image"); image != "" {
+		return image
+	}
+	return "cloudflare/cloudflared:latest"
+}
+
+func cloudflaredImagePullPolicy() string {
+	if policy := viper.GetString("cloudflared-image-pull-policy"); policy != "" {
+		return policy
+	}
+	return "IfNotPresent"
+}
 
 type controlledCloudflaredDeployment struct {
 	protocol           string
@@ -19,15 +32,8 @@ type controlledCloudflaredDeployment struct {
 func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
 	const appName = "controlled-cloudflared-connector"
 
-	image := os.Getenv("CLOUDFLARED_IMAGE")
-	if image == "" {
-		image = "cloudflare/cloudflared:latest"
-	}
-
-	pullPolicy := os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY")
-	if pullPolicy == "" {
-		pullPolicy = "IfNotPresent"
-	}
+	image := cloudflaredImage()
+	pullPolicy := cloudflaredImagePullPolicy()
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
