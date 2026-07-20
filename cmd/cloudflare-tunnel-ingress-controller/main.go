@@ -39,6 +39,7 @@ type rootCmdFlags struct {
 	cloudflaredImage           string
 	cloudflaredImagePullPolicy string
 	cloudflaredReplicaCount    int32
+	cloudflaredPodAntiAffinity bool
 	clusterDomain              string
 	leaderElect                bool
 	dnsCommentTemplate         string
@@ -82,6 +83,7 @@ func main() {
 			options.cloudflaredImage = viper.GetString("cloudflared-image")
 			options.cloudflaredImagePullPolicy = viper.GetString("cloudflared-image-pull-policy")
 			options.cloudflaredReplicaCount = viper.GetInt32("cloudflared-replica-count")
+			options.cloudflaredPodAntiAffinity = viper.GetBool("cloudflared-pod-anti-affinity")
 			options.clusterDomain = viper.GetString("cluster-domain")
 			options.leaderElect = viper.GetBool("leader-elect")
 			options.dnsCommentTemplate = viper.GetString("dns-comment-template")
@@ -166,6 +168,7 @@ func main() {
 							Replicas:        options.cloudflaredReplicaCount,
 							Protocol:        options.cloudflaredProtocol,
 							ExtraArgs:       options.cloudflaredExtraArgs,
+							PodAntiAffinity: options.cloudflaredPodAntiAffinity,
 						})
 						if err != nil {
 							logger.WithName("controlled-cloudflared").Error(err, "create controlled cloudflared")
@@ -191,6 +194,7 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.cloudflaredImage, "cloudflared-image", options.cloudflaredImage, "container image for the managed cloudflared connector")
 	rootCommand.PersistentFlags().StringVar(&options.cloudflaredImagePullPolicy, "cloudflared-image-pull-policy", options.cloudflaredImagePullPolicy, "image pull policy for the managed cloudflared connector")
 	rootCommand.PersistentFlags().Int32Var(&options.cloudflaredReplicaCount, "cloudflared-replica-count", options.cloudflaredReplicaCount, "replica count for the managed cloudflared connector")
+	rootCommand.PersistentFlags().BoolVar(&options.cloudflaredPodAntiAffinity, "cloudflared-pod-anti-affinity", options.cloudflaredPodAntiAffinity, "spread cloudflared connector pods across nodes with required pod anti-affinity, replicas must not exceed the number of schedulable nodes")
 	rootCommand.PersistentFlags().StringVar(&options.clusterDomain, "cluster-domain", options.clusterDomain, "kubernetes cluster domain, used to build service FQDN (should match kubelet --cluster-domain)")
 	rootCommand.PersistentFlags().BoolVar(&options.leaderElect, "leader-elect", options.leaderElect, "enable leader election for high availability")
 	rootCommand.PersistentFlags().StringVar(&options.dnsCommentTemplate, "dns-comment-template", options.dnsCommentTemplate, "Go template for DNS record comments. Available variables: {{.TunnelName}}, {{.TunnelId}}, {{.Hostname}}. Set to empty string to disable. Note: Cloudflare limits comment length by plan (Free: 100, Pro/Biz/Ent: 500 chars). See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/")

@@ -50,17 +50,17 @@ func TestControlledCloudflaredDeploymentBuild(t *testing.T) {
 }
 
 func TestControlledCloudflaredDeploymentBuildAntiAffinity(t *testing.T) {
-	t.Run("single replica has no anti-affinity", func(t *testing.T) {
-		deployment := controlledCloudflaredDeployment{
-			config: CloudflaredConfig{Replicas: 1},
-		}.build()
-
-		assert.Nil(t, deployment.Spec.Template.Spec.Affinity, "single replica should have no affinity")
-	})
-
-	t.Run("multiple replicas have anti-affinity", func(t *testing.T) {
+	t.Run("disabled by default", func(t *testing.T) {
 		deployment := controlledCloudflaredDeployment{
 			config: CloudflaredConfig{Replicas: 3},
+		}.build()
+
+		assert.Nil(t, deployment.Spec.Template.Spec.Affinity)
+	})
+
+	t.Run("enabled sets required anti-affinity", func(t *testing.T) {
+		deployment := controlledCloudflaredDeployment{
+			config: CloudflaredConfig{Replicas: 3, PodAntiAffinity: true},
 		}.build()
 
 		require.NotNil(t, deployment.Spec.Template.Spec.Affinity)
@@ -74,32 +74,18 @@ func TestControlledCloudflaredDeploymentBuildAntiAffinity(t *testing.T) {
 }
 
 func TestBuildPodAntiAffinity(t *testing.T) {
-	t.Run("nil for single replica", func(t *testing.T) {
-		assert.Nil(t, buildPodAntiAffinity("app", 1))
+	t.Run("nil when disabled", func(t *testing.T) {
+		assert.Nil(t, buildPodAntiAffinity("app", false))
 	})
 
-	t.Run("nil for zero replicas", func(t *testing.T) {
-		assert.Nil(t, buildPodAntiAffinity("app", 0))
-	})
-
-	t.Run("set for multiple replicas", func(t *testing.T) {
-		aff := buildPodAntiAffinity("my-app", 3)
+	t.Run("set when enabled", func(t *testing.T) {
+		aff := buildPodAntiAffinity("my-app", true)
 		require.NotNil(t, aff)
 		terms := aff.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
 		require.Len(t, terms, 1)
 		assert.Equal(t, "kubernetes.io/hostname", terms[0].TopologyKey)
 		assert.Equal(t, map[string]string{"app": "my-app"}, terms[0].LabelSelector.MatchLabels)
 	})
-}
-
-func TestAffinityEqual(t *testing.T) {
-	aff1 := buildPodAntiAffinity("test", 2)
-	aff2 := buildPodAntiAffinity("test", 2)
-
-	assert.True(t, affinityEqual(nil, nil))
-	assert.False(t, affinityEqual(aff1, nil))
-	assert.False(t, affinityEqual(nil, aff1))
-	assert.True(t, affinityEqual(aff1, aff2))
 }
 
 func TestControlledCloudflaredDeploymentBuildUsesConfiguredImage(t *testing.T) {
