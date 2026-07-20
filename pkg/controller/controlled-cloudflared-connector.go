@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -23,6 +24,7 @@ type CloudflaredConfig struct {
 	Replicas        int32
 	Protocol        string
 	ExtraArgs       []string
+	PodAntiAffinity bool
 }
 
 func CreateOrUpdateControlledCloudflared(
@@ -81,8 +83,8 @@ func CreateOrUpdateControlledCloudflared(
 			needsUpdate = true
 		}
 
-		desiredAffinity := buildPodAntiAffinity("controlled-cloudflared-connector", config.Replicas)
-		if !affinityEqual(existingDeployment.Spec.Template.Spec.Affinity, desiredAffinity) {
+		desiredAffinity := buildPodAntiAffinity("controlled-cloudflared-connector", config.PodAntiAffinity)
+		if !equality.Semantic.DeepEqual(existingDeployment.Spec.Template.Spec.Affinity, desiredAffinity) {
 			needsUpdate = true
 		}
 

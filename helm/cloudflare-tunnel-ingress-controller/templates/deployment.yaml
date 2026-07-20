@@ -89,6 +89,8 @@ spec:
               value: {{ .Values.cloudflared.image.pullPolicy | quote }}
             - name: CLOUDFLARED_REPLICA_COUNT
               value: {{ .Values.cloudflared.replicaCount | quote }}
+            - name: CLOUDFLARED_POD_ANTI_AFFINITY
+              value: {{ .Values.cloudflared.podAntiAffinity | default false | quote }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}

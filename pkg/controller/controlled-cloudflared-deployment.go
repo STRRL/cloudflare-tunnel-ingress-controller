@@ -1,8 +1,6 @@
 package controller
 
 import (
-	"reflect"
-
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,7 +44,7 @@ func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
 					},
 				},
 				Spec: v1.PodSpec{
-					Affinity: buildPodAntiAffinity(appName, d.config.Replicas),
+					Affinity: buildPodAntiAffinity(appName, d.config.PodAntiAffinity),
 					Containers: []v1.Container{
 						{
 							Name:            appName,
@@ -75,10 +73,11 @@ func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
 	}
 }
 
-// buildPodAntiAffinity returns a pod anti-affinity that spreads pods across nodes.
-// Returns nil when replicas <= 1 (no point scheduling constraints for a single pod).
-func buildPodAntiAffinity(appName string, replicas int32) *v1.Affinity {
-	if replicas <= 1 {
+// buildPodAntiAffinity returns a pod anti-affinity that spreads pods across
+// nodes, or nil when the feature is disabled. The hard scheduling requirement
+// means replicas must not exceed the number of schedulable nodes.
+func buildPodAntiAffinity(appName string, enabled bool) *v1.Affinity {
+	if !enabled {
 		return nil
 	}
 	return &v1.Affinity{
@@ -95,15 +94,4 @@ func buildPodAntiAffinity(appName string, replicas int32) *v1.Affinity {
 			},
 		},
 	}
-}
-
-// affinityEqual compares two Affinity pointers for equality.
-func affinityEqual(a, b *v1.Affinity) bool {
-	if a == nil && b == nil {
-		return true
-	}
-	if a == nil || b == nil {
-		return false
-	}
-	return reflect.DeepEqual(a, b)
 }

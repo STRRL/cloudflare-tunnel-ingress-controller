@@ -167,6 +167,61 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal("cloudflare/cloudflared:2022.3.0"))
 	})
 
+	It("should toggle pod anti-affinity on an existing deployment", func() {
+		// Prepare
+		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
+		ns, err := namespaceFixtures.Start(ctx)
+		Expect(err).NotTo(HaveOccurred())
+
+		defer func() {
+			err := namespaceFixtures.Stop(ctx)
+			Expect(err).NotTo(HaveOccurred())
+		}()
+
+		mockTunnelClient := &MockTunnelClient{
+			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
+				return "mock-token", nil
+			},
+		}
+
+		// Create initial deployment without anti-affinity
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, baseConfig())
+		Expect(err).NotTo(HaveOccurred())
+
+		deployment := &appsv1.Deployment{}
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-connector",
+		}, deployment)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(deployment.Spec.Template.Spec.Affinity).To(BeNil())
+
+		// Enable anti-affinity
+		enabledConfig := baseConfig()
+		enabledConfig.PodAntiAffinity = true
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, enabledConfig)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-connector",
+		}, deployment)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(deployment.Spec.Template.Spec.Affinity).NotTo(BeNil())
+		Expect(deployment.Spec.Template.Spec.Affinity.PodAntiAffinity).NotTo(BeNil())
+
+		// Disable anti-affinity again
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, baseConfig())
+		Expect(err).NotTo(HaveOccurred())
+
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-connector",
+		}, deployment)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(deployment.Spec.Template.Spec.Affinity).To(BeNil())
+	})
+
 	It("should include extra args in cloudflared command", func() {
 		// Prepare
 		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
