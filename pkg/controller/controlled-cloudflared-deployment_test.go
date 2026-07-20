@@ -3,22 +3,22 @@ package controller
 import (
 	"testing"
 
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 )
 
 func TestControlledCloudflaredDeploymentBuild(t *testing.T) {
-	viper.Reset()
-	t.Cleanup(viper.Reset)
-
 	deployment := controlledCloudflaredDeployment{
-		protocol:           "quic",
+		config: CloudflaredConfig{
+			Image:           "cloudflare/cloudflared:latest",
+			ImagePullPolicy: "IfNotPresent",
+			Replicas:        2,
+			Protocol:        "quic",
+			ExtraArgs:       []string{"--post-quantum"},
+		},
 		tokenSecretVersion: "42",
 		namespace:          "controller-system",
-		replicas:           2,
-		extraArgs:          []string{"--post-quantum"},
 	}.build()
 
 	assert.Equal(t, "controlled-cloudflared-connector", deployment.Name)
@@ -50,11 +50,12 @@ func TestControlledCloudflaredDeploymentBuild(t *testing.T) {
 }
 
 func TestControlledCloudflaredDeploymentBuildUsesConfiguredImage(t *testing.T) {
-	viper.Set("cloudflared-image", "cloudflare/cloudflared:2026.7.0")
-	viper.Set("cloudflared-image-pull-policy", "Always")
-	t.Cleanup(viper.Reset)
-
-	deployment := controlledCloudflaredDeployment{}.build()
+	deployment := controlledCloudflaredDeployment{
+		config: CloudflaredConfig{
+			Image:           "cloudflare/cloudflared:2026.7.0",
+			ImagePullPolicy: "Always",
+		},
+	}.build()
 	container := deployment.Spec.Template.Spec.Containers[0]
 
 	assert.Equal(t, "cloudflare/cloudflared:2026.7.0", container.Image)

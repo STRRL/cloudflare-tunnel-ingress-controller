@@ -97,17 +97,12 @@ The controller reads configuration from CLI flags and environment variables, wit
 | `--namespace` | `NAMESPACE` | `default` |
 | `--cloudflared-protocol` | `CLOUDFLARED_PROTOCOL` | `auto` |
 | `--cloudflared-extra-args` | `CLOUDFLARED_EXTRA_ARGS` | (empty) |
+| `--cloudflared-image` | `CLOUDFLARED_IMAGE` | `cloudflare/cloudflared:latest` |
+| `--cloudflared-image-pull-policy` | `CLOUDFLARED_IMAGE_PULL_POLICY` | `IfNotPresent` |
+| `--cloudflared-replica-count` | `CLOUDFLARED_REPLICA_COUNT` | `1` |
 | `--cluster-domain` | `CLUSTER_DOMAIN` | `cluster.local` |
 | `--leader-elect` | `LEADER_ELECT` | `false` |
 | `--dns-comment-template` | `DNS_COMMENT_TEMPLATE` | `managed by cloudflare-tunnel-ingress-controller, tunnel [{{.TunnelName}}]` |
-
-The managed cloudflared connector deployment is configured with environment variables only:
-
-| Environment variable | Default |
-| --- | --- |
-| `CLOUDFLARED_IMAGE` | `cloudflare/cloudflared:latest` |
-| `CLOUDFLARED_IMAGE_PULL_POLICY` | `IfNotPresent` |
-| `CLOUDFLARED_REPLICA_COUNT` | `1` |
 
 ## Alternative
 

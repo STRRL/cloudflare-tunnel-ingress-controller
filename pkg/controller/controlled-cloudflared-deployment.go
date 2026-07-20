@@ -1,39 +1,19 @@
 package controller
 
 import (
-	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func cloudflaredImage() string {
-	if image := viper.GetString("cloudflared-image"); image != "" {
-		return image
-	}
-	return "cloudflare/cloudflared:latest"
-}
-
-func cloudflaredImagePullPolicy() string {
-	if policy := viper.GetString("cloudflared-image-pull-policy"); policy != "" {
-		return policy
-	}
-	return "IfNotPresent"
-}
-
 type controlledCloudflaredDeployment struct {
-	protocol           string
+	config             CloudflaredConfig
 	tokenSecretVersion string
 	namespace          string
-	replicas           int32
-	extraArgs          []string
 }
 
 func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
 	const appName = "controlled-cloudflared-connector"
-
-	image := cloudflaredImage()
-	pullPolicy := cloudflaredImagePullPolicy()
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -45,7 +25,7 @@ func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &d.replicas,
+			Replicas: &d.config.Replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": appName,
@@ -67,9 +47,9 @@ func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
 					Containers: []v1.Container{
 						{
 							Name:            appName,
-							Image:           image,
-							ImagePullPolicy: v1.PullPolicy(pullPolicy),
-							Command:         buildCloudflaredCommand(d.protocol, d.extraArgs),
+							Image:           d.config.Image,
+							ImagePullPolicy: v1.PullPolicy(d.config.ImagePullPolicy),
+							Command:         buildCloudflaredCommand(d.config.Protocol, d.config.ExtraArgs),
 							Env: []v1.EnvVar{
 								{
 									Name: "TUNNEL_TOKEN",
