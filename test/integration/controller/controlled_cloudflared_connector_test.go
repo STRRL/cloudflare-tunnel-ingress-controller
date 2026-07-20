@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"errors"
-	"os"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/controller"
@@ -37,17 +36,15 @@ func (m *MockTunnelClient) FetchTunnelToken(ctx context.Context) (string, error)
 var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 	const testNamespace = "cloudflared-test"
 
-	BeforeEach(func() {
-		Expect(os.Setenv("CLOUDFLARED_REPLICA_COUNT", "2")).To(Succeed())
-		Expect(os.Setenv("CLOUDFLARED_IMAGE", "cloudflare/cloudflared:latest")).To(Succeed())
-		Expect(os.Setenv("CLOUDFLARED_IMAGE_PULL_POLICY", "IfNotPresent")).To(Succeed())
-	})
-
-	AfterEach(func() {
-		Expect(os.Unsetenv("CLOUDFLARED_REPLICA_COUNT")).To(Succeed())
-		Expect(os.Unsetenv("CLOUDFLARED_IMAGE")).To(Succeed())
-		Expect(os.Unsetenv("CLOUDFLARED_IMAGE_PULL_POLICY")).To(Succeed())
-	})
+	baseConfig := func() controller.CloudflaredConfig {
+		return controller.CloudflaredConfig{
+			Image:           "cloudflare/cloudflared:latest",
+			ImagePullPolicy: "IfNotPresent",
+			Replicas:        2,
+			Protocol:        "quic",
+			ExtraArgs:       []string{},
+		}
+	}
 
 	It("should return an error when fetching the tunnel token fails", func() {
 		mockTunnelClient := &MockTunnelClient{
@@ -56,7 +53,7 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			},
 		}
 
-		err := controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, testNamespace, "quic", nil)
+		err := controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, testNamespace, baseConfig())
 
 		Expect(err).To(MatchError(ContainSubstring("fetch tunnel token")))
 	})
@@ -68,7 +65,7 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			},
 		}
 
-		err := controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, "missing-namespace", "quic", nil)
+		err := controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, "missing-namespace", baseConfig())
 
 		Expect(err).To(MatchError(ContainSubstring("create or update tunnel token secret")))
 	})
@@ -90,10 +87,8 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			},
 		}
 
-		protocol := "quic"
-
 		// Act
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, baseConfig())
 		Expect(err).NotTo(HaveOccurred())
 
 		// Assert deployment
@@ -148,17 +143,16 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			},
 		}
 
-		protocol := "quic"
-
 		// Create initial deployment
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, baseConfig())
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(os.Setenv("CLOUDFLARED_REPLICA_COUNT", "3")).To(Succeed())
-		Expect(os.Setenv("CLOUDFLARED_IMAGE", "cloudflare/cloudflared:2022.3.0")).To(Succeed())
+		updatedConfig := baseConfig()
+		updatedConfig.Replicas = 3
+		updatedConfig.Image = "cloudflare/cloudflared:2022.3.0"
 
 		// Act
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, updatedConfig)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Assert
@@ -190,11 +184,11 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			},
 		}
 
-		protocol := "quic"
-		extraArgs := []string{"--post-quantum", "--edge-ip-version", "4"}
+		config := baseConfig()
+		config.ExtraArgs = []string{"--post-quantum", "--edge-ip-version", "4"}
 
 		// Act
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, extraArgs)
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, config)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Assert
@@ -229,10 +223,8 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			},
 		}
 
-		protocol := "quic"
-
 		// Create initial deployment with first token
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, baseConfig())
 		Expect(err).NotTo(HaveOccurred())
 
 		// Verify initial secret
@@ -257,7 +249,7 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		currentToken = "updated-token"
 
 		// Act
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{})
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, baseConfig())
 		Expect(err).NotTo(HaveOccurred())
 
 		// Assert secret was updated

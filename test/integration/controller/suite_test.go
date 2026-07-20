@@ -5,7 +5,6 @@ import (
 	"github.com/go-logr/stdr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -14,7 +13,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"strings"
 	"testing"
 )
 
@@ -33,10 +31,6 @@ func TestControllers(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	// mirror the viper environment binding configured in main()
-	viper.AutomaticEnv()
-	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
-
 	rootLogger := stdr.NewWithOptions(log.New(os.Stderr, "", log.LstdFlags), stdr.Options{LogCaller: stdr.All})
 
 	logf.SetLogger(rootLogger)

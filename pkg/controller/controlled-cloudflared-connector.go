@@ -3,11 +3,9 @@ package controller
 import (
 	"context"
 	"slices"
-	"strconv"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/pkg/errors"
-	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -17,13 +15,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// CloudflaredConfig carries the fully resolved settings for the managed
+// cloudflared connector deployment, configuration parsing stays in main.
+type CloudflaredConfig struct {
+	Image           string
+	ImagePullPolicy string
+	Replicas        int32
+	Protocol        string
+	ExtraArgs       []string
+}
+
 func CreateOrUpdateControlledCloudflared(
 	ctx context.Context,
 	kubeClient client.Client,
 	tunnelClient cloudflarecontroller.TunnelClientInterface,
 	namespace string,
-	protocol string,
-	extraArgs []string,
+	config CloudflaredConfig,
 ) error {
 	logger := log.FromContext(ctx)
 
@@ -50,26 +57,22 @@ func CreateOrUpdateControlledCloudflared(
 
 	if len(list.Items) > 0 {
 		existingDeployment := &list.Items[0]
-		desiredReplicas, err := getDesiredReplicas()
-		if err != nil {
-			return errors.Wrap(err, "get desired replicas")
-		}
 
 		needsUpdate := false
-		if *existingDeployment.Spec.Replicas != desiredReplicas {
+		if *existingDeployment.Spec.Replicas != config.Replicas {
 			needsUpdate = true
 		}
 
 		if len(existingDeployment.Spec.Template.Spec.Containers) > 0 {
 			container := &existingDeployment.Spec.Template.Spec.Containers[0]
-			if container.Image != cloudflaredImage() {
+			if container.Image != config.Image {
 				needsUpdate = true
 			}
-			if string(container.ImagePullPolicy) != cloudflaredImagePullPolicy() {
+			if string(container.ImagePullPolicy) != config.ImagePullPolicy {
 				needsUpdate = true
 			}
 
-			desiredCommand := buildCloudflaredCommand(protocol, extraArgs)
+			desiredCommand := buildCloudflaredCommand(config.Protocol, config.ExtraArgs)
 			if !slices.Equal(container.Command, desiredCommand) {
 				needsUpdate = true
 			}
@@ -80,11 +83,9 @@ func CreateOrUpdateControlledCloudflared(
 
 		if needsUpdate {
 			updatedDeployment := controlledCloudflaredDeployment{
-				protocol:           protocol,
+				config:             config,
 				tokenSecretVersion: tokenSecretVersion,
 				namespace:          namespace,
-				replicas:           desiredReplicas,
-				extraArgs:          extraArgs,
 			}.build()
 			existingDeployment.Spec = updatedDeployment.Spec
 			err = kubeClient.Update(ctx, existingDeployment)
@@ -97,17 +98,10 @@ func CreateOrUpdateControlledCloudflared(
 		return nil
 	}
 
-	replicas, err := getDesiredReplicas()
-	if err != nil {
-		return errors.Wrap(err, "get desired replicas")
-	}
-
 	deployment := controlledCloudflaredDeployment{
-		protocol:           protocol,
+		config:             config,
 		tokenSecretVersion: tokenSecretVersion,
 		namespace:          namespace,
-		replicas:           replicas,
-		extraArgs:          extraArgs,
 	}.build()
 	err = kubeClient.Create(ctx, deployment)
 	if err != nil {
@@ -172,18 +166,6 @@ func createOrUpdateTunnelTokenSecret(
 const tunnelTokenSecretName = "controlled-cloudflared-token"
 const tunnelTokenSecretKey = "tunnel-token"
 const tunnelTokenSecretVersionAnnotation = "strrl.dev/cloudflare-tunnel-token-secret-version"
-
-func getDesiredReplicas() (int32, error) {
-	raw := viper.GetString("cloudflared-replica-count")
-	if raw == "" {
-		return 1, nil
-	}
-	replicas, err := strconv.ParseInt(raw, 10, 32)
-	if err != nil {
-		return 0, errors.Wrap(err, "invalid replica count")
-	}
-	return int32(replicas), nil
-}
 
 func buildCloudflaredCommand(protocol string, extraArgs []string) []string {
 	command := []string{
