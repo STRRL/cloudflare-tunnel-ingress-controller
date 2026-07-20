@@ -22,3 +22,14 @@ type Exposure struct {
 	// external-dns or a Cloudflare Load Balancer targeting the tunnel directly.
 	DisableDNSManagement bool
 }
+
+// Active returns the exposures that are not marked as deleted, preserving order.
+func Active(exposures []Exposure) []Exposure {
+	var active []Exposure
+	for _, item := range exposures {
+		if !item.IsDeleted {
+			active = append(active, item)
+		}
+	}
+	return active
+}

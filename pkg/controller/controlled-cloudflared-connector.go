@@ -17,6 +17,23 @@ import (
 
 const configHashAnnotation = "strrl.dev/cloudflared-config-hash"
 
+// connectorAppName is the name shared by the managed cloudflared connector
+// Deployment, its pods and the "app" label.
+const connectorAppName = "controlled-cloudflared-connector"
+
+// connectorManagedByLabelKey marks resources owned by this controller; its
+// value is connectorAppName.
+const connectorManagedByLabelKey = "strrl.dev/cloudflare-tunnel-ingress-controller"
+
+// connectorLabels are the immutable labels identifying the managed cloudflared
+// connector resources; they also serve as the Deployment selector.
+func connectorLabels() map[string]string {
+	return map[string]string{
+		"app":                      connectorAppName,
+		connectorManagedByLabelKey: connectorAppName,
+	}
+}
+
 // CloudflaredConfig carries the fully resolved settings for the managed
 // cloudflared connector deployment, configuration parsing stays in main.
 type CloudflaredConfig struct {
@@ -56,7 +73,7 @@ func CreateOrUpdateControlledCloudflared(
 	err = kubeClient.List(ctx, &list, &client.ListOptions{
 		Namespace: namespace,
 		LabelSelector: labels.SelectorFromSet(labels.Set{
-			"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
+			connectorManagedByLabelKey: connectorAppName,
 		}),
 	})
 	if err != nil {
@@ -150,7 +167,7 @@ func createOrUpdateTunnelTokenSecret(
 			Name:      tunnelTokenSecretName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
+				connectorManagedByLabelKey: connectorAppName,
 			},
 		},
 		StringData: map[string]string{
