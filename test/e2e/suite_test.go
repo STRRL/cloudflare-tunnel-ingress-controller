@@ -63,8 +63,12 @@ type imageRef struct {
 }
 
 func TestE2E(t *testing.T) {
+	if err := os.MkdirAll("artifacts", 0o755); err != nil {
+		t.Fatalf("create artifacts directory: %v", err)
+	}
+
 	opts := godog.Options{
-		Format:      "pretty",
+		Format:      "pretty,junit:artifacts/godog-junit.xml",
 		Output:      colors.Colored(os.Stdout),
 		Paths:       []string{"features"},
 		Concurrency: 1,
