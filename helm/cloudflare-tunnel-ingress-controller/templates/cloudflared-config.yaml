@@ -30,6 +30,9 @@ data:
     {{- end }}
     {{- if .Values.cloudflared.affinity }}
     {{- $_ := set $config "affinity" .Values.cloudflared.affinity }}
+    {{- else if .Values.cloudflared.podAntiAffinity }}
+    {{- $antiAffinityTerm := dict "labelSelector" (dict "matchLabels" (dict "app" "controlled-cloudflared-connector")) "topologyKey" "kubernetes.io/hostname" }}
+    {{- $_ := set $config "affinity" (dict "podAntiAffinity" (dict "requiredDuringSchedulingIgnoredDuringExecution" (list $antiAffinityTerm))) }}
     {{- end }}
     {{- if .Values.cloudflared.topologySpreadConstraints }}
     {{- $_ := set $config "topologySpreadConstraints" .Values.cloudflared.topologySpreadConstraints }}

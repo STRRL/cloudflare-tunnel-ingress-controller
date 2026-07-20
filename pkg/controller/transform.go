@@ -12,20 +12,39 @@ import (
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 )
 
-func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient client.Client, ingress networkingv1.Ingress, clusterDomain string) ([]exposure.Exposure, error) {
+const (
+	EventReasonTLSIgnored      = "TLSIgnored"
+	EventReasonRuleSkipped     = "RuleSkipped"
+	EventReasonTransformFailed = "TransformFailed"
+)
+
+func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient client.Client, recorder record.EventRecorder, ingress networkingv1.Ingress, clusterDomain string) ([]exposure.Exposure, error) {
 	isDeleted := ingress.DeletionTimestamp != nil
 
 	if len(ingress.Spec.TLS) > 0 {
 		logger.Info("ingress has tls specified, SSL Passthrough is not supported, it will be ignored.")
+		recorder.Event(&ingress, v1.EventTypeWarning, EventReasonTLSIgnored, "ingress has tls specified, SSL Passthrough is not supported, it will be ignored")
 	}
 
 	var result []exposure.Exposure
 	for _, rule := range ingress.Spec.Rules {
 		if rule.Host == "" {
 			return nil, errors.Errorf("host in ingress %s/%s is empty", ingress.GetNamespace(), ingress.GetName())
+		}
+
+		// rule.HTTP is optional in the Ingress API, a rule may carry only a
+		// host, skip it and keep processing the remaining rules
+		if rule.HTTP == nil {
+			logger.Info("ingress rule has no http section, skipped",
+				"ingress", fmt.Sprintf("%s/%s", ingress.GetNamespace(), ingress.GetName()),
+				"host", rule.Host,
+			)
+			recorder.Eventf(&ingress, v1.EventTypeWarning, EventReasonRuleSkipped, "rule for host %s has no http section, skipped", rule.Host)
+			continue
 		}
 
 		hostname := rule.Host
@@ -47,14 +66,32 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 			originServerName = ptr.To(name)
 		}
 
+		disableDNSManagement := false
+
+		if value, ok := getAnnotation(ingress.Annotations, AnnotationDisableDNSManagement); ok {
+			switch value {
+			case AnnotationDisableDNSManagementTrue:
+				disableDNSManagement = true
+			case AnnotationDisableDNSManagementFalse:
+				disableDNSManagement = false
+			default:
+				return nil, errors.Errorf(
+					"invalid value for annotation %s, available values: \"%s\" or \"%s\"",
+					AnnotationDisableDNSManagement,
+					AnnotationDisableDNSManagementTrue,
+					AnnotationDisableDNSManagementFalse,
+				)
+			}
+		}
+
 		var proxySSLVerifyEnabled *bool
 
 		if proxySSLVerify, ok := getAnnotation(ingress.Annotations, AnnotationProxySSLVerify); ok {
 			switch proxySSLVerify {
 			case AnnotationProxySSLVerifyOn:
-				proxySSLVerifyEnabled = boolPointer(true)
+				proxySSLVerifyEnabled = ptr.To(true)
 			case AnnotationProxySSLVerifyOff:
-				proxySSLVerifyEnabled = boolPointer(false)
+				proxySSLVerifyEnabled = ptr.To(false)
 			default:
 				return nil, errors.Errorf(
 					"invalid value for annotation %s, available values: \"%s\" or \"%s\"",
@@ -113,6 +150,7 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 				ProxySSLVerifyEnabled: proxySSLVerifyEnabled,
 				HTTPHostHeader:        httpHostHeader,
 				OriginServerName:      originServerName,
+				DisableDNSManagement:  disableDNSManagement,
 			})
 		}
 	}
@@ -148,8 +186,4 @@ func getPortWithName(ports []v1.ServicePort, portName string) (bool, int32) {
 func getAnnotation(annotations map[string]string, key string) (string, bool) {
 	value, ok := annotations[key]
 	return value, ok
-}
-
-func boolPointer(b bool) *bool {
-	return &b
 }

@@ -1,10 +1,16 @@
 package controller
 
 import (
+	"context"
+	"strings"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestGetHostFromService(t *testing.T) {
@@ -127,5 +133,108 @@ func TestGetHostFromService(t *testing.T) {
 				t.Errorf("getHostFromService() returns unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestFromIngressToExposureNilHTTP(t *testing.T) {
+	// rule.HTTP is optional in the Ingress API, a rule may carry only a
+	// host. Previously this dereferenced the nil pointer and panicked;
+	// such rules must be skipped without failing the whole ingress.
+	ingress := networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "host-only",
+		},
+		Spec: networkingv1.IngressSpec{
+			Rules: []networkingv1.IngressRule{
+				{
+					Host: "example.com",
+					IngressRuleValue: networkingv1.IngressRuleValue{
+						HTTP: nil,
+					},
+				},
+			},
+		},
+	}
+
+	recorder := record.NewFakeRecorder(8)
+	exposures, err := FromIngressToExposure(context.Background(), logr.Discard(), nil, recorder, ingress, "cluster.local")
+	if err != nil {
+		t.Fatalf("expected a rule with nil HTTP to be skipped, got error: %v", err)
+	}
+	if len(exposures) != 0 {
+		t.Fatalf("expected no exposures for a rule with nil HTTP, got %d", len(exposures))
+	}
+
+	select {
+	case event := <-recorder.Events:
+		if !strings.Contains(event, EventReasonRuleSkipped) {
+			t.Fatalf("expected a %s event, got %q", EventReasonRuleSkipped, event)
+		}
+	default:
+		t.Fatalf("expected a %s event to be recorded", EventReasonRuleSkipped)
+	}
+}
+
+func TestFromIngressToExposureNilHTTPKeepsOtherRules(t *testing.T) {
+	// A host-only rule must not drop the valid rules of the same ingress.
+	pathType := networkingv1.PathTypePrefix
+	ingress := networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "mixed-rules",
+		},
+		Spec: networkingv1.IngressSpec{
+			Rules: []networkingv1.IngressRule{
+				{
+					Host: "app.example.com",
+					IngressRuleValue: networkingv1.IngressRuleValue{
+						HTTP: &networkingv1.HTTPIngressRuleValue{
+							Paths: []networkingv1.HTTPIngressPath{
+								{
+									Path:     "/",
+									PathType: &pathType,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: "my-app",
+											Port: networkingv1.ServiceBackendPort{Number: 80},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Host: "placeholder.example.com",
+					IngressRuleValue: networkingv1.IngressRuleValue{
+						HTTP: nil,
+					},
+				},
+			},
+		},
+	}
+
+	service := v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "my-app",
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: "10.0.0.1",
+			Ports:     []v1.ServicePort{{Port: 80}},
+		},
+	}
+	kubeClient := fake.NewClientBuilder().WithObjects(&service).Build()
+
+	exposures, err := FromIngressToExposure(context.Background(), logr.Discard(), kubeClient, record.NewFakeRecorder(8), ingress, "cluster.local")
+	if err != nil {
+		t.Fatalf("expected the host-only rule to be skipped, got error: %v", err)
+	}
+	if len(exposures) != 1 {
+		t.Fatalf("expected exactly the valid rule to be exposed, got %d exposures", len(exposures))
+	}
+	if exposures[0].Hostname != "app.example.com" {
+		t.Fatalf("expected exposure for app.example.com, got %s", exposures[0].Hostname)
 	}
 }

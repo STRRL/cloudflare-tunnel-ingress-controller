@@ -7,6 +7,7 @@ import (
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/pkg/errors"
+	"k8s.io/utils/ptr"
 )
 
 func fromExposureToCloudflareIngress(ctx context.Context, exposure exposure.Exposure) (*cloudflare.UnvalidatedIngressRule, error) {
@@ -16,8 +17,13 @@ func fromExposureToCloudflareIngress(ctx context.Context, exposure exposure.Expo
 
 	result := cloudflare.UnvalidatedIngressRule{
 		Hostname: exposure.Hostname,
-		Path:     exposure.PathPrefix,
 		Service:  exposure.ServiceTarget,
+	}
+
+	// path based routing only applies to http(s), non http protocols
+	// like ssh, rdp or tcp must not carry a path in the tunnel rule
+	if strings.HasPrefix(exposure.ServiceTarget, "http://") || strings.HasPrefix(exposure.ServiceTarget, "https://") {
+		result.Path = exposure.PathPrefix
 	}
 
 	if exposure.HTTPHostHeader != nil {
@@ -33,9 +39,9 @@ func fromExposureToCloudflareIngress(ctx context.Context, exposure exposure.Expo
 		}
 		result.OriginRequest.OriginServerName = exposure.OriginServerName
 		if exposure.ProxySSLVerifyEnabled == nil {
-			result.OriginRequest.NoTLSVerify = boolPointer(true)
+			result.OriginRequest.NoTLSVerify = ptr.To(true)
 		} else {
-			result.OriginRequest.NoTLSVerify = boolPointer(!*exposure.ProxySSLVerifyEnabled)
+			result.OriginRequest.NoTLSVerify = ptr.To(!*exposure.ProxySSLVerifyEnabled)
 		}
 	}
 

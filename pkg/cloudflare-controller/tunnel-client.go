@@ -1,9 +1,12 @@
 package cloudflarecontroller
 
 import (
+	"bytes"
 	"context"
+	"reflect"
 	"slices"
 	"strings"
+	"text/template"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
@@ -20,15 +23,69 @@ type TunnelClientInterface interface {
 var _ TunnelClientInterface = &TunnelClient{}
 
 type TunnelClient struct {
-	logger     logr.Logger
-	cfClient   *cloudflare.API
-	accountId  string
-	tunnelId   string
-	tunnelName string
+	logger             logr.Logger
+	cfClient           *cloudflare.API
+	accountId          string
+	tunnelId           string
+	tunnelName         string
+	dnsCommentTemplate *template.Template // nil if disabled (empty template string)
 }
 
-func NewTunnelClient(logger logr.Logger, cfClient *cloudflare.API, accountId string, tunnelId string, tunnelName string) *TunnelClient {
-	return &TunnelClient{logger: logger, cfClient: cfClient, accountId: accountId, tunnelId: tunnelId, tunnelName: tunnelName}
+// DNSCommentTemplateData contains the variables available in the DNS comment template.
+// See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/
+// for comment length limits per Cloudflare plan (Free: 100, Pro/Business/Enterprise: 500 chars).
+type DNSCommentTemplateData struct {
+	TunnelName string // Name of the Cloudflare Tunnel
+	TunnelId   string // ID of the Cloudflare Tunnel
+	Hostname   string // DNS record hostname (e.g. "app.example.com")
+}
+
+func NewTunnelClient(logger logr.Logger, cfClient *cloudflare.API, accountId string, tunnelId string, tunnelName string, dnsCommentTemplate string) *TunnelClient {
+	tc := &TunnelClient{
+		logger:     logger,
+		cfClient:   cfClient,
+		accountId:  accountId,
+		tunnelId:   tunnelId,
+		tunnelName: tunnelName,
+	}
+	if dnsCommentTemplate != "" {
+		tmpl, err := template.New("dns-comment").Parse(dnsCommentTemplate)
+		if err != nil {
+			logger.Error(err, "failed to parse dns-comment-template, DNS comments will be disabled", "template", dnsCommentTemplate)
+		} else {
+			tc.dnsCommentTemplate = tmpl
+		}
+	}
+	return tc
+}
+
+// renderDNSComment renders the DNS comment for a given hostname using the configured template.
+// Returns empty string if the template is disabled or rendering fails.
+func (t *TunnelClient) renderDNSComment(hostname string) string {
+	if t.dnsCommentTemplate == nil {
+		return ""
+	}
+	data := DNSCommentTemplateData{
+		TunnelName: t.tunnelName,
+		TunnelId:   t.tunnelId,
+		Hostname:   hostname,
+	}
+	var buf bytes.Buffer
+	if err := t.dnsCommentTemplate.Execute(&buf, data); err != nil {
+		t.logger.Error(err, "failed to render dns comment template", "hostname", hostname)
+		return ""
+	}
+	comment := buf.String()
+
+	// Warn about comment length.
+	// Cloudflare enforces per-plan limits: Free=100, Pro/Business/Enterprise=500 chars.
+	// See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/
+	if len(comment) > 100 {
+		t.logger.Info("rendered DNS comment exceeds 100 characters (Cloudflare Free plan limit, Pro/Business/Enterprise allow 500)",
+			"hostname", hostname, "commentLength", len(comment),
+		)
+	}
+	return comment
 }
 
 func (t *TunnelClient) PutExposures(ctx context.Context, exposures []exposure.Exposure) error {
@@ -66,14 +123,10 @@ func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures [
 		ingressRules = append(ingressRules, *ingress)
 	}
 
-	// sort the rules by hostnames first for prettiness, then by path length in descending order
+	// sort the rules: non-wildcard hostnames before wildcard hostnames (wildcards are fallbacks),
+	// then alphabetically by hostname, then by path length in descending order
 	// to ensure "precedence will be given first to the longest matching path".
-	slices.SortFunc(ingressRules, func(a, b cloudflare.UnvalidatedIngressRule) int {
-		if v := strings.Compare(strings.ToLower(a.Hostname), strings.ToLower(b.Hostname)); v != 0 {
-			return v
-		}
-		return len(b.Path) - len(a.Path)
-	})
+	slices.SortFunc(ingressRules, sortIngressRules)
 
 	// at last, append a default 404 service as default route
 	ingressRules = append(ingressRules, cloudflare.UnvalidatedIngressRule{
@@ -82,7 +135,17 @@ func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures [
 
 	t.logger.V(3).Info("update cloudflare tunnel config", "ingress-rules", ingressRules)
 
-	_, err := t.cfClient.UpdateTunnelConfiguration(ctx,
+	current, err := t.cfClient.GetTunnelConfiguration(ctx, cloudflare.ResourceIdentifier(t.accountId), t.tunnelId)
+	if err != nil {
+		return errors.Wrap(err, "get cloudflare tunnel config")
+	}
+
+	if reflect.DeepEqual(current.Config.Ingress, ingressRules) {
+		t.logger.Info("cloudflare tunnel config unchanged, skipping update")
+		return nil
+	}
+
+	_, err = t.cfClient.UpdateTunnelConfiguration(ctx,
 		cloudflare.ResourceIdentifier(t.accountId),
 		cloudflare.TunnelConfigurationParams{
 			TunnelID: t.tunnelId,
@@ -116,6 +179,12 @@ func (t *TunnelClient) updateDNSCNAMERecord(ctx context.Context, exposures []exp
 		ok, zone := zoneBelongedByExposure(item, zoneNames)
 		if ok {
 			exposuresByZone[zone] = append(exposuresByZone[zone], item)
+		} else if item.DisableDNSManagement {
+			// DNS management is delegated externally for this exposure; its hostname
+			// may live in a zone not managed by this Cloudflare account, so don't
+			// require a zone match and skip it from DNS reconciliation.
+			t.logger.V(3).Info("DNS management disabled for exposure, skipping DNS reconciliation", "hostname", item.Hostname)
+			continue
 		} else {
 			return errors.Errorf("hostname %s not belong to any zone", item.Hostname)
 		}
@@ -165,13 +234,22 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 
 	for _, item := range toCreate {
 		t.logger.Info("create DNS record", "type", item.Type, "hostname", item.Hostname, "content", item.Content)
-		_, err := t.cfClient.CreateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.CreateDNSRecordParams{
+		params := cloudflare.CreateDNSRecordParams{
 			Type:    item.Type,
 			Name:    item.Hostname,
 			Content: item.Content,
 			Proxied: cloudflare.BoolPtr(item.Type == "CNAME"),
 			TTL:     1,
-		})
+		}
+		// Add comment to CNAME records if template is configured.
+		// Comments are informational only; ownership is tracked via TXT records.
+		// See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/
+		if item.Type == "CNAME" {
+			if comment := t.renderDNSComment(item.Hostname); comment != "" {
+				params.Comment = comment
+			}
+		}
+		_, err := t.cfClient.CreateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), params)
 		if err != nil {
 			return errors.Wrapf(err, "create DNS record for zone %s, hostname %s", zone.Name, item.Hostname)
 		}
@@ -179,14 +257,21 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 
 	for _, item := range toUpdate {
 		t.logger.Info("update DNS record", "id", item.OldRecord.ID, "type", item.Type, "hostname", item.OldRecord.Name, "content", item.Content)
-		_, err := t.cfClient.UpdateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.UpdateDNSRecordParams{
+		params := cloudflare.UpdateDNSRecordParams{
 			ID:      item.OldRecord.ID,
 			Type:    item.Type,
 			Name:    item.OldRecord.Name,
 			Content: item.Content,
 			Proxied: cloudflare.BoolPtr(item.Type == "CNAME"),
 			TTL:     1,
-		})
+		}
+		// Add comment to CNAME records if template is configured.
+		if item.Type == "CNAME" {
+			if comment := t.renderDNSComment(item.OldRecord.Name); comment != "" {
+				params.Comment = &comment
+			}
+		}
+		_, err := t.cfClient.UpdateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), params)
 		if err != nil {
 			return errors.Wrapf(err, "update DNS record for zone %s, hostname %s", zone.Name, item.OldRecord.Name)
 		}
@@ -230,4 +315,35 @@ func findZoneByName(zoneName string, zones []cloudflare.Zone) (bool, cloudflare.
 
 func (t *TunnelClient) FetchTunnelToken(ctx context.Context) (string, error) {
 	return t.cfClient.GetTunnelToken(ctx, cloudflare.ResourceIdentifier(t.accountId), t.tunnelId)
+}
+
+// sortIngressRules defines the sort order for Cloudflare tunnel ingress rules:
+// non-wildcard hostnames before wildcard hostnames (wildcards act as fallbacks),
+// then alphabetically by hostname, then by path length in descending order.
+func sortIngressRules(a, b cloudflare.UnvalidatedIngressRule) int {
+	aIsWildcard := strings.HasPrefix(a.Hostname, "*.")
+	bIsWildcard := strings.HasPrefix(b.Hostname, "*.")
+	if aIsWildcard != bIsWildcard {
+		if aIsWildcard {
+			return 1
+		}
+		return -1
+	}
+	// a broader wildcard suffix-matches everything a more specific one
+	// covers, so wildcards with more labels must come first:
+	// *.internal.example.com before *.example.com
+	if aIsWildcard {
+		if v := strings.Count(b.Hostname, ".") - strings.Count(a.Hostname, "."); v != 0 {
+			return v
+		}
+	}
+	if v := strings.Compare(strings.ToLower(a.Hostname), strings.ToLower(b.Hostname)); v != 0 {
+		return v
+	}
+	if v := len(b.Path) - len(a.Path); v != 0 {
+		return v
+	}
+	// lexical fallback keeps the comparator a total order, the rule list
+	// must be deterministic or reconciles would push spurious updates
+	return strings.Compare(a.Path, b.Path)
 }

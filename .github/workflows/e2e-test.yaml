@@ -13,24 +13,37 @@ on:
 
 permissions: read-all
 
+# All e2e runs share one Cloudflare tunnel and zone. Two controllers running
+# at once treat each other's records as orphans and delete them in a loop,
+# so runs must be strictly serialized.
+concurrency:
+  group: e2e-shared-cloudflare-tunnel
+  cancel-in-progress: false
+
 jobs:
   e2e-test:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: './go.mod'
 
+      - name: Install cloudflared
+        run: |
+          curl -fsSL -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          sudo install /tmp/cloudflared /usr/local/bin/cloudflared
+          cloudflared --version
+
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
         with:
           version: 'latest'
 
       - name: Start minikube
-        uses: medyagh/setup-minikube@latest
+        uses: medyagh/setup-minikube@v0
         with:
           driver: docker
           container-runtime: docker
@@ -58,11 +71,11 @@ jobs:
 
       - name: Run e2e tests
         run: |
-          make e2e
+          bash ./test/e2e/e2e.sh
 
       - name: Upload coverage reports to Codecov
         if: always()
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: ./test/e2e/artifacts/e2e-cover.out
           flags: e2e
@@ -70,7 +83,7 @@ jobs:
 
       - name: Upload test artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-artifacts-${{ github.run_number }}-${{ github.run_attempt }}
           path: test/e2e/artifacts/

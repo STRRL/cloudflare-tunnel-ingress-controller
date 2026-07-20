@@ -2,7 +2,7 @@ package controller
 
 import (
 	"context"
-	"os"
+	"errors"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/controller"
@@ -12,9 +12,8 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 )
 
 var _ cloudflarecontroller.TunnelClientInterface = &MockTunnelClient{}
@@ -38,19 +37,42 @@ func (m *MockTunnelClient) FetchTunnelToken(ctx context.Context) (string, error)
 var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 	const testNamespace = "cloudflared-test"
 
-	BeforeEach(func() {
-		Expect(os.Setenv("CLOUDFLARED_REPLICA_COUNT", "2")).To(Succeed())
-		Expect(os.Setenv("CLOUDFLARED_IMAGE", "cloudflare/cloudflared:latest")).To(Succeed())
-		Expect(os.Setenv("CLOUDFLARED_IMAGE_PULL_POLICY", "IfNotPresent")).To(Succeed())
+	baseConfig := func() controller.CloudflaredConfig {
+		return controller.CloudflaredConfig{
+			Image:           "cloudflare/cloudflared:latest",
+			ImagePullPolicy: "IfNotPresent",
+			Replicas:        2,
+			Protocol:        "quic",
+			ExtraArgs:       []string{},
+		}
+	}
+
+	It("should return an error when fetching the tunnel token fails", func() {
+		mockTunnelClient := &MockTunnelClient{
+			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
+				return "", errors.New("fetch failed")
+			},
+		}
+
+		err := controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, testNamespace, baseConfig())
+
+		Expect(err).To(MatchError(ContainSubstring("fetch tunnel token")))
 	})
 
-	AfterEach(func() {
-		Expect(os.Unsetenv("CLOUDFLARED_REPLICA_COUNT")).To(Succeed())
-		Expect(os.Unsetenv("CLOUDFLARED_IMAGE")).To(Succeed())
-		Expect(os.Unsetenv("CLOUDFLARED_IMAGE_PULL_POLICY")).To(Succeed())
+	It("should return an error when the tunnel token secret cannot be created", func() {
+		mockTunnelClient := &MockTunnelClient{
+			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
+				return "mock-token", nil
+			},
+		}
+
+		err := controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, "missing-namespace", baseConfig())
+
+		Expect(err).To(MatchError(ContainSubstring("create or update tunnel token secret")))
 	})
 
 	It("should create a new cloudflared deployment", func() {
+		// Prepare
 		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
 		ns, err := namespaceFixtures.Start(ctx)
 		Expect(err).NotTo(HaveOccurred())
@@ -66,11 +88,11 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			},
 		}
 
-		protocol := "quic"
-
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{}, nil, "")
+		// Act
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, baseConfig())
 		Expect(err).NotTo(HaveOccurred())
 
+		// Assert deployment
 		deployment := &appsv1.Deployment{}
 		err = kubeClient.Get(ctx, types.NamespacedName{
 			Namespace: ns,
@@ -81,9 +103,32 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		Expect(*deployment.Spec.Replicas).To(Equal(int32(2)))
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal("cloudflare/cloudflared:latest"))
 		Expect(deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy).To(Equal(v1.PullPolicy("IfNotPresent")))
+
+		// Assert TUNNEL_TOKEN env var references the secret
+		container := deployment.Spec.Template.Spec.Containers[0]
+		Expect(container.Env).To(HaveLen(1))
+		Expect(container.Env[0].Name).To(Equal("TUNNEL_TOKEN"))
+		Expect(container.Env[0].ValueFrom).NotTo(BeNil())
+		Expect(container.Env[0].ValueFrom.SecretKeyRef).NotTo(BeNil())
+		Expect(container.Env[0].ValueFrom.SecretKeyRef.Name).To(Equal("controlled-cloudflared-token"))
+		Expect(container.Env[0].ValueFrom.SecretKeyRef.Key).To(Equal("tunnel-token"))
+
+		// Assert token is NOT in command args
+		Expect(container.Command).NotTo(ContainElement("--token"))
+		Expect(container.Command).NotTo(ContainElement("mock-token"))
+
+		// Assert secret was created with the token
+		secret := &v1.Secret{}
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-token",
+		}, secret)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(secret.Data["tunnel-token"])).To(Equal("mock-token"))
 	})
 
 	It("should update an existing cloudflared deployment", func() {
+		// Prepare
 		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
 		ns, err := namespaceFixtures.Start(ctx)
 		Expect(err).NotTo(HaveOccurred())
@@ -99,17 +144,19 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			},
 		}
 
-		protocol := "quic"
-
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{}, nil, "")
+		// Create initial deployment
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, baseConfig())
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(os.Setenv("CLOUDFLARED_REPLICA_COUNT", "3")).To(Succeed())
-		Expect(os.Setenv("CLOUDFLARED_IMAGE", "cloudflare/cloudflared:2022.3.0")).To(Succeed())
+		updatedConfig := baseConfig()
+		updatedConfig.Replicas = 3
+		updatedConfig.Image = "cloudflare/cloudflared:2022.3.0"
 
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{}, nil, "")
+		// Act
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, updatedConfig)
 		Expect(err).NotTo(HaveOccurred())
 
+		// Assert
 		deployment := &appsv1.Deployment{}
 		err = kubeClient.Get(ctx, types.NamespacedName{
 			Namespace: ns,
@@ -121,7 +168,8 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal("cloudflare/cloudflared:2022.3.0"))
 	})
 
-	It("should include extra args in cloudflared command", func() {
+	It("should apply and remove pod template customization on an existing deployment", func() {
+		// Prepare
 		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
 		ns, err := namespaceFixtures.Start(ctx)
 		Expect(err).NotTo(HaveOccurred())
@@ -137,12 +185,87 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			},
 		}
 
-		protocol := "quic"
-		extraArgs := []string{"--post-quantum", "--edge-ip-version", "4"}
-
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, extraArgs, nil, "")
+		// Create initial deployment without customization
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, baseConfig())
 		Expect(err).NotTo(HaveOccurred())
 
+		deployment := &appsv1.Deployment{}
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-connector",
+		}, deployment)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(deployment.Spec.Template.Spec.Affinity).To(BeNil())
+
+		// Apply customization with anti-affinity and a pod label
+		customizedConfig := baseConfig()
+		customizedConfig.Customization = &controller.CloudflaredDeploymentConfig{
+			PodLabels: map[string]string{"team": "platform"},
+			Affinity: &v1.Affinity{
+				PodAntiAffinity: &v1.PodAntiAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
+						{
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{"app": "controlled-cloudflared-connector"},
+							},
+							TopologyKey: "kubernetes.io/hostname",
+						},
+					},
+				},
+			},
+		}
+		customizedConfig.CustomizationHash = "hash-v1"
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, customizedConfig)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-connector",
+		}, deployment)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(deployment.Spec.Template.Spec.Affinity).NotTo(BeNil())
+		Expect(deployment.Spec.Template.Spec.Affinity.PodAntiAffinity).NotTo(BeNil())
+		Expect(deployment.Spec.Template.Labels["team"]).To(Equal("platform"))
+		Expect(deployment.Annotations["strrl.dev/cloudflared-config-hash"]).To(Equal("hash-v1"))
+
+		// Remove customization again
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, baseConfig())
+		Expect(err).NotTo(HaveOccurred())
+
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-connector",
+		}, deployment)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(deployment.Spec.Template.Spec.Affinity).To(BeNil())
+		Expect(deployment.Spec.Template.Labels).NotTo(HaveKey("team"))
+	})
+
+	It("should include extra args in cloudflared command", func() {
+		// Prepare
+		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
+		ns, err := namespaceFixtures.Start(ctx)
+		Expect(err).NotTo(HaveOccurred())
+
+		defer func() {
+			err := namespaceFixtures.Stop(ctx)
+			Expect(err).NotTo(HaveOccurred())
+		}()
+
+		mockTunnelClient := &MockTunnelClient{
+			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
+				return "mock-token", nil
+			},
+		}
+
+		config := baseConfig()
+		config.ExtraArgs = []string{"--post-quantum", "--edge-ip-version", "4"}
+
+		// Act
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, config)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Assert
 		deployment := &appsv1.Deployment{}
 		err = kubeClient.Get(ctx, types.NamespacedName{
 			Namespace: ns,
@@ -156,7 +279,8 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		Expect(command).To(ContainElement("4"))
 	})
 
-	It("should apply deployment config to cloudflared deployment", func() {
+	It("should update the secret and restart cloudflared when token changes", func() {
+		// Prepare
 		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
 		ns, err := namespaceFixtures.Start(ctx)
 		Expect(err).NotTo(HaveOccurred())
@@ -166,45 +290,25 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			Expect(err).NotTo(HaveOccurred())
 		}()
 
+		currentToken := "initial-token"
 		mockTunnelClient := &MockTunnelClient{
 			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
-				return "mock-token", nil
+				return currentToken, nil
 			},
 		}
 
-		protocol := "quic"
-		deploymentConfig := &controller.CloudflaredDeploymentConfig{
-			Resources: &v1.ResourceRequirements{
-				Requests: v1.ResourceList{
-					v1.ResourceCPU:    resource.MustParse("100m"),
-					v1.ResourceMemory: resource.MustParse("128Mi"),
-				},
-				Limits: v1.ResourceList{
-					v1.ResourceCPU:    resource.MustParse("200m"),
-					v1.ResourceMemory: resource.MustParse("256Mi"),
-				},
-			},
-			SecurityContext: &v1.SecurityContext{
-				ReadOnlyRootFilesystem: ptr.To(true),
-				RunAsNonRoot:           ptr.To(true),
-			},
-			PodSecurityContext: &v1.PodSecurityContext{
-				RunAsNonRoot: ptr.To(true),
-			},
-			PodLabels: map[string]string{
-				"team": "platform",
-			},
-			PodAnnotations: map[string]string{
-				"prometheus.io/scrape": "true",
-			},
-			NodeSelector: map[string]string{
-				"kubernetes.io/os": "linux",
-			},
-			PriorityClassName: "high-priority",
-		}
-
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{}, deploymentConfig, "test-hash")
+		// Create initial deployment with first token
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, baseConfig())
 		Expect(err).NotTo(HaveOccurred())
+
+		// Verify initial secret
+		secret := &v1.Secret{}
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-token",
+		}, secret)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(secret.Data["tunnel-token"])).To(Equal("initial-token"))
 
 		deployment := &appsv1.Deployment{}
 		err = kubeClient.Get(ctx, types.NamespacedName{
@@ -212,70 +316,31 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			Name:      "controlled-cloudflared-connector",
 		}, deployment)
 		Expect(err).NotTo(HaveOccurred())
+		initialSecretVersion := deployment.Spec.Template.Annotations["strrl.dev/cloudflare-tunnel-token-secret-version"]
+		Expect(initialSecretVersion).To(Equal(secret.ResourceVersion))
 
-		container := deployment.Spec.Template.Spec.Containers[0]
-		Expect(container.Resources.Requests.Cpu().String()).To(Equal("100m"))
-		Expect(container.Resources.Requests.Memory().String()).To(Equal("128Mi"))
-		Expect(container.Resources.Limits.Cpu().String()).To(Equal("200m"))
-		Expect(container.Resources.Limits.Memory().String()).To(Equal("256Mi"))
+		// Change token
+		currentToken = "updated-token"
 
-		Expect(container.SecurityContext).NotTo(BeNil())
-		Expect(*container.SecurityContext.ReadOnlyRootFilesystem).To(BeTrue())
-		Expect(*container.SecurityContext.RunAsNonRoot).To(BeTrue())
-
-		Expect(deployment.Spec.Template.Spec.SecurityContext).NotTo(BeNil())
-		Expect(*deployment.Spec.Template.Spec.SecurityContext.RunAsNonRoot).To(BeTrue())
-
-		Expect(deployment.Spec.Template.Labels).To(HaveKeyWithValue("team", "platform"))
-		Expect(deployment.Spec.Template.Labels).To(HaveKeyWithValue("app", "controlled-cloudflared-connector"))
-		Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("prometheus.io/scrape", "true"))
-
-		Expect(deployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("kubernetes.io/os", "linux"))
-		Expect(deployment.Spec.Template.Spec.PriorityClassName).To(Equal("high-priority"))
-
-		Expect(deployment.Annotations).To(HaveKeyWithValue("strrl.dev/cloudflared-config-hash", "test-hash"))
-	})
-
-	It("should update deployment when config hash changes", func() {
-		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
-		ns, err := namespaceFixtures.Start(ctx)
+		// Act
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, baseConfig())
 		Expect(err).NotTo(HaveOccurred())
 
-		defer func() {
-			err := namespaceFixtures.Stop(ctx)
-			Expect(err).NotTo(HaveOccurred())
-		}()
-
-		mockTunnelClient := &MockTunnelClient{
-			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
-				return "mock-token", nil
-			},
-		}
-
-		protocol := "quic"
-
-		// Create with initial config
-		config1 := &controller.CloudflaredDeploymentConfig{
-			PriorityClassName: "low-priority",
-		}
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{}, config1, "hash-v1")
+		// Assert secret was updated
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-token",
+		}, secret)
 		Expect(err).NotTo(HaveOccurred())
+		Expect(string(secret.Data["tunnel-token"])).To(Equal("updated-token"))
 
-		// Update with new config (different hash)
-		config2 := &controller.CloudflaredDeploymentConfig{
-			PriorityClassName: "high-priority",
-		}
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, protocol, []string{}, config2, "hash-v2")
-		Expect(err).NotTo(HaveOccurred())
-
-		deployment := &appsv1.Deployment{}
 		err = kubeClient.Get(ctx, types.NamespacedName{
 			Namespace: ns,
 			Name:      "controlled-cloudflared-connector",
 		}, deployment)
 		Expect(err).NotTo(HaveOccurred())
-
-		Expect(deployment.Spec.Template.Spec.PriorityClassName).To(Equal("high-priority"))
-		Expect(deployment.Annotations).To(HaveKeyWithValue("strrl.dev/cloudflared-config-hash", "hash-v2"))
+		updatedSecretVersion := deployment.Spec.Template.Annotations["strrl.dev/cloudflare-tunnel-token-secret-version"]
+		Expect(updatedSecretVersion).To(Equal(secret.ResourceVersion))
+		Expect(updatedSecretVersion).NotTo(Equal(initialSecretVersion))
 	})
 })

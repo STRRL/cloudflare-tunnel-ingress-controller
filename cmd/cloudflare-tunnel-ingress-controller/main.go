@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
@@ -13,6 +14,10 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -23,16 +28,22 @@ type rootCmdFlags struct {
 	// for annotation on Ingress
 	ingressClass string
 	// for IngressClass.spec.controller
-	controllerClass             string
-	logLevel                    int
-	cloudflareAPIToken          string
-	cloudflareAccountId         string
-	cloudflareTunnelName        string
-	namespace                   string
-	cloudflaredProtocol         string
-	cloudflaredExtraArgs        []string
-	clusterDomain               string
+	controllerClass            string
+	logLevel                   int
+	cloudflareAPIToken         string
+	cloudflareAccountId        string
+	cloudflareTunnelName       string
+	namespace                  string
+	cloudflaredProtocol        string
+	cloudflaredExtraArgs       []string
+	cloudflaredImage           string
+	cloudflaredImagePullPolicy string
+	cloudflaredReplicaCount    int32
+	// path to the JSON file with cloudflared pod template customization
 	cloudflaredDeploymentConfig string
+	clusterDomain               string
+	leaderElect                 bool
+	dnsCommentTemplate          string
 }
 
 func main() {
@@ -41,13 +52,17 @@ func main() {
 	var rootLogger = stdr.NewWithOptions(log.New(os.Stderr, "", log.LstdFlags), stdr.Options{LogCaller: stdr.All})
 
 	options := rootCmdFlags{
-		logger:              rootLogger.WithName("main"),
-		ingressClass:        "cloudflare-tunnel",
-		controllerClass:     "strrl.dev/cloudflare-tunnel-ingress-controller",
-		logLevel:            0,
-		namespace:           "default",
-		cloudflaredProtocol: "auto",
-		clusterDomain:       "cluster.local",
+		logger:                     rootLogger.WithName("main"),
+		ingressClass:               "cloudflare-tunnel",
+		controllerClass:            "strrl.dev/cloudflare-tunnel-ingress-controller",
+		logLevel:                   0,
+		namespace:                  "default",
+		cloudflaredProtocol:        "auto",
+		cloudflaredImage:           "cloudflare/cloudflared:latest",
+		cloudflaredImagePullPolicy: "IfNotPresent",
+		cloudflaredReplicaCount:    1,
+		clusterDomain:              "cluster.local",
+		dnsCommentTemplate:         "managed by cloudflare-tunnel-ingress-controller, tunnel [{{.TunnelName}}]",
 	}
 
 	crlog.SetLogger(rootLogger.WithName("controller-runtime"))
@@ -56,11 +71,29 @@ func main() {
 		Use: "tunnel-controller",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
+
+			options.cloudflareAPIToken = viper.GetString("cloudflare-api-token")
+			options.cloudflareAccountId = viper.GetString("cloudflare-account-id")
+			options.cloudflareTunnelName = viper.GetString("cloudflare-tunnel-name")
+			options.ingressClass = viper.GetString("ingress-class")
+			options.controllerClass = viper.GetString("controller-class")
+			options.logLevel = viper.GetInt("log-level")
+			options.namespace = viper.GetString("namespace")
+			options.cloudflaredProtocol = viper.GetString("cloudflared-protocol")
+			options.cloudflaredExtraArgs = viper.GetStringSlice("cloudflared-extra-args")
+			options.cloudflaredImage = viper.GetString("cloudflared-image")
+			options.cloudflaredImagePullPolicy = viper.GetString("cloudflared-image-pull-policy")
+			options.cloudflaredReplicaCount = viper.GetInt32("cloudflared-replica-count")
+			options.cloudflaredDeploymentConfig = viper.GetString("cloudflared-deployment-config")
+			options.clusterDomain = viper.GetString("cluster-domain")
+			options.leaderElect = viper.GetBool("leader-elect")
+			options.dnsCommentTemplate = viper.GetString("dns-comment-template")
+
 			stdr.SetVerbosity(options.logLevel)
 			logger := options.logger
 			logger.Info("logging verbosity", "level", options.logLevel)
 
-			logger.V(3).Info("build cloudflare client with API Token", "api-token", options.cloudflareAPIToken)
+			logger.V(3).Info("build cloudflare client with API Token", "api-token", "<redacted>")
 			cloudflareClient, err := cloudflare.NewWithAPIToken(options.cloudflareAPIToken)
 			if err != nil {
 				logger.Error(err, "create cloudflare client")
@@ -70,7 +103,7 @@ func main() {
 			var tunnelClient *cloudflarecontroller.TunnelClient
 
 			logger.V(3).Info("bootstrap tunnel client with tunnel name", "account-id", options.cloudflareAccountId, "tunnel-name", options.cloudflareTunnelName)
-			tunnelClient, err = cloudflarecontroller.BootstrapTunnelClientWithTunnelName(ctx, logger.WithName("tunnel-client"), cloudflareClient, options.cloudflareAccountId, options.cloudflareTunnelName)
+			tunnelClient, err = cloudflarecontroller.BootstrapTunnelClientWithTunnelName(ctx, logger.WithName("tunnel-client"), cloudflareClient, options.cloudflareAccountId, options.cloudflareTunnelName, options.dnsCommentTemplate)
 			if err != nil {
 				logger.Error(err, "bootstrap tunnel client with tunnel name")
 				os.Exit(1)
@@ -82,7 +115,20 @@ func main() {
 				os.Exit(1)
 			}
 
-			mgr, err := manager.New(cfg, manager.Options{})
+			mgr, err := manager.New(cfg, manager.Options{
+				Cache: cache.Options{
+					ByObject: map[client.Object]cache.ByObject{
+						&corev1.Secret{}: {
+							Namespaces: map[string]cache.Config{
+								options.namespace: {},
+							},
+						},
+					},
+				},
+				LeaderElection:          options.leaderElect,
+				LeaderElectionID:        "cloudflare-tunnel-ingress-controller.strrl.dev",
+				LeaderElectionNamespace: options.namespace,
+			})
 			if err != nil {
 				logger.Error(err, "unable to set up manager")
 				os.Exit(1)
@@ -106,17 +152,32 @@ func main() {
 				os.Exit(1)
 			}
 
-			ticker := time.NewTicker(10 * time.Second)
 			done := make(chan struct{})
 			defer close(done)
 
 			go func() {
+				select {
+				case <-done:
+					return
+				case <-mgr.Elected():
+				}
+
+				ticker := time.NewTicker(10 * time.Second)
+				defer ticker.Stop()
 				for {
 					select {
 					case <-done:
 						return
 					case <-ticker.C:
-						err := controller.CreateOrUpdateControlledCloudflared(ctx, mgr.GetClient(), tunnelClient, options.namespace, options.cloudflaredProtocol, options.cloudflaredExtraArgs, deploymentConfig, configHash)
+						err := controller.CreateOrUpdateControlledCloudflared(ctx, mgr.GetClient(), tunnelClient, options.namespace, controller.CloudflaredConfig{
+							Image:             options.cloudflaredImage,
+							ImagePullPolicy:   options.cloudflaredImagePullPolicy,
+							Replicas:          options.cloudflaredReplicaCount,
+							Protocol:          options.cloudflaredProtocol,
+							ExtraArgs:         options.cloudflaredExtraArgs,
+							Customization:     deploymentConfig,
+							CustomizationHash: configHash,
+						})
 						if err != nil {
 							logger.WithName("controlled-cloudflared").Error(err, "create controlled cloudflared")
 						}
@@ -138,8 +199,19 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.namespace, "namespace", options.namespace, "namespace to execute cloudflared connector")
 	rootCommand.PersistentFlags().StringVar(&options.cloudflaredProtocol, "cloudflared-protocol", options.cloudflaredProtocol, "cloudflared protocol")
 	rootCommand.PersistentFlags().StringSliceVar(&options.cloudflaredExtraArgs, "cloudflared-extra-args", options.cloudflaredExtraArgs, "extra arguments to pass to cloudflared")
+	rootCommand.PersistentFlags().StringVar(&options.cloudflaredImage, "cloudflared-image", options.cloudflaredImage, "container image for the managed cloudflared connector")
+	rootCommand.PersistentFlags().StringVar(&options.cloudflaredImagePullPolicy, "cloudflared-image-pull-policy", options.cloudflaredImagePullPolicy, "image pull policy for the managed cloudflared connector")
+	rootCommand.PersistentFlags().Int32Var(&options.cloudflaredReplicaCount, "cloudflared-replica-count", options.cloudflaredReplicaCount, "replica count for the managed cloudflared connector")
+	rootCommand.PersistentFlags().StringVar(&options.cloudflaredDeploymentConfig, "cloudflared-deployment-config", options.cloudflaredDeploymentConfig, "path to JSON file with cloudflared deployment pod template customization")
 	rootCommand.PersistentFlags().StringVar(&options.clusterDomain, "cluster-domain", options.clusterDomain, "kubernetes cluster domain, used to build service FQDN (should match kubelet --cluster-domain)")
-	rootCommand.PersistentFlags().StringVar(&options.cloudflaredDeploymentConfig, "cloudflared-deployment-config", options.cloudflaredDeploymentConfig, "path to JSON file with cloudflared deployment pod template configuration")
+	rootCommand.PersistentFlags().BoolVar(&options.leaderElect, "leader-elect", options.leaderElect, "enable leader election for high availability")
+	rootCommand.PersistentFlags().StringVar(&options.dnsCommentTemplate, "dns-comment-template", options.dnsCommentTemplate, "Go template for DNS record comments. Available variables: {{.TunnelName}}, {{.TunnelId}}, {{.Hostname}}. Set to empty string to disable. Note: Cloudflare limits comment length by plan (Free: 100, Pro/Biz/Ent: 500 chars). See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/")
+
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+	if err := viper.BindPFlags(rootCommand.PersistentFlags()); err != nil {
+		log.Fatalf("failed to bind flags to viper: %v", err)
+	}
 
 	err := rootCommand.Execute()
 	if err != nil {
