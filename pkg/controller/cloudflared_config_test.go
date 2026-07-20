@@ -143,3 +143,16 @@ func TestLoadCloudflaredDeploymentConfig_SameContentSameHash(t *testing.T) {
 
 	assert.Equal(t, hash1, hash2)
 }
+
+func TestLoadCloudflaredDeploymentConfig_UnknownField(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	err := os.WriteFile(configPath, []byte(`{"toleration": []}`), 0644)
+	require.NoError(t, err)
+
+	config, hash, err := LoadCloudflaredDeploymentConfig(configPath)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown field")
+	assert.Nil(t, config)
+	assert.Empty(t, hash)
+}

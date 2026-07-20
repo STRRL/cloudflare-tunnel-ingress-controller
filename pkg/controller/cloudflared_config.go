@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -46,8 +47,13 @@ func LoadCloudflaredDeploymentConfig(path string) (*CloudflaredDeploymentConfig,
 		return nil, "", fmt.Errorf("read cloudflared deployment config: %w", err)
 	}
 
+	// Unknown fields fail loudly, a typo in the customization must not turn
+	// into a silently ignored setting.
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+
 	var config CloudflaredDeploymentConfig
-	if err := json.Unmarshal(data, &config); err != nil {
+	if err := decoder.Decode(&config); err != nil {
 		return nil, "", fmt.Errorf("parse cloudflared deployment config: %w", err)
 	}
 
