@@ -8,13 +8,14 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+const configHashAnnotation = "strrl.dev/cloudflared-config-hash"
 
 // CloudflaredConfig carries the fully resolved settings for the managed
 // cloudflared connector deployment, configuration parsing stays in main.
@@ -24,7 +25,12 @@ type CloudflaredConfig struct {
 	Replicas        int32
 	Protocol        string
 	ExtraArgs       []string
-	PodAntiAffinity bool
+	// Customization holds the pod template customization loaded from the
+	// deployment config file, nil means no customization.
+	Customization *CloudflaredDeploymentConfig
+	// CustomizationHash identifies the customization content, drift is
+	// detected through the config hash annotation on the deployment.
+	CustomizationHash string
 }
 
 func CreateOrUpdateControlledCloudflared(
@@ -83,8 +89,7 @@ func CreateOrUpdateControlledCloudflared(
 			needsUpdate = true
 		}
 
-		desiredAffinity := buildPodAntiAffinity("controlled-cloudflared-connector", config.PodAntiAffinity)
-		if !equality.Semantic.DeepEqual(existingDeployment.Spec.Template.Spec.Affinity, desiredAffinity) {
+		if existingDeployment.Annotations[configHashAnnotation] != config.CustomizationHash {
 			needsUpdate = true
 		}
 
@@ -95,6 +100,14 @@ func CreateOrUpdateControlledCloudflared(
 				namespace:          namespace,
 			}.build()
 			existingDeployment.Spec = updatedDeployment.Spec
+			if existingDeployment.Annotations == nil {
+				existingDeployment.Annotations = map[string]string{}
+			}
+			if config.CustomizationHash != "" {
+				existingDeployment.Annotations[configHashAnnotation] = config.CustomizationHash
+			} else {
+				delete(existingDeployment.Annotations, configHashAnnotation)
+			}
 			err = kubeClient.Update(ctx, existingDeployment)
 			if err != nil {
 				return errors.Wrap(err, "update controlled-cloudflared-connector deployment")

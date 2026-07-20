@@ -103,13 +103,40 @@ cloudflared:
     tag: latest
   replicaCount: 1
   protocol: auto
-  # Spread cloudflared pods across nodes with required pod anti-affinity.
+  # Convenience switch that renders a required pod anti-affinity on
+  # kubernetes.io/hostname into the customization below, spreading cloudflared
+  # pods across nodes. Ignored when cloudflared.affinity is set explicitly.
   # When enabled, replicaCount must not exceed the number of schedulable nodes,
   # otherwise the extra pods stay pending.
   podAntiAffinity: false
   # Extra arguments to pass to cloudflared command
   # Example: ["--post-quantum", "--edge-ip-version", "4"]
   extraArgs: []
+
+  # Pod template customization for the controlled-cloudflared-connector Deployment.
+  # These fields are applied to the cloudflared pods managed by the controller.
+  resources: {}
+  securityContext: {}
+  podSecurityContext: {}
+  podLabels: {}
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  # priorityClassName: ""
+  probes:
+    liveness: {}
+    readiness: {}
+    startup: {}
+  volumes: []
+  volumeMounts: []
+
+  # PodDisruptionBudget for the controlled-cloudflared-connector Deployment.
+  pdb:
+    enabled: false
+    # minAvailable: 1
+    # maxUnavailable: 1
 
 cloudflaredServiceMonitor:
   create: false

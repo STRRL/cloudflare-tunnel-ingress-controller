@@ -100,7 +100,7 @@ The controller reads configuration from CLI flags and environment variables, wit
 | `--cloudflared-image` | `CLOUDFLARED_IMAGE` | `cloudflare/cloudflared:latest` |
 | `--cloudflared-image-pull-policy` | `CLOUDFLARED_IMAGE_PULL_POLICY` | `IfNotPresent` |
 | `--cloudflared-replica-count` | `CLOUDFLARED_REPLICA_COUNT` | `1` |
-| `--cloudflared-pod-anti-affinity` | `CLOUDFLARED_POD_ANTI_AFFINITY` | `false` |
+| `--cloudflared-deployment-config` | `CLOUDFLARED_DEPLOYMENT_CONFIG` | (empty) |
 | `--cluster-domain` | `CLUSTER_DOMAIN` | `cluster.local` |
 | `--leader-elect` | `LEADER_ELECT` | `false` |
 | `--dns-comment-template` | `DNS_COMMENT_TEMPLATE` | `managed by cloudflare-tunnel-ingress-controller, tunnel [{{.TunnelName}}]` |

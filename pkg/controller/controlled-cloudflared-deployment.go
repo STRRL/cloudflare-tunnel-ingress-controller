@@ -15,6 +15,93 @@ type controlledCloudflaredDeployment struct {
 func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
 	const appName = "controlled-cloudflared-connector"
 
+	customization := d.config.Customization
+	if customization == nil {
+		customization = &CloudflaredDeploymentConfig{}
+	}
+
+	// User labels and annotations go first, the controller owned keys are set
+	// afterwards so a customization can never override them.
+	podLabels := map[string]string{}
+	for k, v := range customization.PodLabels {
+		podLabels[k] = v
+	}
+	podLabels["app"] = appName
+	podLabels["strrl.dev/cloudflare-tunnel-ingress-controller"] = "controlled-cloudflared-connector"
+
+	podAnnotations := map[string]string{}
+	for k, v := range customization.PodAnnotations {
+		podAnnotations[k] = v
+	}
+	podAnnotations[tunnelTokenSecretVersionAnnotation] = d.tokenSecretVersion
+
+	deploymentAnnotations := map[string]string{}
+	if d.config.CustomizationHash != "" {
+		deploymentAnnotations[configHashAnnotation] = d.config.CustomizationHash
+	}
+
+	container := v1.Container{
+		Name:            appName,
+		Image:           d.config.Image,
+		ImagePullPolicy: v1.PullPolicy(d.config.ImagePullPolicy),
+		Command:         buildCloudflaredCommand(d.config.Protocol, d.config.ExtraArgs),
+		Env: []v1.EnvVar{
+			{
+				Name: "TUNNEL_TOKEN",
+				ValueFrom: &v1.EnvVarSource{
+					SecretKeyRef: &v1.SecretKeySelector{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: tunnelTokenSecretName,
+						},
+						Key: tunnelTokenSecretKey,
+					},
+				},
+			},
+		},
+	}
+
+	if customization.Resources != nil {
+		container.Resources = *customization.Resources
+	}
+	if customization.SecurityContext != nil {
+		container.SecurityContext = customization.SecurityContext
+	}
+	if len(customization.VolumeMounts) > 0 {
+		container.VolumeMounts = customization.VolumeMounts
+	}
+	if customization.Probes != nil {
+		container.LivenessProbe = customization.Probes.Liveness
+		container.ReadinessProbe = customization.Probes.Readiness
+		container.StartupProbe = customization.Probes.Startup
+	}
+
+	podSpec := v1.PodSpec{
+		Containers:    []v1.Container{container},
+		RestartPolicy: v1.RestartPolicyAlways,
+	}
+
+	if customization.PodSecurityContext != nil {
+		podSpec.SecurityContext = customization.PodSecurityContext
+	}
+	if len(customization.NodeSelector) > 0 {
+		podSpec.NodeSelector = customization.NodeSelector
+	}
+	if len(customization.Tolerations) > 0 {
+		podSpec.Tolerations = customization.Tolerations
+	}
+	if customization.Affinity != nil {
+		podSpec.Affinity = customization.Affinity
+	}
+	if len(customization.TopologySpreadConstraints) > 0 {
+		podSpec.TopologySpreadConstraints = customization.TopologySpreadConstraints
+	}
+	if customization.PriorityClassName != "" {
+		podSpec.PriorityClassName = customization.PriorityClassName
+	}
+	if len(customization.Volumes) > 0 {
+		podSpec.Volumes = customization.Volumes
+	}
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      appName,
@@ -23,6 +110,7 @@ func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
 				"app": appName,
 				"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
 			},
+			Annotations: deploymentAnnotations,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &d.config.Replicas,
@@ -34,63 +122,11 @@ func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: appName,
-					Annotations: map[string]string{
-						tunnelTokenSecretVersionAnnotation: d.tokenSecretVersion,
-					},
-					Labels: map[string]string{
-						"app": appName,
-						"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
-					},
+					Name:        appName,
+					Annotations: podAnnotations,
+					Labels:      podLabels,
 				},
-				Spec: v1.PodSpec{
-					Affinity: buildPodAntiAffinity(appName, d.config.PodAntiAffinity),
-					Containers: []v1.Container{
-						{
-							Name:            appName,
-							Image:           d.config.Image,
-							ImagePullPolicy: v1.PullPolicy(d.config.ImagePullPolicy),
-							Command:         buildCloudflaredCommand(d.config.Protocol, d.config.ExtraArgs),
-							Env: []v1.EnvVar{
-								{
-									Name: "TUNNEL_TOKEN",
-									ValueFrom: &v1.EnvVarSource{
-										SecretKeyRef: &v1.SecretKeySelector{
-											LocalObjectReference: v1.LocalObjectReference{
-												Name: tunnelTokenSecretName,
-											},
-											Key: tunnelTokenSecretKey,
-										},
-									},
-								},
-							},
-						},
-					},
-					RestartPolicy: v1.RestartPolicyAlways,
-				},
-			},
-		},
-	}
-}
-
-// buildPodAntiAffinity returns a pod anti-affinity that spreads pods across
-// nodes, or nil when the feature is disabled. The hard scheduling requirement
-// means replicas must not exceed the number of schedulable nodes.
-func buildPodAntiAffinity(appName string, enabled bool) *v1.Affinity {
-	if !enabled {
-		return nil
-	}
-	return &v1.Affinity{
-		PodAntiAffinity: &v1.PodAntiAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
-				{
-					LabelSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							"app": appName,
-						},
-					},
-					TopologyKey: "kubernetes.io/hostname",
-				},
+				Spec: podSpec,
 			},
 		},
 	}

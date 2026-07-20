@@ -12,6 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -167,7 +168,7 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal("cloudflare/cloudflared:2022.3.0"))
 	})
 
-	It("should toggle pod anti-affinity on an existing deployment", func() {
+	It("should apply and remove pod template customization on an existing deployment", func() {
 		// Prepare
 		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
 		ns, err := namespaceFixtures.Start(ctx)
@@ -184,7 +185,7 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			},
 		}
 
-		// Create initial deployment without anti-affinity
+		// Create initial deployment without customization
 		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, baseConfig())
 		Expect(err).NotTo(HaveOccurred())
 
@@ -196,10 +197,25 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(deployment.Spec.Template.Spec.Affinity).To(BeNil())
 
-		// Enable anti-affinity
-		enabledConfig := baseConfig()
-		enabledConfig.PodAntiAffinity = true
-		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, enabledConfig)
+		// Apply customization with anti-affinity and a pod label
+		customizedConfig := baseConfig()
+		customizedConfig.Customization = &controller.CloudflaredDeploymentConfig{
+			PodLabels: map[string]string{"team": "platform"},
+			Affinity: &v1.Affinity{
+				PodAntiAffinity: &v1.PodAntiAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
+						{
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{"app": "controlled-cloudflared-connector"},
+							},
+							TopologyKey: "kubernetes.io/hostname",
+						},
+					},
+				},
+			},
+		}
+		customizedConfig.CustomizationHash = "hash-v1"
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, customizedConfig)
 		Expect(err).NotTo(HaveOccurred())
 
 		err = kubeClient.Get(ctx, types.NamespacedName{
@@ -209,8 +225,10 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(deployment.Spec.Template.Spec.Affinity).NotTo(BeNil())
 		Expect(deployment.Spec.Template.Spec.Affinity.PodAntiAffinity).NotTo(BeNil())
+		Expect(deployment.Spec.Template.Labels["team"]).To(Equal("platform"))
+		Expect(deployment.Annotations["strrl.dev/cloudflared-config-hash"]).To(Equal("hash-v1"))
 
-		// Disable anti-affinity again
+		// Remove customization again
 		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, baseConfig())
 		Expect(err).NotTo(HaveOccurred())
 
@@ -220,6 +238,7 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 		}, deployment)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(deployment.Spec.Template.Spec.Affinity).To(BeNil())
+		Expect(deployment.Spec.Template.Labels).NotTo(HaveKey("team"))
 	})
 
 	It("should include extra args in cloudflared command", func() {

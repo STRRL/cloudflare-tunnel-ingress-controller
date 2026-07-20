@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestControlledCloudflaredDeploymentBuild(t *testing.T) {
@@ -49,42 +51,89 @@ func TestControlledCloudflaredDeploymentBuild(t *testing.T) {
 	assert.Equal(t, tunnelTokenSecretKey, container.Env[0].ValueFrom.SecretKeyRef.Key)
 }
 
-func TestControlledCloudflaredDeploymentBuildAntiAffinity(t *testing.T) {
-	t.Run("disabled by default", func(t *testing.T) {
+func TestControlledCloudflaredDeploymentBuildCustomization(t *testing.T) {
+	t.Run("no customization keeps a plain pod spec", func(t *testing.T) {
 		deployment := controlledCloudflaredDeployment{
 			config: CloudflaredConfig{Replicas: 3},
 		}.build()
 
-		assert.Nil(t, deployment.Spec.Template.Spec.Affinity)
+		podSpec := deployment.Spec.Template.Spec
+		assert.Nil(t, podSpec.Affinity)
+		assert.Nil(t, podSpec.SecurityContext)
+		assert.Empty(t, podSpec.NodeSelector)
+		assert.Empty(t, deployment.Annotations)
 	})
 
-	t.Run("enabled sets required anti-affinity", func(t *testing.T) {
+	t.Run("customization is applied to the pod template", func(t *testing.T) {
+		customization := &CloudflaredDeploymentConfig{
+			Resources: &v1.ResourceRequirements{
+				Requests: v1.ResourceList{
+					v1.ResourceCPU: resource.MustParse("100m"),
+				},
+			},
+			PodLabels:      map[string]string{"team": "platform"},
+			PodAnnotations: map[string]string{"prometheus.io/scrape": "true"},
+			NodeSelector:   map[string]string{"kubernetes.io/os": "linux"},
+			Affinity: &v1.Affinity{
+				PodAntiAffinity: &v1.PodAntiAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
+						{
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{"app": "controlled-cloudflared-connector"},
+							},
+							TopologyKey: "kubernetes.io/hostname",
+						},
+					},
+				},
+			},
+			PriorityClassName: "high-priority",
+		}
+
 		deployment := controlledCloudflaredDeployment{
-			config: CloudflaredConfig{Replicas: 3, PodAntiAffinity: true},
+			config: CloudflaredConfig{
+				Replicas:          2,
+				Customization:     customization,
+				CustomizationHash: "abc123",
+			},
+			tokenSecretVersion: "42",
 		}.build()
 
-		require.NotNil(t, deployment.Spec.Template.Spec.Affinity)
-		require.NotNil(t, deployment.Spec.Template.Spec.Affinity.PodAntiAffinity)
+		podSpec := deployment.Spec.Template.Spec
+		assert.Equal(t, "100m", podSpec.Containers[0].Resources.Requests.Cpu().String())
+		assert.Equal(t, map[string]string{"kubernetes.io/os": "linux"}, podSpec.NodeSelector)
+		require.NotNil(t, podSpec.Affinity)
+		require.NotNil(t, podSpec.Affinity.PodAntiAffinity)
+		assert.Equal(t, "high-priority", podSpec.PriorityClassName)
+		assert.Equal(t, "abc123", deployment.Annotations[configHashAnnotation])
 
-		terms := deployment.Spec.Template.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
-		require.Len(t, terms, 1)
-		assert.Equal(t, "kubernetes.io/hostname", terms[0].TopologyKey)
-		assert.Equal(t, map[string]string{"app": "controlled-cloudflared-connector"}, terms[0].LabelSelector.MatchLabels)
+		labels := deployment.Spec.Template.Labels
+		assert.Equal(t, "platform", labels["team"])
+		annotations := deployment.Spec.Template.Annotations
+		assert.Equal(t, "true", annotations["prometheus.io/scrape"])
+		assert.Equal(t, "42", annotations[tunnelTokenSecretVersionAnnotation])
 	})
-}
 
-func TestBuildPodAntiAffinity(t *testing.T) {
-	t.Run("nil when disabled", func(t *testing.T) {
-		assert.Nil(t, buildPodAntiAffinity("app", false))
-	})
+	t.Run("customization cannot override selector labels or token annotation", func(t *testing.T) {
+		deployment := controlledCloudflaredDeployment{
+			config: CloudflaredConfig{
+				Replicas: 1,
+				Customization: &CloudflaredDeploymentConfig{
+					PodLabels: map[string]string{
+						"app": "hijacked",
+						"strrl.dev/cloudflare-tunnel-ingress-controller": "hijacked",
+					},
+					PodAnnotations: map[string]string{
+						tunnelTokenSecretVersionAnnotation: "hijacked",
+					},
+				},
+			},
+			tokenSecretVersion: "42",
+		}.build()
 
-	t.Run("set when enabled", func(t *testing.T) {
-		aff := buildPodAntiAffinity("my-app", true)
-		require.NotNil(t, aff)
-		terms := aff.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
-		require.Len(t, terms, 1)
-		assert.Equal(t, "kubernetes.io/hostname", terms[0].TopologyKey)
-		assert.Equal(t, map[string]string{"app": "my-app"}, terms[0].LabelSelector.MatchLabels)
+		labels := deployment.Spec.Template.Labels
+		assert.Equal(t, "controlled-cloudflared-connector", labels["app"])
+		assert.Equal(t, "controlled-cloudflared-connector", labels["strrl.dev/cloudflare-tunnel-ingress-controller"])
+		assert.Equal(t, "42", deployment.Spec.Template.Annotations[tunnelTokenSecretVersionAnnotation])
 	})
 }
 
