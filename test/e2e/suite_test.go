@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -13,9 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cucumber/godog"
+	"github.com/cucumber/godog/colors"
 	"github.com/joho/godotenv"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -23,16 +24,15 @@ import (
 )
 
 var (
-	kubeconfigPath      string
-	minikubeProfile     string
-	kubeClient          *kubernetes.Clientset
-	suiteCtx            context.Context
-	repoRoot            string
-	controllerImage     string
-	controllerImageRef  imageRef
-	dashboardBaseDomain string
-	dashboardHostname   string
-	tcpHostname         string
+	kubeconfigPath     string
+	minikubeProfile    string
+	kubeClient         *kubernetes.Clientset
+	suiteCtx           context.Context
+	repoRoot           string
+	controllerImage    string
+	controllerImageRef imageRef
+	baseDomain         string
+	logOut             io.Writer = os.Stdout
 )
 
 var requiredEnvVars = []string{
@@ -40,19 +40,21 @@ var requiredEnvVars = []string{
 	"CLOUDFLARE_ACCOUNT_ID",
 	"CLOUDFLARE_TUNNEL_NAME",
 	controllerImageEnvKey,
-	dashboardBaseDomainEnvKey,
+	baseDomainEnvKey,
 	e2eKubeconfigEnvKey,
 	e2eMinikubeProfileEnvKey,
 }
 
 const (
-	dotenvPath                = ".env.e2e"
-	tokenVerifyURL            = "https://api.cloudflare.com/client/v4/user/tokens/verify"
-	controllerImageEnvKey     = "E2E_CONTROLLER_IMAGE"
-	dashboardBaseDomainEnvKey = "E2E_BASE_DOMAIN"
-	e2eKubeconfigEnvKey       = "E2E_KUBECONFIG"
-	e2eMinikubeProfileEnvKey  = "E2E_MINIKUBE_PROFILE"
-	e2eClusterDomain          = "e2e.cluster.internal"
+	dotenvPath               = ".env.e2e"
+	tokenVerifyURL           = "https://api.cloudflare.com/client/v4/user/tokens/verify"
+	controllerImageEnvKey    = "E2E_CONTROLLER_IMAGE"
+	baseDomainEnvKey         = "E2E_BASE_DOMAIN"
+	e2eKubeconfigEnvKey      = "E2E_KUBECONFIG"
+	e2eMinikubeProfileEnvKey = "E2E_MINIKUBE_PROFILE"
+	e2eClusterDomain         = "e2e.cluster.internal"
+	controllerNamespace      = "cloudflare-tunnel-ingress-controller"
+	controllerReleaseName    = "cf-ic-e2e"
 )
 
 type imageRef struct {
@@ -61,68 +63,164 @@ type imageRef struct {
 }
 
 func TestE2E(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Cloudflare Tunnel Ingress Controller E2E Suite")
+	opts := godog.Options{
+		Format:      "pretty",
+		Output:      colors.Colored(os.Stdout),
+		Paths:       []string{"features"},
+		Concurrency: 1,
+		Strict:      true,
+		TestingT:    t,
+	}
+
+	status := godog.TestSuite{
+		Name:                 "cloudflare-tunnel-ingress-controller",
+		TestSuiteInitializer: InitializeTestSuite,
+		ScenarioInitializer:  InitializeScenario,
+		Options:              &opts,
+	}.Run()
+
+	if status != 0 {
+		t.Fatalf("godog suite exited with status %d", status)
+	}
 }
 
-var _ = BeforeSuite(func() {
+// InitializeTestSuite boots the shared infrastructure once for all scenarios:
+// minikube, the controller image, the Helm release. Scenarios only manage
+// their own workloads and ingresses on top of it.
+func InitializeTestSuite(ctx *godog.TestSuiteContext) {
+	ctx.BeforeSuite(func() {
+		if err := bootstrapSuite(); err != nil {
+			panic(fmt.Sprintf("bootstrap e2e suite: %v", err))
+		}
+	})
+
+	ctx.AfterSuite(func() {
+		if err := collectControllerCoverage(controllerNamespace, controllerReleaseName); err != nil {
+			_, _ = fmt.Fprintf(logOut, "warning: failed to collect coverage: %v\n", err)
+		}
+	})
+}
+
+func bootstrapSuite() error {
 	suiteCtx = context.Background()
 
-	Expect(loadDotenv(dotenvPath)).To(Succeed())
+	if err := loadDotenv(dotenvPath); err != nil {
+		return err
+	}
 
-	missing := missingEnvVars(requiredEnvVars)
-	Expect(missing).To(BeEmpty(), fmt.Sprintf("missing required environment variables: %s", strings.Join(missing, ", ")))
+	if missing := missingEnvVars(requiredEnvVars); len(missing) > 0 {
+		return fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
+	}
 
 	controllerImage = os.Getenv(controllerImageEnvKey)
 	var err error
 	controllerImageRef, err = parseImageRef(controllerImage)
-	Expect(err).NotTo(HaveOccurred(), "parse controller image reference")
-	dashboardBaseDomain = os.Getenv(dashboardBaseDomainEnvKey)
-	dashboardHostname, err = buildTestHostname("cf-dashboard", dashboardBaseDomain)
-	Expect(err).NotTo(HaveOccurred(), "build dashboard hostname")
-	_, _ = fmt.Fprintf(GinkgoWriter, "using dashboard hostname %s\n", dashboardHostname)
-	tcpHostname, err = buildTestHostname("cf-tcp", dashboardBaseDomain)
-	Expect(err).NotTo(HaveOccurred(), "build tcp hostname")
-	_, _ = fmt.Fprintf(GinkgoWriter, "using tcp hostname %s\n", tcpHostname)
+	if err != nil {
+		return fmt.Errorf("parse controller image reference: %w", err)
+	}
+	baseDomain = os.Getenv(baseDomainEnvKey)
 
-	verifyCtx, cancel := context.WithTimeout(suiteCtx, 30*time.Second)
-	defer cancel()
-	Expect(verifyCloudflareToken(verifyCtx, os.Getenv("CLOUDFLARE_API_TOKEN"))).To(Succeed())
+	verifyCtx, cancelVerify := context.WithTimeout(suiteCtx, 30*time.Second)
+	defer cancelVerify()
+	if err := verifyCloudflareToken(verifyCtx, os.Getenv("CLOUDFLARE_API_TOKEN")); err != nil {
+		return err
+	}
 
-	_, err = exec.LookPath("minikube")
-	Expect(err).NotTo(HaveOccurred(), "minikube binary must be installed and on PATH")
-
-	_, err = exec.LookPath("helm")
-	Expect(err).NotTo(HaveOccurred(), "helm binary must be installed and on PATH")
-
-	_, err = exec.LookPath("cloudflared")
-	Expect(err).NotTo(HaveOccurred(), "cloudflared binary must be installed and on PATH")
+	for _, binary := range []string{"minikube", "helm", "cloudflared"} {
+		if _, err := exec.LookPath(binary); err != nil {
+			return fmt.Errorf("%s binary must be installed and on PATH", binary)
+		}
+	}
 
 	minikubeProfile = os.Getenv(e2eMinikubeProfileEnvKey)
 	kubeconfigPath = os.Getenv(e2eKubeconfigEnvKey)
 
-	startCtx, cancel := context.WithTimeout(suiteCtx, 20*time.Minute)
-	defer cancel()
-
+	startCtx, cancelStart := context.WithTimeout(suiteCtx, 20*time.Minute)
+	defer cancelStart()
 	startCmd := exec.CommandContext(startCtx, "minikube", "start", "-p", minikubeProfile, "--wait=all", fmt.Sprintf("--dns-domain=%s", e2eClusterDomain))
-	startCmd.Stdout = GinkgoWriter
-	startCmd.Stderr = GinkgoWriter
-	Expect(startCmd.Run()).To(Succeed(), "failed to start minikube profile %s", minikubeProfile)
+	startCmd.Stdout = logOut
+	startCmd.Stderr = logOut
+	if err := startCmd.Run(); err != nil {
+		return fmt.Errorf("start minikube profile %s: %w", minikubeProfile, err)
+	}
 
 	kubeconfigData, err := fetchKubeconfig(suiteCtx, minikubeProfile)
-	Expect(err).NotTo(HaveOccurred(), "failed to fetch kubeconfig for profile %s", minikubeProfile)
-
-	err = os.WriteFile(kubeconfigPath, kubeconfigData, 0o600)
-	Expect(err).NotTo(HaveOccurred(), "failed to write kubeconfig temp file")
-
-	Expect(os.Setenv("KUBECONFIG", kubeconfigPath)).To(Succeed())
+	if err != nil {
+		return fmt.Errorf("fetch kubeconfig for profile %s: %w", minikubeProfile, err)
+	}
+	if err := os.WriteFile(kubeconfigPath, kubeconfigData, 0o600); err != nil {
+		return fmt.Errorf("write kubeconfig temp file: %w", err)
+	}
+	if err := os.Setenv("KUBECONFIG", kubeconfigPath); err != nil {
+		return fmt.Errorf("set KUBECONFIG: %w", err)
+	}
 
 	restConfig, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
-	Expect(err).NotTo(HaveOccurred(), "failed to build rest config")
-
+	if err != nil {
+		return fmt.Errorf("build rest config: %w", err)
+	}
 	kubeClient, err = kubernetes.NewForConfig(restConfig)
-	Expect(err).NotTo(HaveOccurred(), "failed to init kube client")
-})
+	if err != nil {
+		return fmt.Errorf("init kube client: %w", err)
+	}
+
+	if err := waitFor("nodes ready", 10*time.Minute, 10*time.Second, func() error {
+		nodes, err := kubeClient.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+		if err != nil {
+			return err
+		}
+		if len(nodes.Items) == 0 {
+			return fmt.Errorf("no nodes found")
+		}
+		for _, node := range nodes.Items {
+			if !isNodeReady(node) {
+				return fmt.Errorf("node %s not Ready", node.Name)
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	loadCtx, cancelLoad := context.WithTimeout(suiteCtx, 5*time.Minute)
+	defer cancelLoad()
+	if err := loadImageIntoMinikube(loadCtx, minikubeProfile, controllerImage); err != nil {
+		return err
+	}
+
+	values := controllerHelmValues{}
+	values.Cloudflare.AccountID = os.Getenv("CLOUDFLARE_ACCOUNT_ID")
+	values.Cloudflare.TunnelName = os.Getenv("CLOUDFLARE_TUNNEL_NAME")
+	values.Cloudflare.APIToken = os.Getenv("CLOUDFLARE_API_TOKEN")
+	values.Image.Repository = controllerImageRef.repository
+	values.Image.Tag = controllerImageRef.tag
+	values.Image.PullPolicy = "IfNotPresent"
+	values.ClusterDomain = e2eClusterDomain
+
+	helmCtx, cancelHelm := context.WithTimeout(suiteCtx, 10*time.Minute)
+	defer cancelHelm()
+	if err := helmUpgradeInstall(helmCtx, kubeconfigPath, controllerReleaseName, controllerNamespace, values); err != nil {
+		return err
+	}
+
+	return waitFor("controller deployment ready", 10*time.Minute, 10*time.Second, func() error {
+		deployments, err := kubeClient.AppsV1().Deployments(controllerNamespace).List(context.Background(), metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("app.kubernetes.io/instance=%s", controllerReleaseName),
+		})
+		if err != nil {
+			return err
+		}
+		if len(deployments.Items) == 0 {
+			return fmt.Errorf("controller deployment not created")
+		}
+		for _, deployment := range deployments.Items {
+			if !isDeploymentAvailable(deployment) {
+				return fmt.Errorf("deployment %s has %d available replicas", deployment.Name, deployment.Status.AvailableReplicas)
+			}
+		}
+		return nil
+	})
+}
 
 func missingEnvVars(keys []string) []string {
 	var missing []string
@@ -223,7 +321,7 @@ func verifyCloudflareToken(ctx context.Context, token string) error {
 
 func fetchKubeconfig(ctx context.Context, profile string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "minikube", "-p", profile, "kubectl", "--", "config", "view", "--raw")
-	cmd.Stderr = GinkgoWriter
+	cmd.Stderr = logOut
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
@@ -264,8 +362,8 @@ func parseImageRef(ref string) (imageRef, error) {
 
 func loadImageIntoMinikube(ctx context.Context, profile string, image string) error {
 	cmd := exec.CommandContext(ctx, "minikube", "-p", profile, "image", "load", image)
-	cmd.Stdout = GinkgoWriter
-	cmd.Stderr = GinkgoWriter
+	cmd.Stdout = logOut
+	cmd.Stderr = logOut
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("minikube image load %s: %w", image, err)
 	}
@@ -283,8 +381,8 @@ func helmUpgradeInstall(ctx context.Context, kubeconfigPath string, releaseName 
 	}
 	defer func() { _ = os.Remove(valuesPath) }()
 
-	_, _ = fmt.Fprintf(GinkgoWriter, "helm image override: repository=%s tag=%s pullPolicy=%s\n", values.Image.Repository, values.Image.Tag, values.Image.PullPolicy)
-	_, _ = fmt.Fprintf(GinkgoWriter, "helm cloudflare values length: accountId=%d tunnelName=%d apiToken=%d\n",
+	_, _ = fmt.Fprintf(logOut, "helm image override: repository=%s tag=%s pullPolicy=%s\n", values.Image.Repository, values.Image.Tag, values.Image.PullPolicy)
+	_, _ = fmt.Fprintf(logOut, "helm cloudflare values length: accountId=%d tunnelName=%d apiToken=%d\n",
 		len(values.Cloudflare.AccountID), len(values.Cloudflare.TunnelName), len(values.Cloudflare.APIToken))
 
 	helmArgs := []string{
@@ -319,8 +417,8 @@ func helmUpgradeInstall(ctx context.Context, kubeconfigPath string, releaseName 
 	}
 
 	cmd := exec.CommandContext(ctx, "helm", helmArgs...)
-	cmd.Stdout = GinkgoWriter
-	cmd.Stderr = GinkgoWriter
+	cmd.Stdout = logOut
+	cmd.Stderr = logOut
 	cmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("helm upgrade --install %s: %w", releaseName, err)
@@ -350,8 +448,8 @@ func writeHelmValuesFile(values controllerHelmValues) (string, error) {
 
 func enableMinikubeAddon(ctx context.Context, profile string, addon string) error {
 	cmd := exec.CommandContext(ctx, "minikube", "-p", profile, "addons", "enable", addon)
-	cmd.Stdout = GinkgoWriter
-	cmd.Stderr = GinkgoWriter
+	cmd.Stdout = logOut
+	cmd.Stderr = logOut
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("enable minikube addon %s: %w", addon, err)
 	}
@@ -378,6 +476,9 @@ func collectControllerCoverage(namespace string, releaseName string) error {
 	if repoRoot == "" {
 		return fmt.Errorf("repository root not resolved")
 	}
+	if kubeClient == nil {
+		return fmt.Errorf("kube client not initialised")
+	}
 
 	pods, err := kubeClient.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("app.kubernetes.io/instance=%s", releaseName),
@@ -389,13 +490,13 @@ func collectControllerCoverage(namespace string, releaseName string) error {
 		return fmt.Errorf("no controller pods found")
 	}
 	podName := pods.Items[0].Name
-	_, _ = fmt.Fprintf(GinkgoWriter, "collecting coverage from pod %s/%s\n", namespace, podName)
+	_, _ = fmt.Fprintf(logOut, "collecting coverage from pod %s/%s\n", namespace, podName)
 
 	signalCtx, cancelSignal := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancelSignal()
 	signalCmd := exec.CommandContext(signalCtx, "kubectl", "exec", podName, "-n", namespace, "--", "kill", "-USR1", "1")
-	signalCmd.Stdout = GinkgoWriter
-	signalCmd.Stderr = GinkgoWriter
+	signalCmd.Stdout = logOut
+	signalCmd.Stderr = logOut
 	if err := signalCmd.Run(); err != nil {
 		return fmt.Errorf("send SIGUSR1 to controller: %w", err)
 	}
@@ -417,20 +518,20 @@ func collectControllerCoverage(namespace string, releaseName string) error {
 
 	untarCmd := exec.Command("tar", "-xf", "-", "-C", coverageDir)
 	untarCmd.Stdin = bytes.NewReader(tarData)
-	untarCmd.Stdout = GinkgoWriter
-	untarCmd.Stderr = GinkgoWriter
+	untarCmd.Stdout = logOut
+	untarCmd.Stderr = logOut
 	if err := untarCmd.Run(); err != nil {
 		return fmt.Errorf("untar coverage data: %w", err)
 	}
 
 	coverOut := filepath.Join(repoRoot, "test", "e2e", "artifacts", "e2e-cover.out")
 	covdataCmd := exec.Command("go", "tool", "covdata", "textfmt", "-i="+coverageDir, "-o="+coverOut)
-	covdataCmd.Stdout = GinkgoWriter
-	covdataCmd.Stderr = GinkgoWriter
+	covdataCmd.Stdout = logOut
+	covdataCmd.Stderr = logOut
 	if err := covdataCmd.Run(); err != nil {
 		return fmt.Errorf("convert coverage data to text format: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(GinkgoWriter, "e2e coverage data saved to %s\n", coverOut)
+	_, _ = fmt.Fprintf(logOut, "e2e coverage data saved to %s\n", coverOut)
 	return nil
 }

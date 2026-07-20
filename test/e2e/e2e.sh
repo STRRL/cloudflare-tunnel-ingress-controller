@@ -26,22 +26,9 @@ finish() {
     export KUBECONFIG="$E2E_KUBECONFIG"
     DUMP_DIRECTORY="$E2E_DUMP_DIRECTORY" \
         bash "$SCRIPT_DIRECTORY/dump.sh"
-    kubectl delete ingress dashboard-via-cloudflare \
-        --namespace kubernetes-dashboard \
-        --ignore-not-found=true \
-        --wait=true
-    kubectl delete ingress redis-via-cloudflare-tcp \
-        --namespace default \
-        --ignore-not-found=true \
-        --wait=true
-    kubectl delete ingress wildcard-routing-via-cloudflare \
-        --namespace default \
-        --ignore-not-found=true \
-        --wait=true
-    kubectl delete ingress dns-managed-via-cloudflare \
-        --namespace default \
-        --ignore-not-found=true \
-        --wait=true
+    # scenario ingresses are cleaned up by the godog After hooks, delete any
+    # leftovers from aborted runs so the controller relinquishes tunnel state
+    kubectl delete ingress --all --all-namespaces --wait=true
     minikube -p "$E2E_MINIKUBE_PROFILE" addons disable dashboard
     minikube -p "$E2E_MINIKUBE_PROFILE" addons disable metrics-server
     helm uninstall cf-ic-e2e \
