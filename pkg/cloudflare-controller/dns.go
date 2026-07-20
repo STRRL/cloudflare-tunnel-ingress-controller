@@ -73,6 +73,34 @@ func syncDNSRecord(
 	for _, item := range effectiveExposures {
 		txtRecordName := fmt.Sprintf("%s.%s", ManagedRecordTXTPrefix, item.Hostname)
 
+		// DNS management is delegated externally for this exposure: relinquish
+		// ownership by cleaning up the records this controller created, so a
+		// later ingress deletion can never claim an externally managed record.
+		// The CNAME is only removed while it still points at this tunnel, if an
+		// external system already repointed it the record must survive and only
+		// the ownership TXT is dropped.
+		if item.DisableDNSManagement {
+			containsTXT, oldTXT := dnsRecordsContainsHostname(existedTXTRecords, txtRecordName)
+			if containsTXT && oldTXT.Content == expectedTXTContent {
+				containsCNAME, oldCNAME := dnsRecordsContainsHostname(existedCNAMERecords, item.Hostname)
+				if containsCNAME && oldCNAME.Content == tunnelDomain(tunnelId) {
+					toDelete = append(toDelete, DNSOperationDelete{
+						OldRecord: oldCNAME,
+					})
+					logger.Info("DNS management disabled, deleting controller-owned CNAME record",
+						"hostname", item.Hostname,
+					)
+				}
+				toDelete = append(toDelete, DNSOperationDelete{
+					OldRecord: oldTXT,
+				})
+				logger.Info("DNS management disabled, relinquishing ownership TXT record",
+					"hostname", item.Hostname,
+				)
+			}
+			continue
+		}
+
 		// Handle CNAME record
 		containsCNAME, oldCNAME := dnsRecordsContainsHostname(existedCNAMERecords, item.Hostname)
 		if containsCNAME {

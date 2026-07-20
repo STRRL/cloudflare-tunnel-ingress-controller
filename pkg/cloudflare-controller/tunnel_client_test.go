@@ -1,9 +1,11 @@
 package cloudflarecontroller
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-logr/logr"
 )
 
@@ -88,6 +90,131 @@ func TestRenderDNSComment(t *testing.T) {
 			}
 			if !tt.wantEmpty && tt.wantContains != "" && strings.TrimSpace(got) == "" {
 				t.Errorf("expected non-empty comment, got empty")
+			}
+		})
+	}
+}
+
+func Test_sortIngressRules(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     []cloudflare.UnvalidatedIngressRule
+		wantOrder []cloudflare.UnvalidatedIngressRule
+	}{
+		{
+			name: "wildcard sorts after explicit hostname",
+			input: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "*.example.com", Path: "/"},
+				{Hostname: "app.example.com", Path: "/"},
+			},
+			wantOrder: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "app.example.com", Path: "/"},
+				{Hostname: "*.example.com", Path: "/"},
+			},
+		},
+		{
+			name: "multiple explicit hostnames before wildcard",
+			input: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "*.example.com", Path: "/"},
+				{Hostname: "app.example.com", Path: "/"},
+				{Hostname: "api.example.com", Path: "/"},
+			},
+			wantOrder: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "api.example.com", Path: "/"},
+				{Hostname: "app.example.com", Path: "/"},
+				{Hostname: "*.example.com", Path: "/"},
+			},
+		},
+		{
+			name: "non-wildcard only sorts alphabetically",
+			input: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "z.example.com", Path: "/"},
+				{Hostname: "a.example.com", Path: "/"},
+			},
+			wantOrder: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "a.example.com", Path: "/"},
+				{Hostname: "z.example.com", Path: "/"},
+			},
+		},
+		{
+			name: "path length descending for same hostname",
+			input: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "app.example.com", Path: "/"},
+				{Hostname: "app.example.com", Path: "/longer/path"},
+			},
+			wantOrder: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "app.example.com", Path: "/longer/path"},
+				{Hostname: "app.example.com", Path: "/"},
+			},
+		},
+		{
+			name: "equal length paths order lexically",
+			input: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "app.example.com", Path: "/foo"},
+				{Hostname: "app.example.com", Path: "/api"},
+			},
+			wantOrder: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "app.example.com", Path: "/api"},
+				{Hostname: "app.example.com", Path: "/foo"},
+			},
+		},
+		{
+			name: "single character subdomain sorts before wildcard",
+			input: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "*.example.com", Path: "/"},
+				{Hostname: "x.example.com", Path: "/"},
+			},
+			wantOrder: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "x.example.com", Path: "/"},
+				{Hostname: "*.example.com", Path: "/"},
+			},
+		},
+		{
+			name: "apex domain sorts before its wildcard",
+			input: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "*.example.com", Path: "/"},
+				{Hostname: "example.com", Path: "/"},
+			},
+			wantOrder: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "example.com", Path: "/"},
+				{Hostname: "*.example.com", Path: "/"},
+			},
+		},
+		{
+			name: "more specific wildcard sorts before broader wildcard",
+			input: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "*.example.com", Path: "/"},
+				{Hostname: "*.internal.example.com", Path: "/"},
+			},
+			wantOrder: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "*.internal.example.com", Path: "/"},
+				{Hostname: "*.example.com", Path: "/"},
+			},
+		},
+		{
+			name: "wildcards with equal specificity sort alphabetically",
+			input: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "*.b.example.com", Path: "/"},
+				{Hostname: "*.a.example.com", Path: "/"},
+			},
+			wantOrder: []cloudflare.UnvalidatedIngressRule{
+				{Hostname: "*.a.example.com", Path: "/"},
+				{Hostname: "*.b.example.com", Path: "/"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rules := make([]cloudflare.UnvalidatedIngressRule, len(tt.input))
+			copy(rules, tt.input)
+
+			slices.SortFunc(rules, sortIngressRules)
+
+			for i, rule := range rules {
+				if rule.Hostname != tt.wantOrder[i].Hostname || rule.Path != tt.wantOrder[i].Path {
+					t.Errorf("position %d: got %s%s, want %s%s", i, rule.Hostname, rule.Path, tt.wantOrder[i].Hostname, tt.wantOrder[i].Path)
+				}
 			}
 		})
 	}

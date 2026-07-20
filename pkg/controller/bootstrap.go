@@ -16,7 +16,7 @@ type IngressControllerOptions struct {
 }
 
 func RegisterIngressController(logger logr.Logger, mgr manager.Manager, options IngressControllerOptions) error {
-	controller := NewIngressController(logger.WithName("ingress-controller"), mgr.GetClient(), options.IngressClassName, options.ControllerClassName, options.ClusterDomain, options.CFTunnelClient)
+	controller := NewIngressController(logger.WithName("ingress-controller"), mgr.GetClient(), mgr.GetEventRecorderFor("cloudflare-tunnel-ingress-controller"), options.IngressClassName, options.ControllerClassName, options.ClusterDomain, options.CFTunnelClient)
 	err := builder.
 		ControllerManagedBy(mgr).
 		For(&networkingv1.Ingress{}).

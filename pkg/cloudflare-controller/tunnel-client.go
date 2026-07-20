@@ -123,14 +123,10 @@ func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures [
 		ingressRules = append(ingressRules, *ingress)
 	}
 
-	// sort the rules by hostnames first for prettiness, then by path length in descending order
+	// sort the rules: non-wildcard hostnames before wildcard hostnames (wildcards are fallbacks),
+	// then alphabetically by hostname, then by path length in descending order
 	// to ensure "precedence will be given first to the longest matching path".
-	slices.SortFunc(ingressRules, func(a, b cloudflare.UnvalidatedIngressRule) int {
-		if v := strings.Compare(strings.ToLower(a.Hostname), strings.ToLower(b.Hostname)); v != 0 {
-			return v
-		}
-		return len(b.Path) - len(a.Path)
-	})
+	slices.SortFunc(ingressRules, sortIngressRules)
 
 	// at last, append a default 404 service as default route
 	ingressRules = append(ingressRules, cloudflare.UnvalidatedIngressRule{
@@ -183,6 +179,12 @@ func (t *TunnelClient) updateDNSCNAMERecord(ctx context.Context, exposures []exp
 		ok, zone := zoneBelongedByExposure(item, zoneNames)
 		if ok {
 			exposuresByZone[zone] = append(exposuresByZone[zone], item)
+		} else if item.DisableDNSManagement {
+			// DNS management is delegated externally for this exposure; its hostname
+			// may live in a zone not managed by this Cloudflare account, so don't
+			// require a zone match and skip it from DNS reconciliation.
+			t.logger.V(3).Info("DNS management disabled for exposure, skipping DNS reconciliation", "hostname", item.Hostname)
+			continue
 		} else {
 			return errors.Errorf("hostname %s not belong to any zone", item.Hostname)
 		}
@@ -313,4 +315,35 @@ func findZoneByName(zoneName string, zones []cloudflare.Zone) (bool, cloudflare.
 
 func (t *TunnelClient) FetchTunnelToken(ctx context.Context) (string, error) {
 	return t.cfClient.GetTunnelToken(ctx, cloudflare.ResourceIdentifier(t.accountId), t.tunnelId)
+}
+
+// sortIngressRules defines the sort order for Cloudflare tunnel ingress rules:
+// non-wildcard hostnames before wildcard hostnames (wildcards act as fallbacks),
+// then alphabetically by hostname, then by path length in descending order.
+func sortIngressRules(a, b cloudflare.UnvalidatedIngressRule) int {
+	aIsWildcard := strings.HasPrefix(a.Hostname, "*.")
+	bIsWildcard := strings.HasPrefix(b.Hostname, "*.")
+	if aIsWildcard != bIsWildcard {
+		if aIsWildcard {
+			return 1
+		}
+		return -1
+	}
+	// a broader wildcard suffix-matches everything a more specific one
+	// covers, so wildcards with more labels must come first:
+	// *.internal.example.com before *.example.com
+	if aIsWildcard {
+		if v := strings.Count(b.Hostname, ".") - strings.Count(a.Hostname, "."); v != 0 {
+			return v
+		}
+	}
+	if v := strings.Compare(strings.ToLower(a.Hostname), strings.ToLower(b.Hostname)); v != 0 {
+		return v
+	}
+	if v := len(b.Path) - len(a.Path); v != 0 {
+		return v
+	}
+	// lexical fallback keeps the comparator a total order, the rule list
+	// must be deterministic or reconciles would push spurious updates
+	return strings.Compare(a.Path, b.Path)
 }

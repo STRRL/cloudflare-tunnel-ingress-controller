@@ -2,32 +2,50 @@ package controller
 
 import (
 	"context"
-	"os"
-	"reflect"
 	"slices"
-	"strconv"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// CloudflaredConfig carries the fully resolved settings for the managed
+// cloudflared connector deployment, configuration parsing stays in main.
+type CloudflaredConfig struct {
+	Image           string
+	ImagePullPolicy string
+	Replicas        int32
+	Protocol        string
+	ExtraArgs       []string
+}
+
 func CreateOrUpdateControlledCloudflared(
 	ctx context.Context,
 	kubeClient client.Client,
 	tunnelClient cloudflarecontroller.TunnelClientInterface,
 	namespace string,
-	protocol string,
-	extraArgs []string,
+	config CloudflaredConfig,
 ) error {
 	logger := log.FromContext(ctx)
+
+	token, err := tunnelClient.FetchTunnelToken(ctx)
+	if err != nil {
+		return errors.Wrap(err, "fetch tunnel token")
+	}
+
+	tokenSecretVersion, err := createOrUpdateTunnelTokenSecret(ctx, kubeClient, namespace, token)
+	if err != nil {
+		return errors.Wrap(err, "create or update tunnel token secret")
+	}
+
 	list := appsv1.DeploymentList{}
-	err := kubeClient.List(ctx, &list, &client.ListOptions{
+	err = kubeClient.List(ctx, &list, &client.ListOptions{
 		Namespace: namespace,
 		LabelSelector: labels.SelectorFromSet(labels.Set{
 			"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
@@ -38,49 +56,42 @@ func CreateOrUpdateControlledCloudflared(
 	}
 
 	if len(list.Items) > 0 {
-		// Check if the existing deployment needs to be updated
 		existingDeployment := &list.Items[0]
-		desiredReplicas, err := getDesiredReplicas()
-		if err != nil {
-			return errors.Wrap(err, "get desired replicas")
-		}
 
 		needsUpdate := false
-		if *existingDeployment.Spec.Replicas != desiredReplicas {
+		if *existingDeployment.Spec.Replicas != config.Replicas {
 			needsUpdate = true
-		}
-
-		// Get token once for all checks
-		token, err := tunnelClient.FetchTunnelToken(ctx)
-		if err != nil {
-			return errors.Wrap(err, "fetch tunnel token")
 		}
 
 		if len(existingDeployment.Spec.Template.Spec.Containers) > 0 {
 			container := &existingDeployment.Spec.Template.Spec.Containers[0]
-			if container.Image != os.Getenv("CLOUDFLARED_IMAGE") {
+			if container.Image != config.Image {
 				needsUpdate = true
 			}
-			if string(container.ImagePullPolicy) != os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY") {
+			if string(container.ImagePullPolicy) != config.ImagePullPolicy {
 				needsUpdate = true
 			}
 
-			// Check if command arguments have changed
-			desiredCommand := buildCloudflaredCommand(protocol, token, extraArgs)
+			desiredCommand := buildCloudflaredCommand(config.Protocol, config.ExtraArgs)
 			if !slices.Equal(container.Command, desiredCommand) {
 				needsUpdate = true
 			}
 		}
+		if existingDeployment.Spec.Template.Annotations[tunnelTokenSecretVersionAnnotation] != tokenSecretVersion {
+			needsUpdate = true
+		}
 
-		// Check if anti-affinity needs to be added or removed
-		desiredAffinity := buildPodAntiAffinity("controlled-cloudflared-connector", desiredReplicas)
+		desiredAffinity := buildPodAntiAffinity("controlled-cloudflared-connector", config.Replicas)
 		if !affinityEqual(existingDeployment.Spec.Template.Spec.Affinity, desiredAffinity) {
 			needsUpdate = true
 		}
 
 		if needsUpdate {
-
-			updatedDeployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, desiredReplicas, extraArgs)
+			updatedDeployment := controlledCloudflaredDeployment{
+				config:             config,
+				tokenSecretVersion: tokenSecretVersion,
+				namespace:          namespace,
+			}.build()
 			existingDeployment.Spec = updatedDeployment.Spec
 			err = kubeClient.Update(ctx, existingDeployment)
 			if err != nil {
@@ -92,17 +103,11 @@ func CreateOrUpdateControlledCloudflared(
 		return nil
 	}
 
-	token, err := tunnelClient.FetchTunnelToken(ctx)
-	if err != nil {
-		return errors.Wrap(err, "fetch tunnel token")
-	}
-
-	replicas, err := getDesiredReplicas()
-	if err != nil {
-		return errors.Wrap(err, "get desired replicas")
-	}
-
-	deployment := cloudflaredConnectDeploymentTemplating(protocol, token, namespace, replicas, extraArgs)
+	deployment := controlledCloudflaredDeployment{
+		config:             config,
+		tokenSecretVersion: tokenSecretVersion,
+		namespace:          namespace,
+	}.build()
 	err = kubeClient.Create(ctx, deployment)
 	if err != nil {
 		return errors.Wrap(err, "create controlled-cloudflared-connector deployment")
@@ -111,108 +116,63 @@ func CreateOrUpdateControlledCloudflared(
 	return nil
 }
 
-func cloudflaredConnectDeploymentTemplating(protocol string, token string, namespace string, replicas int32, extraArgs []string) *appsv1.Deployment {
-	appName := "controlled-cloudflared-connector"
+func createOrUpdateTunnelTokenSecret(
+	ctx context.Context,
+	kubeClient client.Client,
+	namespace string,
+	token string,
+) (string, error) {
+	logger := log.FromContext(ctx)
 
-	// Use default values if environment variables are empty
-	image := os.Getenv("CLOUDFLARED_IMAGE")
-	if image == "" {
-		image = "cloudflare/cloudflared:latest"
-	}
+	existingSecret := &v1.Secret{}
+	err := kubeClient.Get(ctx, client.ObjectKey{
+		Namespace: namespace,
+		Name:      tunnelTokenSecretName,
+	}, existingSecret)
 
-	pullPolicy := os.Getenv("CLOUDFLARED_IMAGE_PULL_POLICY")
-	if pullPolicy == "" {
-		pullPolicy = "IfNotPresent"
-	}
-
-	return &appsv1.Deployment{
+	desiredSecret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      appName,
+			Name:      tunnelTokenSecretName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				"app": appName,
 				"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
 			},
 		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": appName,
-					"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
-				},
-			},
-			Template: v1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: appName,
-					Labels: map[string]string{
-						"app": appName,
-						"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
-					},
-				},
-				Spec: v1.PodSpec{
-					Affinity:  buildPodAntiAffinity(appName, replicas),
-					Containers: []v1.Container{
-						{
-							Name:            appName,
-							Image:           image,
-							ImagePullPolicy: v1.PullPolicy(pullPolicy),
-							Command:         buildCloudflaredCommand(protocol, token, extraArgs),
-						},
-					},
-					RestartPolicy: v1.RestartPolicyAlways,
-				},
-			},
+		StringData: map[string]string{
+			tunnelTokenSecretKey: token,
 		},
 	}
-}
 
-// buildPodAntiAffinity returns a pod anti-affinity that spreads pods across nodes.
-// Returns nil when replicas <= 1 (no point scheduling constraints for a single pod).
-func buildPodAntiAffinity(appName string, replicas int32) *v1.Affinity {
-	if replicas <= 1 {
-		return nil
-	}
-	return &v1.Affinity{
-		PodAntiAffinity: &v1.PodAntiAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
-				{
-					LabelSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							"app": appName,
-						},
-					},
-					TopologyKey: "kubernetes.io/hostname",
-				},
-			},
-		},
-	}
-}
-
-// affinityEqual compares two Affinity pointers for equality.
-func affinityEqual(a, b *v1.Affinity) bool {
-	if a == nil && b == nil {
-		return true
-	}
-	if a == nil || b == nil {
-		return false
-	}
-	return reflect.DeepEqual(a, b)
-}
-
-func getDesiredReplicas() (int32, error) {
-	replicaCount := os.Getenv("CLOUDFLARED_REPLICA_COUNT")
-	if replicaCount == "" {
-		return 1, nil
-	}
-	replicas, err := strconv.ParseInt(replicaCount, 10, 32)
 	if err != nil {
-		return 0, errors.Wrap(err, "invalid replica count")
+		if !apierrors.IsNotFound(err) {
+			return "", errors.Wrap(err, "get tunnel token secret")
+		}
+		err = kubeClient.Create(ctx, desiredSecret)
+		if err != nil {
+			return "", errors.Wrap(err, "create tunnel token secret")
+		}
+		logger.Info("Created tunnel token secret", "namespace", namespace)
+		return desiredSecret.ResourceVersion, nil
 	}
-	return int32(replicas), nil
+
+	if string(existingSecret.Data[tunnelTokenSecretKey]) == token {
+		return existingSecret.ResourceVersion, nil
+	}
+
+	existingSecret.StringData = desiredSecret.StringData
+	err = kubeClient.Update(ctx, existingSecret)
+	if err != nil {
+		return "", errors.Wrap(err, "update tunnel token secret")
+	}
+	logger.Info("Updated tunnel token secret", "namespace", namespace)
+	return existingSecret.ResourceVersion, nil
 }
 
-func buildCloudflaredCommand(protocol string, token string, extraArgs []string) []string {
+const tunnelTokenSecretName = "controlled-cloudflared-token"
+const tunnelTokenSecretKey = "tunnel-token"
+const tunnelTokenSecretVersionAnnotation = "strrl.dev/cloudflare-tunnel-token-secret-version"
+
+func buildCloudflaredCommand(protocol string, extraArgs []string) []string {
 	command := []string{
 		"cloudflared",
 		"--protocol",
@@ -226,8 +186,9 @@ func buildCloudflaredCommand(protocol string, token string, extraArgs []string) 
 		command = append(command, extraArgs...)
 	}
 
-	// Add metrics, run subcommand and token
-	command = append(command, "--metrics", "0.0.0.0:44483", "run", "--token", token)
+	// Add metrics and run subcommand
+	// The tunnel token is provided via TUNNEL_TOKEN env var from a Kubernetes Secret
+	command = append(command, "--metrics", "0.0.0.0:44483", "run")
 
 	return command
 }
