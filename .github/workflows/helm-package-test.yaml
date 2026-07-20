@@ -14,8 +14,8 @@ jobs:
   integration-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: azure/setup-helm@v3
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v5
       - name: Run helm package
         run: |
           helm package ./helm/cloudflare-tunnel-ingress-controller

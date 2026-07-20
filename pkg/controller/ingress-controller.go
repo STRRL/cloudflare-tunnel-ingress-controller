@@ -12,6 +12,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -25,14 +26,15 @@ const IngressControllerFinalizer = "strrl.dev/cloudflare-tunnel-ingress-controll
 type IngressController struct {
 	logger              logr.Logger
 	kubeClient          client.Client
+	recorder            record.EventRecorder
 	ingressClassName    string
 	controllerClassName string
 	clusterDomain       string
 	tunnelClient        *cloudflarecontroller.TunnelClient
 }
 
-func NewIngressController(logger logr.Logger, kubeClient client.Client, ingressClassName string, controllerClassName string, clusterDomain string, tunnelClient *cloudflarecontroller.TunnelClient) *IngressController {
-	return &IngressController{logger: logger, kubeClient: kubeClient, ingressClassName: ingressClassName, controllerClassName: controllerClassName, clusterDomain: clusterDomain, tunnelClient: tunnelClient}
+func NewIngressController(logger logr.Logger, kubeClient client.Client, recorder record.EventRecorder, ingressClassName string, controllerClassName string, clusterDomain string, tunnelClient *cloudflarecontroller.TunnelClient) *IngressController {
+	return &IngressController{logger: logger, kubeClient: kubeClient, recorder: recorder, ingressClassName: ingressClassName, controllerClassName: controllerClassName, clusterDomain: clusterDomain, tunnelClient: tunnelClient}
 }
 
 func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -82,9 +84,10 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 	var allExposures []exposure.Exposure
 	for _, ingress := range ingresses {
 		// best effort to extract exposures from all ingresses
-		exposures, err := FromIngressToExposure(ctx, i.logger, i.kubeClient, ingress, i.clusterDomain)
+		exposures, err := FromIngressToExposure(ctx, i.logger, i.kubeClient, i.recorder, ingress, i.clusterDomain)
 		if err != nil {
 			i.logger.Info("extract exposures from ingress, skipped", "triggered-by", request.NamespacedName, "ingress", fmt.Sprintf("%s/%s", ingress.Namespace, ingress.Name), "error", err)
+			i.recorder.Event(&ingress, v1.EventTypeWarning, EventReasonTransformFailed, err.Error())
 		}
 		allExposures = append(allExposures, exposures...)
 	}
@@ -232,5 +235,3 @@ func (i *IngressController) cleanFinalizer(ctx context.Context, ingress networki
 	}
 	return nil
 }
-
-

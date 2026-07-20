@@ -335,6 +335,157 @@ func Test_syncDNSRecord(t *testing.T) {
 			wantDelete: nil,
 			wantErr:    false,
 		},
+		{
+			name: "exposure with DNS management disabled creates no records",
+			args: args{
+				logger: logr.Discard(),
+				exposures: []exposure.Exposure{
+					{
+						Hostname:             "test.example.com",
+						ServiceTarget:        "http://10.0.0.1:233",
+						PathPrefix:           "/",
+						IsDeleted:            false,
+						DisableDNSManagement: true,
+					},
+				},
+				existedCNAMERecords: nil,
+				existedTXTRecords:   nil,
+				tunnelId:            WhateverTunnelId,
+				tunnelName:          "tunnel-in-test",
+			},
+			wantCreate: nil,
+			wantUpdate: nil,
+			wantDelete: nil,
+			wantErr:    false,
+		},
+		{
+			name: "exposure with DNS management disabled relinquishes owned records",
+			args: args{
+				logger: logr.Discard(),
+				exposures: []exposure.Exposure{
+					{
+						Hostname:             "test.example.com",
+						ServiceTarget:        "http://10.0.0.1:233",
+						PathPrefix:           "/",
+						IsDeleted:            false,
+						DisableDNSManagement: true,
+					},
+				},
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					},
+				},
+				tunnelId:   WhateverTunnelId,
+				tunnelName: "tunnel-in-test",
+			},
+			wantCreate: nil,
+			wantUpdate: nil,
+			wantDelete: []DNSOperationDelete{
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+					},
+				},
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "exposure with DNS management disabled keeps a repointed CNAME and only drops the ownership TXT",
+			args: args{
+				logger: logr.Discard(),
+				exposures: []exposure.Exposure{
+					{
+						Hostname:             "test.example.com",
+						ServiceTarget:        "http://10.0.0.1:233",
+						PathPrefix:           "/",
+						IsDeleted:            false,
+						DisableDNSManagement: true,
+					},
+				},
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: "load-balancer.example.net",
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					},
+				},
+				tunnelId:   WhateverTunnelId,
+				tunnelName: "tunnel-in-test",
+			},
+			wantCreate: nil,
+			wantUpdate: nil,
+			wantDelete: []DNSOperationDelete{
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "exposure with DNS management disabled ignores records owned by another tunnel",
+			args: args{
+				logger: logr.Discard(),
+				exposures: []exposure.Exposure{
+					{
+						Hostname:             "test.example.com",
+						ServiceTarget:        "http://10.0.0.1:233",
+						PathPrefix:           "/",
+						IsDeleted:            false,
+						DisableDNSManagement: true,
+					},
+				},
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: "other-tunnel.cfargotunnel.com",
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"another-tunnel"}`,
+					},
+				},
+				tunnelId:   WhateverTunnelId,
+				tunnelName: "tunnel-in-test",
+			},
+			wantCreate: nil,
+			wantUpdate: nil,
+			wantDelete: nil,
+			wantErr:    false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

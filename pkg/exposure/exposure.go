@@ -16,4 +16,9 @@ type Exposure struct {
 	HTTPHostHeader *string
 	// OriginServerName is the hostname on the origin server certificate.
 	OriginServerName *string
+	// DisableDNSManagement, when true, makes the controller skip Cloudflare DNS
+	// record (CNAME/TXT) management for this exposure while still configuring the
+	// tunnel ingress rule. DNS can then be delegated to an external system, e.g.
+	// external-dns or a Cloudflare Load Balancer targeting the tunnel directly.
+	DisableDNSManagement bool
 }
