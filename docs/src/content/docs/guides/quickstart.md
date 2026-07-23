@@ -10,45 +10,29 @@ Use this guide to install the controller with Helm and publish a Kubernetes Serv
 - A Kubernetes cluster running version 1.26 or later with cluster-admin access.
 - `kubectl` and `helm` configured for the cluster.
 - A Cloudflare account with an active zone and Argo Tunnel access enabled.
-- An API token that can manage tunnels and DNS:
-  - `Account.Cloudflare Tunnel:Edit`
-  - `Zone.DNS:Edit`
-  - `Zone.Zone:Read`
-- You can create API Key and prefill the permissions with [this template](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22argotunnel%22%2C%22type%22%3A%22edit%22%7D%5D&name=Cloudflare%20Tunnel%20Ingress%20Controller&accountId=*&zoneId=all).
-- Your Cloudflare account ID. Follow the official guide to [find your account and zone IDs](https://developers.cloudflare.com/fundamentals/get-started/basic-tasks/find-account-and-zone-ids/).
+- A Cloudflare API token with `Account.Cloudflare Tunnel:Edit`, `Zone.DNS:Edit`, and `Zone.Zone:Read` permissions, created by following [Cloudflare credentials](/reference/cloudflare-credentials/).
+- Your Cloudflare account ID.
+- A Service named `kubernetes-dashboard` in the `kubernetes-dashboard` namespace.
 
-## 1. Add the Helm repository
+## 1. Install the controller
 
-Add the official chart and refresh your local index:
-
-```bash
-helm repo add strrl.dev https://helm.strrl.dev
-helm repo update
-```
-
-## 2. Install the controller
-
-Install (or upgrade) the controller. Replace the placeholders with your API token, account ID, and preferred tunnel name. The chart provisions the `cloudflare-api` secret automatically using these values.
+Replace the placeholders with your API token, account ID, and preferred tunnel name. Helm installs the controller and creates its credential Secret.
 
 ```bash
 helm upgrade --install --wait \
   cloudflare-tunnel-ingress-controller \
-  strrl.dev/cloudflare-tunnel-ingress-controller \
-  --namespace cloudflare-tunnel-ingress-controller --create-namespace \
+  cloudflare-tunnel-ingress-controller \
+  --repo https://helm.strrl.dev \
+  --namespace cloudflare-tunnel-ingress-controller \
+  --create-namespace \
   --set cloudflare.apiToken="<CLOUDFLARE_API_TOKEN>" \
   --set cloudflare.accountId="<CLOUDFLARE_ACCOUNT_ID>" \
   --set cloudflare.tunnelName="<TUNNEL_NAME>"
 ```
 
-Verify the controller pod and the bundled `cloudflared` connector are running:
+## 2. Create your first Ingress
 
-```bash
-kubectl get pods -n cloudflare-tunnel-ingress-controller
-```
-
-## 3. Publish a Service with Ingress
-
-Create an `Ingress` that targets your Service and assigns the `cloudflare-tunnel` ingress class. The controller watches for these routes and configures Cloudflare automatically.
+Save the following manifest as `dashboard-ingress.yaml`. Replace `dash.example.com` with a hostname in your Cloudflare zone.
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -59,7 +43,7 @@ metadata:
 spec:
   ingressClassName: cloudflare-tunnel
   rules:
-    - host: dash.example.com # <- REPLACE ME!
+    - host: dash.example.com
       http:
         paths:
           - path: /
@@ -71,20 +55,14 @@ spec:
                   number: 80
 ```
 
-Apply the manifest and monitor the ingress status until a Cloudflare hostname appears:
+Apply the manifest:
 
 ```bash
 kubectl apply -f dashboard-ingress.yaml
-kubectl get ingress dashboard -n kubernetes-dashboard -o yaml
 ```
 
-## 4. Validate externally
+## 3. Verify the Ingress
 
-- Visit `https://dash.example.com` (or your chosen hostname) to confirm the proxied application is reachable.
-- Run `kubectl logs deployment/cloudflare-tunnel-ingress-controller -n cloudflare-tunnel-ingress-controller` to troubleshoot tunnel or DNS issues.
+Open `https://dash.example.com`, using the hostname you chose. The Kubernetes Dashboard should load through Cloudflare Tunnel.
 
-## Next steps
-
-- Review the reference docs for the [ingress class](/reference/ingress-class/), [credentials](/reference/cloudflare-credentials/), [ingress](/reference/ingress/), and [ingress annotations](/reference/ingress-annotations/).
-- Switch the chart to an existing secret if you prefer to manage credentials outside Helm releases.
-- Automate deployment via GitOps and monitor the `cloudflared` connector pods for long-lived tunnels.
+If something goes wrong, see [troubleshooting](/guides/troubleshooting/).
