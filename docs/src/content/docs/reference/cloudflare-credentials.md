@@ -19,8 +19,8 @@ To let Helm create the secret, pass the values during installation:
 helm upgrade --install cloudflare-tunnel-ingress-controller \
   strrl.dev/cloudflare-tunnel-ingress-controller \
   --set cloudflare.apiToken="<CLOUDFLARE_API_TOKEN>" \
-         cloudflare.accountId="<CLOUDFLARE_ACCOUNT_ID>" \
-         cloudflare.tunnelName="<TUNNEL_NAME>"
+  --set cloudflare.accountId="<CLOUDFLARE_ACCOUNT_ID>" \
+  --set cloudflare.tunnelName="<TUNNEL_NAME>"
 ```
 
 ## Using an existing secret
@@ -62,4 +62,9 @@ cloudflare:
     apiTokenKey: api_token
 ```
 
-The controller only needs read access to these values. Rotating the secret in place automatically refreshes credentials on the next reconciliation loop.
+The controller only needs read access to these values. The chart injects them into the controller pod as environment variables, and the controller reads them once at startup, so rotating the secret in place does not refresh a running controller. After updating the secret, restart the controller to pick up the new credentials:
+
+```bash
+kubectl rollout restart deployment cloudflare-tunnel-ingress-controller \
+  -n cloudflare-tunnel-ingress-controller
+```
