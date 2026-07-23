@@ -108,12 +108,7 @@ func (t *TunnelClient) TunnelDomain() string {
 func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures []exposure.Exposure) error {
 	var ingressRules []cloudflare.UnvalidatedIngressRule
 
-	var effectiveExposures []exposure.Exposure
-	for _, item := range exposures {
-		if !item.IsDeleted {
-			effectiveExposures = append(effectiveExposures, item)
-		}
-	}
+	effectiveExposures := exposure.Active(exposures)
 
 	for _, item := range effectiveExposures {
 		ingress, err := fromExposureToCloudflareIngress(ctx, item)

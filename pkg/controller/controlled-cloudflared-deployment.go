@@ -13,7 +13,7 @@ type controlledCloudflaredDeployment struct {
 }
 
 func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
-	const appName = "controlled-cloudflared-connector"
+	const appName = connectorAppName
 
 	customization := d.config.Customization
 	if customization == nil {
@@ -27,7 +27,7 @@ func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
 		podLabels[k] = v
 	}
 	podLabels["app"] = appName
-	podLabels["strrl.dev/cloudflare-tunnel-ingress-controller"] = "controlled-cloudflared-connector"
+	podLabels[connectorManagedByLabelKey] = connectorAppName
 
 	podAnnotations := map[string]string{}
 	for k, v := range customization.PodAnnotations {
@@ -104,21 +104,15 @@ func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      appName,
-			Namespace: d.namespace,
-			Labels: map[string]string{
-				"app": appName,
-				"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
-			},
+			Name:        appName,
+			Namespace:   d.namespace,
+			Labels:      connectorLabels(),
 			Annotations: deploymentAnnotations,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &d.config.Replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": appName,
-					"strrl.dev/cloudflare-tunnel-ingress-controller": "controlled-cloudflared-connector",
-				},
+				MatchLabels: connectorLabels(),
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{

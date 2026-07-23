@@ -57,12 +57,7 @@ func syncDNSRecord(
 	tunnelId string,
 	tunnelName string,
 ) ([]DNSOperationCreate, []DNSOperationUpdate, []DNSOperationDelete, error) {
-	var effectiveExposures []exposure.Exposure
-	for _, item := range exposures {
-		if !item.IsDeleted {
-			effectiveExposures = append(effectiveExposures, item)
-		}
-	}
+	effectiveExposures := exposure.Active(exposures)
 
 	var toCreate []DNSOperationCreate
 	var toUpdate []DNSOperationUpdate
@@ -75,7 +70,7 @@ func syncDNSRecord(
 
 	// Create or update CNAME/TXT records for active exposures
 	for _, item := range effectiveExposures {
-		txtRecordName := fmt.Sprintf("%s.%s", ManagedRecordTXTPrefix, item.Hostname)
+		txtRecordName := managedTXTRecordName(item.Hostname)
 
 		// DNS management is delegated externally for this exposure: relinquish
 		// ownership by cleaning up the records this controller created, so a
@@ -109,13 +104,7 @@ func syncDNSRecord(
 		containsCNAME, oldCNAME := dnsRecordsContainsHostname(existedCNAMERecords, item.Hostname)
 		if containsCNAME {
 			// Check if this record is managed by this controller
-			hasTXTRecord := false
-			for _, txtRecord := range existedTXTRecords {
-				if txtRecord.Name == txtRecordName {
-					hasTXTRecord = true
-					break
-				}
-			}
+			hasTXTRecord, _ := dnsRecordsContainsHostname(existedTXTRecords, txtRecordName)
 			if !hasTXTRecord {
 				logger.Info("WARNING: overriding DNS record not managed by this controller",
 					"hostname", item.Hostname,
@@ -160,23 +149,16 @@ func syncDNSRecord(
 		}
 
 		// Check if there's a corresponding TXT record managed by this tunnel
-		txtRecordName := fmt.Sprintf("%s.%s", ManagedRecordTXTPrefix, cnameRecord.Name)
-		var matchingTXTRecord *cloudflare.DNSRecord
-		for _, txtRecord := range existedTXTRecords {
-			txtRecord := txtRecord
-			if txtRecord.Name == txtRecordName && txtRecord.Content == expectedTXTContent {
-				matchingTXTRecord = &txtRecord
-				break
-			}
-		}
+		txtRecordName := managedTXTRecordName(cnameRecord.Name)
+		hasMatchingTXT, matchingTXTRecord := findMatchingTXTRecord(existedTXTRecords, txtRecordName, expectedTXTContent)
 
 		// Only delete if we have a matching TXT record (proves ownership)
-		if matchingTXTRecord != nil {
+		if hasMatchingTXT {
 			toDelete = append(toDelete, DNSOperationDelete{
 				OldRecord: cnameRecord,
 			})
 			toDelete = append(toDelete, DNSOperationDelete{
-				OldRecord: *matchingTXTRecord,
+				OldRecord: matchingTXTRecord,
 			})
 		}
 	}
@@ -195,12 +177,7 @@ func migrateLegacyDNSRecords(
 	existedTXTRecords []cloudflare.DNSRecord,
 	tunnelName string,
 ) ([]DNSOperationDelete, error) {
-	var effectiveExposures []exposure.Exposure
-	for _, item := range exposures {
-		if !item.IsDeleted {
-			effectiveExposures = append(effectiveExposures, item)
-		}
-	}
+	effectiveExposures := exposure.Active(exposures)
 
 	legacyComment := renderLegacyComment(tunnelName)
 	expectedTXTContent, err := renderTXTContent(tunnelName)
@@ -217,14 +194,8 @@ func migrateLegacyDNSRecords(
 		}
 
 		// Skip records already tracked by TXT (handled by syncDNSRecord)
-		txtRecordName := fmt.Sprintf("%s.%s", ManagedRecordTXTPrefix, cnameRecord.Name)
-		hasTXTRecord := false
-		for _, txtRecord := range existedTXTRecords {
-			if txtRecord.Name == txtRecordName && txtRecord.Content == expectedTXTContent {
-				hasTXTRecord = true
-				break
-			}
-		}
+		txtRecordName := managedTXTRecordName(cnameRecord.Name)
+		hasTXTRecord, _ := findMatchingTXTRecord(existedTXTRecords, txtRecordName, expectedTXTContent)
 		if hasTXTRecord {
 			continue
 		}
@@ -247,6 +218,23 @@ func dnsRecordsContainsHostname(records []cloudflare.DNSRecord, hostname string)
 	for _, item := range records {
 		if item.Name == hostname {
 			return true, item
+		}
+	}
+	return false, cloudflare.DNSRecord{}
+}
+
+// managedTXTRecordName returns the name of the ownership TXT record that tracks
+// the given hostname, e.g. "_ctic_managed.dash.strrl.cloud".
+func managedTXTRecordName(hostname string) string {
+	return fmt.Sprintf("%s.%s", ManagedRecordTXTPrefix, hostname)
+}
+
+// findMatchingTXTRecord returns the TXT record matching both name and content,
+// used to prove this controller/tunnel owns the corresponding CNAME record.
+func findMatchingTXTRecord(records []cloudflare.DNSRecord, name string, content string) (bool, cloudflare.DNSRecord) {
+	for _, record := range records {
+		if record.Name == name && record.Content == content {
+			return true, record
 		}
 	}
 	return false, cloudflare.DNSRecord{}
