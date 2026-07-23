@@ -6,24 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a Kubernetes Ingress Controller that integrates with Cloudflare Tunnel to expose Kubernetes services to the internet securely without requiring port forwarding or firewall configuration. It watches Kubernetes Ingress resources and automatically configures Cloudflare Tunnels to route traffic to the corresponding services.
 
-## Key Architecture Components
+For the data flow, DNS ownership model, and connector reconciliation design, see the [architecture explanation](https://tunnel.strrl.dev/explanation/architecture/).
 
-### Core Controllers
-- **IngressController** (`pkg/controller/ingress-controller.go`): Main reconciler that watches Ingress resources and manages tunnel configurations
-- **TunnelClient** (`pkg/cloudflare-controller/tunnel-client.go`): Handles Cloudflare API interactions for tunnel configuration and DNS management
-- **ControlledCloudflaredConnector** (`pkg/controller/controlled-cloudflared-connector.go`): Manages cloudflared daemon deployment in Kubernetes
+## Architecture Orientation
 
-### Data Flow
-1. Ingress resources are created with `ingressClassName: cloudflare-tunnel` or the annotation `kubernetes.io/ingress.class: cloudflare-tunnel`
-2. IngressController reconciles changes and transforms Ingress specs into Exposure objects (`pkg/exposure/exposure.go`)
-3. TunnelClient updates Cloudflare tunnel ingress rules and creates/updates DNS CNAME records pointing to the tunnel domain
-4. ControlledCloudflaredConnector runs every 10 seconds to ensure cloudflared pods are deployed and up-to-date
-5. Cloudflared connects to Cloudflare and maintains the tunnel, routing traffic based on the configured ingress rules
-
-### Key Packages
-- `pkg/controller/`: Kubernetes controllers and reconciliation logic
-- `pkg/cloudflare-controller/`: Cloudflare API client and tunnel management
-- `pkg/exposure/`: Data structures for representing service exposures
+- **IngressController** (`pkg/controller/ingress-controller.go`): Reconciles controlled Kubernetes Ingress resources
+- **Ingress transformation** (`pkg/controller/transform.go`): Converts Ingress rules and Services into Exposure objects
+- **Exposure** (`pkg/exposure/exposure.go`): Internal representation shared between Kubernetes and Cloudflare logic
+- **TunnelClient** (`pkg/cloudflare-controller/tunnel-client.go`): Reconciles tunnel ingress rules and DNS records through the Cloudflare API
+- **DNS ownership** (`pkg/cloudflare-controller/dns.go`): Plans CNAME and ownership TXT record changes
+- **ControlledCloudflaredConnector** (`pkg/controller/controlled-cloudflared-connector.go`): Reconciles the managed cloudflared Secret and Deployment
 
 ## Development Commands
 
