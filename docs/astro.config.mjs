@@ -13,6 +13,13 @@ export default defineConfig({
     starlight({
       title: "Cloudflare Tunnel Ingress Controller",
       customCss: ["./src/styles/custom.css"],
+      components: {
+        Footer: "./src/components/Footer.astro",
+      },
+      editLink: {
+        baseUrl:
+          "https://github.com/STRRL/cloudflare-tunnel-ingress-controller/edit/master/docs/",
+      },
       plugins: [
         starlightBlog({
           title: "Development Blog",
@@ -38,12 +45,64 @@ export default defineConfig({
       ],
       sidebar: [
         {
-          label: "Guides",
+          label: "Tutorials",
           items: [{ label: "Quickstart", slug: "guides/quickstart" }],
         },
         {
+          label: "How-to Guides",
+          items: [
+            { label: "Overview", slug: "how-to" },
+            {
+              label: "Expose Non HTTP Services",
+              slug: "how-to/expose-non-http-services",
+            },
+            {
+              label: "Use an External DNS System",
+              slug: "how-to/use-with-external-dns",
+            },
+            {
+              label: "Configure High Availability",
+              slug: "how-to/high-availability",
+            },
+            {
+              label: "Monitor the Controller and cloudflared",
+              slug: "how-to/monitoring",
+            },
+            {
+              label: "Rotate Cloudflare Credentials",
+              slug: "how-to/rotate-cloudflare-credentials",
+            },
+            { label: "Troubleshooting", slug: "guides/troubleshooting" },
+          ],
+        },
+        {
           label: "Reference",
-          autogenerate: { directory: "reference" },
+          items: [
+            {
+              label: "Controller Configuration",
+              slug: "reference/controller-configuration",
+            },
+            { label: "Helm Values", slug: "reference/helm-values" },
+            { label: "Ingress Class", slug: "reference/ingress-class" },
+            { label: "Ingress", slug: "reference/ingress" },
+            {
+              label: "Ingress Annotations",
+              slug: "reference/ingress-annotations",
+            },
+            {
+              label: "Cloudflare Credentials",
+              slug: "reference/cloudflare-credentials",
+            },
+          ],
+        },
+        {
+          label: "Explanation",
+          items: [
+            {
+              label: "Architecture",
+              slug: "explanation/architecture",
+            },
+          ],
         },
       ],
       head: [

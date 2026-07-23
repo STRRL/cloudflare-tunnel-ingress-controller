@@ -1,0 +1,27 @@
+name: Missing docs or how to request
+description: Request documentation for a task that is not currently covered.
+title: "[Docs]: "
+labels:
+  - documentation
+body:
+  - type: textarea
+    id: task
+    attributes:
+      label: What task are you trying to accomplish?
+      description: Tell us what you want to do and what outcome you expect.
+    validations:
+      required: true
+  - type: textarea
+    id: docs-searched
+    attributes:
+      label: Where did you look in the docs?
+      description: Share any pages or sections you already checked.
+    validations:
+      required: false
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Anything else?
+      description: Add any context that could help us understand the request.
+    validations:
+      required: false

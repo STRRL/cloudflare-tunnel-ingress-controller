@@ -1,0 +1,29 @@
+---
+import Default from "@astrojs/starlight/components/Footer.astro";
+
+const docsRequestUrl =
+  "https://github.com/STRRL/cloudflare-tunnel-ingress-controller/issues/new?template=docs-request.yml";
+---
+
+<Default><slot /></Default>
+
+<p class="docs-feedback">
+  <a href={docsRequestUrl}>Missing something in the docs? Open an issue</a>
+</p>
+
+<style>
+  .docs-feedback {
+    margin: 1rem auto 0;
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-sm);
+    text-align: center;
+  }
+
+  .docs-feedback a {
+    color: inherit;
+  }
+
+  .docs-feedback a:hover {
+    color: var(--sl-color-text-accent);
+  }
+</style>
