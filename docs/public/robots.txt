@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tunnel.strrl.dev/sitemap-index.xml
