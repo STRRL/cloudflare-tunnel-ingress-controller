@@ -6,7 +6,7 @@ We'd love to hear how the project works for you—please take a minute to fill o
 
 ## Prerequisites
 
-To use the Cloudflare Tunnel Ingress Controller, you need to have a Cloudflare account and a domain configured on Cloudflare. You also need to create a Cloudflare API token with the following permissions: `Zone:Zone:Read`, `Zone:DNS:Edit`, and `Account:Cloudflare Tunnel:Edit`.
+To use the Cloudflare Tunnel Ingress Controller, you need to have a Cloudflare account and a domain configured on Cloudflare. You also need a Cloudflare API token with `Zone:Zone:Read`, `Zone:DNS:Edit`, and `Account:Cloudflare Tunnel:Edit` permissions, which you can create quickly using [this template](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22argotunnel%22%2C%22type%22%3A%22edit%22%7D%5D&name=Cloudflare%20Tunnel%20Ingress%20Controller&accountId=*&zoneId=all); see [Cloudflare credentials](https://tunnel.strrl.dev/reference/cloudflare-credentials/) for details.
 
 Additionally, you need to fetch the Account ID from the Cloudflare dashboard.
 
@@ -18,92 +18,25 @@ Take a look on this video to see how smoothly and easily it works:
 
 [![Less than 4 minutes! Bootstrap a Kubernetes Cluster and Expose Kubernetes Dashboard to the Internet.](https://markdown-videos.vercel.app/youtube/e-ARlEnS4zQ)](http://www.youtube.com/watch?v=e-ARlEnS4zQ "Less than 4 minutes! Bootstrap a Kubernetes Cluster and Expose Kubernetes Dashboard to the Internet.")
 
-Want to DIY? The following instructions would help your bootstrap a minikube Kubernetes Cluster, then expose the Kubernetes Dashboard to the internet via Cloudflare Tunnel Ingress Controller.
-
-- Step 0: You should have a Cloudflare account and a domain configured on Cloudflare.
-- Step 1: Create a Cloudflare API token with the following:
-  - `Zone:Zone:Read`
-  - `Zone:DNS:Edit`
-  - `Account:Cloudflare Tunnel:Edit`
-
-You can copy the following template URL to create the API token with the required permissions directly:
-
-```text
-https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=[{"key":"zone","type":"read"},{"key":"dns","type":"edit"},{"key":"argotunnel","type":"edit"}]&name=Cloudflare%20Tunnel%20Ingress%20Controller&accountId=*&zoneId=all
-```
-
-- Step 2: Fetch the Account ID from the Cloudflare dashboard, follow the instructions from [this cloudflare developer doc](https://developers.cloudflare.com/fundamentals/get-started/basic-tasks/find-account-and-zone-ids/).
-- Step 3: Bootstrap a minikube cluster
-
-```bash
-minikube start
-```
-
-- Add Helm Repository;
-
-```bash
-helm repo add strrl.dev https://helm.strrl.dev
-helm repo update
-```
-
-- Step 4: Install cloudflare-tunnel-ingress-controller with Helm:
+Install the controller with Helm:
 
 ```bash
 helm upgrade --install --wait \
-  -n cloudflare-tunnel-ingress-controller --create-namespace \
   cloudflare-tunnel-ingress-controller \
-  strrl.dev/cloudflare-tunnel-ingress-controller \
-  --set=cloudflare.apiToken="<cloudflare-api-token>",cloudflare.accountId="<cloudflare-account-id>",cloudflare.tunnelName="<your-favorite-tunnel-name>" 
+  cloudflare-tunnel-ingress-controller \
+  --repo https://helm.strrl.dev \
+  --namespace cloudflare-tunnel-ingress-controller \
+  --create-namespace \
+  --set cloudflare.apiToken="<CLOUDFLARE_API_TOKEN>" \
+  --set cloudflare.accountId="<CLOUDFLARE_ACCOUNT_ID>" \
+  --set cloudflare.tunnelName="<TUNNEL_NAME>"
 ```
 
-> if the tunnel does not exist, controller will create it for you.
-
-- Step 5: Then enable some awesome features in minikube, like kubernetes-dashboard:
-
-```bash
-minikube addons enable dashboard
-minikube addons enable metrics-server
-```
-
-- Then expose the dashboard to the internet by creating an `Ingress`:
-
-```bash
-kubectl -n kubernetes-dashboard \
-  create ingress dashboard-via-cf-tunnel \
-  --rule="<your-favorite-domain>/*=kubernetes-dashboard:80"\
-  --class cloudflare-tunnel
-```
-
-> for example, I would use `dash.strrl.cloud` as my favorite domain here.
-
-- Step 6: At last, access the dashboard via the domain you just created:
-
-![dash.strrl.cloud](./static/dash.strrl.cloud.png)
-
-- Done! Enjoy! 🎉
+Follow the [quickstart](https://tunnel.strrl.dev/guides/quickstart/) to publish your first Ingress.
 
 ## Configuration
 
-The controller reads configuration from CLI flags and environment variables, with precedence: CLI flags > environment variables > built in defaults. Every flag maps to an environment variable by uppercasing the flag name and replacing `-` with `_`. This is handy for local debugging with an `.env` file, since flags and environment variables share a single config loading path.
-
-| Flag | Environment variable | Default |
-| --- | --- | --- |
-| `--cloudflare-api-token` | `CLOUDFLARE_API_TOKEN` | (required) |
-| `--cloudflare-account-id` | `CLOUDFLARE_ACCOUNT_ID` | (required) |
-| `--cloudflare-tunnel-name` | `CLOUDFLARE_TUNNEL_NAME` | (required) |
-| `--ingress-class` | `INGRESS_CLASS` | `cloudflare-tunnel` |
-| `--controller-class` | `CONTROLLER_CLASS` | `strrl.dev/cloudflare-tunnel-ingress-controller` |
-| `--log-level` | `LOG_LEVEL` | `0` |
-| `--namespace` | `NAMESPACE` | `default` |
-| `--cloudflared-protocol` | `CLOUDFLARED_PROTOCOL` | `auto` |
-| `--cloudflared-extra-args` | `CLOUDFLARED_EXTRA_ARGS` | (empty) |
-| `--cloudflared-image` | `CLOUDFLARED_IMAGE` | `cloudflare/cloudflared:latest` |
-| `--cloudflared-image-pull-policy` | `CLOUDFLARED_IMAGE_PULL_POLICY` | `IfNotPresent` |
-| `--cloudflared-replica-count` | `CLOUDFLARED_REPLICA_COUNT` | `1` |
-| `--cloudflared-deployment-config` | `CLOUDFLARED_DEPLOYMENT_CONFIG` | (empty) |
-| `--cluster-domain` | `CLUSTER_DOMAIN` | `cluster.local` |
-| `--leader-elect` | `LEADER_ELECT` | `false` |
-| `--dns-comment-template` | `DNS_COMMENT_TEMPLATE` | `managed by cloudflare-tunnel-ingress-controller, tunnel [{{.TunnelName}}]` |
+The controller supports CLI flags and matching environment variables. See [controller configuration](https://tunnel.strrl.dev/reference/controller-configuration/) for the complete list and defaults.
 
 ## Alternative
 
