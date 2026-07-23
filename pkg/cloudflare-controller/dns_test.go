@@ -624,13 +624,16 @@ func Test_migrateLegacyDNSRecords(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotDelete := migrateLegacyDNSRecords(
+			gotDelete, err := migrateLegacyDNSRecords(
 				tt.args.logger,
 				tt.args.exposures,
 				tt.args.existedCNAMERecords,
 				tt.args.existedTXTRecords,
 				tt.args.tunnelName,
 			)
+			if err != nil {
+				t.Errorf("migrateLegacyDNSRecords() unexpected error: %v", err)
+			}
 			if !reflect.DeepEqual(gotDelete, tt.wantDelete) {
 				t.Errorf("migrateLegacyDNSRecords() = %v, want %v", gotDelete, tt.wantDelete)
 			}
@@ -639,7 +642,10 @@ func Test_migrateLegacyDNSRecords(t *testing.T) {
 }
 
 func Test_renderTXTContent(t *testing.T) {
-	result := renderTXTContent("my-tunnel")
+	result, err := renderTXTContent("my-tunnel")
+	if err != nil {
+		t.Fatalf("renderTXTContent() unexpected error: %v", err)
+	}
 	expected := `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"my-tunnel"}`
 	if result != expected {
 		t.Errorf("renderTXTContent() = %v, want %v", result, expected)

@@ -8,6 +8,7 @@ import (
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 )
 
 const ManagedRecordTXTPrefix = "_ctic_managed"
@@ -67,7 +68,10 @@ func syncDNSRecord(
 	var toUpdate []DNSOperationUpdate
 	var toDelete []DNSOperationDelete
 
-	expectedTXTContent := renderTXTContent(tunnelName)
+	expectedTXTContent, err := renderTXTContent(tunnelName)
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "render managed record TXT content")
+	}
 
 	// Create or update CNAME/TXT records for active exposures
 	for _, item := range effectiveExposures {
@@ -190,7 +194,7 @@ func migrateLegacyDNSRecords(
 	existedCNAMERecords []cloudflare.DNSRecord,
 	existedTXTRecords []cloudflare.DNSRecord,
 	tunnelName string,
-) []DNSOperationDelete {
+) ([]DNSOperationDelete, error) {
 	var effectiveExposures []exposure.Exposure
 	for _, item := range exposures {
 		if !item.IsDeleted {
@@ -199,7 +203,10 @@ func migrateLegacyDNSRecords(
 	}
 
 	legacyComment := renderLegacyComment(tunnelName)
-	expectedTXTContent := renderTXTContent(tunnelName)
+	expectedTXTContent, err := renderTXTContent(tunnelName)
+	if err != nil {
+		return nil, errors.Wrap(err, "render managed record TXT content")
+	}
 
 	var toDelete []DNSOperationDelete
 	for _, cnameRecord := range existedCNAMERecords {
@@ -233,7 +240,7 @@ func migrateLegacyDNSRecords(
 		}
 	}
 
-	return toDelete
+	return toDelete, nil
 }
 
 func dnsRecordsContainsHostname(records []cloudflare.DNSRecord, hostname string) (bool, cloudflare.DNSRecord) {
@@ -264,13 +271,16 @@ func renderLegacyComment(tunnelName string) string {
 	return fmt.Sprintf(LegacyCommentFormat, tunnelName)
 }
 
-func renderTXTContent(tunnelName string) string {
+func renderTXTContent(tunnelName string) (string, error) {
 	content := ManagedRecordTXTContent{
 		Controller: ControllerIdentifier,
 		Tunnel:     tunnelName,
 	}
-	jsonBytes, _ := json.Marshal(content)
-	return string(jsonBytes)
+	jsonBytes, err := json.Marshal(content)
+	if err != nil {
+		return "", errors.Wrap(err, "marshal managed record TXT content")
+	}
+	return string(jsonBytes), nil
 }
 
 func parseTXTContent(content string) (*ManagedRecordTXTContent, error) {
