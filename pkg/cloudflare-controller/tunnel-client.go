@@ -236,15 +236,11 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 			Proxied: cloudflare.BoolPtr(item.Type == "CNAME"),
 			TTL:     1,
 		}
-		// Add comment to CNAME records if template is configured.
-		// Comments are informational only; ownership is tracked via TXT records.
+		// Add comment to every managed record if template is configured.
+		// Comments are informational only; ownership is tracked via TXT record content.
 		// See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/
-		if item.Type == "CNAME" {
-			if comment := t.renderDNSComment(item.Hostname); comment != "" {
-				params.Comment = comment
-			}
-		} else if item.Type == "TXT" {
-			params.Comment = managedTXTRecordComment
+		if comment := t.renderDNSComment(item.Hostname); comment != "" {
+			params.Comment = comment
 		}
 		_, err := t.cfClient.CreateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), params)
 		if err != nil {
@@ -262,13 +258,8 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 			Proxied: cloudflare.BoolPtr(item.Type == "CNAME"),
 			TTL:     1,
 		}
-		// Add comment to CNAME records if template is configured.
-		if item.Type == "CNAME" {
-			if comment := t.renderDNSComment(item.OldRecord.Name); comment != "" {
-				params.Comment = &comment
-			}
-		} else if item.Type == "TXT" {
-			comment := managedTXTRecordComment
+		// Add comment to every managed record if template is configured.
+		if comment := t.renderDNSComment(item.OldRecord.Name); comment != "" {
 			params.Comment = &comment
 		}
 		_, err := t.cfClient.UpdateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), params)
