@@ -2,6 +2,8 @@ module github.com/STRRL/cloudflare-tunnel-ingress-controller
 
 go 1.26.0
 
+toolchain go1.26.5
+
 require (
 	github.com/chromedp/chromedp v0.16.0
 	github.com/cloudflare/cloudflare-go v0.117.0
@@ -41,7 +43,7 @@ require (
 	github.com/go-openapi/jsonreference v0.20.2 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
-	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
+	github.com/go-viper/mapstructure/v2 v2.3.0 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.4.0 // indirect
