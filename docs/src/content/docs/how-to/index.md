@@ -3,6 +3,10 @@ title: How To Guides
 description: Complete common operational tasks with a running Cloudflare Tunnel Ingress Controller.
 ---
 
+:::tip[Can't find the how-to you need?]
+The how-to quadrant is driven by real user tasks. [Tell us what you are trying to do](https://github.com/STRRL/cloudflare-tunnel-ingress-controller/issues/new?template=docs-request.yml).
+:::
+
 Use these guides after the controller and its managed `cloudflared` connectors are running.
 
 1. [Expose non HTTP services](/how-to/expose-non-http-services/): Publish TCP, SSH, RDP, and other supported service protocols.
