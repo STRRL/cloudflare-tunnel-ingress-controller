@@ -1,0 +1,37 @@
+{
+  "name": "tunnel.strrl.dev",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm lint:fix && pnpm format"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.36.1",
+    "astro": "^5.6.1",
+    "astro-og-canvas": "^0.7.2",
+    "canvaskit-wasm": "^0.40.0",
+    "sharp": "^0.34.2",
+    "starlight-blog": "^0.24.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.38.0",
+    "@typescript-eslint/eslint-plugin": "^8.46.2",
+    "@typescript-eslint/parser": "^8.46.2",
+    "astro-eslint-parser": "^1.2.2",
+    "eslint": "^9.38.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-astro": "^1.4.0",
+    "prettier": "^3.6.2",
+    "prettier-plugin-astro": "^0.14.1",
+    "typescript-eslint": "^8.46.2"
+  }
+}

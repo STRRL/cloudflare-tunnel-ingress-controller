@@ -1,0 +1,7 @@
+{
+  "name": "tunnel-strrl-dev",
+  "compatibility_date": "2025-10-28",
+  "assets": {
+    "directory": "./dist",
+  },
+}

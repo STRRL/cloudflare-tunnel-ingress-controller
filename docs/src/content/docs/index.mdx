@@ -1,0 +1,50 @@
+---
+title: Cloudflare Tunnel Ingress Controller
+description: Publish services through Cloudflare Tunnel using native Kubernetes Ingress resources.
+template: splash # Remove or comment out this line to display the site sidebar on this page.
+hero:
+  tagline: Expose Kubernetes services through Cloudflare Tunnel with native Ingress.
+  text: The controller maps standard Kubernetes Ingress objects that use the `cloudflare-tunnel` class into Cloudflare Argo tunnels and DNS records—no extra CRDs required.
+  actions:
+    - text: Quickstart
+      link: /guides/quickstart/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/strrl/cloudflare-tunnel-ingress-controller
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+
+## What Is the Controller?
+
+The Cloudflare Tunnel Ingress Controller watches Kubernetes `Ingress` objects and the associated `IngressClass`. When it sees routes assigned to the `cloudflare-tunnel` class, it provisions Cloudflare tunnels, starts `cloudflared` connectors, and publishes DNS records so traffic reaches the target Service securely.
+
+### Key capabilities
+
+- Use existing Kubernetes `Ingress` resources—no custom API types to learn.
+- Automate tunnel creation, DNS record management, and `cloudflared` connector rollout.
+- Provide credentials through the bundled `cloudflare-api` secret or your own secret reference.
+- Observe controller activity via Kubernetes events, logs, and metrics endpoints.
+
+## Where to Start
+
+<CardGrid stagger>
+  <Card title="Follow the Quickstart" icon="rocket">
+    Install the Helm chart, supply Cloudflare credentials, and publish your
+    first Ingress-backed route.
+  </Card>
+  <Card title="Review Configuration" icon="setting">
+    Understand ingress class behaviour, secret formats, and Helm values before
+    rolling into production.
+  </Card>
+  <Card title="Plan Operations" icon="status">
+    Adopt GitOps workflows, monitor connector health, and manage DNS lifecycles
+    safely.
+  </Card>
+</CardGrid>
+
+## Join the community
+
+Issues and pull requests are welcome in the [GitHub repository](https://github.com/strrl/cloudflare-tunnel-ingress-controller). For ideas and questions, start a discussion or open an issue so we can help you get tunnels online safely.
