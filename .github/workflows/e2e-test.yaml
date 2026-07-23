@@ -10,22 +10,45 @@ on:
   pull_request:
     branches:
       - "master"
-    paths-ignore:
-      - "docs/**"
 
 permissions: read-all
 
-# All e2e runs share one Cloudflare tunnel and zone. Two controllers running
-# at once treat each other's records as orphans and delete them in a loop,
-# so runs must be strictly serialized.
-concurrency:
-  group: e2e-shared-cloudflare-tunnel
-  cancel-in-progress: false
-
 jobs:
+  # The e2e-test job below is a required status check on master. Skipping the
+  # whole workflow via paths-ignore leaves the required check missing forever
+  # and blocks docs-only pull requests, so the workflow always runs and this
+  # job decides whether the e2e job itself runs. A skipped required job counts
+  # as satisfied.
+  changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      non_docs: ${{ steps.filter.outputs.non_docs }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect non-docs changes
+        id: filter
+        run: |
+          if git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -v '^docs/' | grep -q .; then
+            echo "non_docs=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "non_docs=false" >> "$GITHUB_OUTPUT"
+          fi
+
   e2e-test:
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || (needs.changes.result == 'success' && needs.changes.outputs.non_docs == 'true')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # All e2e runs share one Cloudflare tunnel and zone. Two controllers running
+    # at once treat each other's records as orphans and delete them in a loop,
+    # so runs must be strictly serialized.
+    concurrency:
+      group: e2e-shared-cloudflare-tunnel
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
 
