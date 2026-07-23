@@ -16,9 +16,12 @@
   },
   "dependencies": {
     "@astrojs/starlight": "^0.36.1",
+    "@mermaid-js/layout-elk": "^0.2.2",
     "astro": "^5.6.1",
+    "astro-mermaid": "^2.0.1",
     "astro-og-canvas": "^0.7.2",
     "canvaskit-wasm": "^0.40.0",
+    "mermaid": "^11.16.0",
     "sharp": "^0.34.2",
     "starlight-blog": "^0.24.3"
   },

@@ -11,36 +11,42 @@ Traffic does not pass through the controller itself. The controller manages conf
 
 `IngressController` watches Kubernetes Ingress resources and selects those assigned to its Ingress class. When one changes, the controller reads all controlled Ingress resources again. This full view matters because the Cloudflare tunnel configuration is one ordered list of ingress rules, rather than one independent object per Kubernetes Ingress.
 
-Each host and path is transformed into an `Exposure`. An Exposure is the internal boundary between Kubernetes and Cloudflare. It contains the public hostname, path prefix, and a Service target such as `http://my-service.default.svc.cluster.local:8080`. It also carries origin options derived from annotations.
+```mermaid
+flowchart LR
+    Ingress["Kubernetes Ingress"] -->|"watched by"| Controller["IngressController"]
+    Controller -->|"transforms host, path, and Service"| Exposure["Exposure"]
+    Exposure --> TunnelClient["TunnelClient"]
+    TunnelClient -->|"updates"| Rules["Cloudflare tunnel ingress rules"]
 
-`TunnelClient` turns the active Exposures into Cloudflare tunnel ingress rules. It orders specific hostnames before wildcard hostnames and longer paths before shorter paths, then adds a final rule that returns HTTP 404. If the resulting rule list differs from the current remote tunnel configuration, the client updates Cloudflare.
-
-This produces two related flows:
-
-```text
-Configuration:
-Ingress -> IngressController -> Exposure -> TunnelClient -> Cloudflare tunnel rules
-
-Traffic:
-Client -> Cloudflare edge -> tunnel -> cloudflared -> Kubernetes Service
+    Client["Public client"] --> Edge["Cloudflare edge"]
+    Edge -->|"tunnel connection"| Cloudflared["cloudflared"]
+    Rules -.->|"selects Service target"| Cloudflared
+    Cloudflared -->|"routes request"| Service["Kubernetes Service"]
 ```
 
-The separation is intentional. Ingress reconciliation can update routes without placing the controller in the request path. `cloudflared` maintains outbound tunnel connections to Cloudflare and forwards each request to the Service target selected by the matching tunnel rule.
+An `Exposure` is the internal boundary between Kubernetes and Cloudflare. It holds the public hostname, path prefix, Service target, and origin options. `TunnelClient` turns active Exposures into an ordered rule list, with specific hostnames before wildcards, longer paths before shorter paths, and a final HTTP 404 rule.
+
+The controller stays outside the request path. It writes configuration, while `cloudflared` maintains outbound tunnel connections and forwards public traffic to the Service selected by the matching rule.
 
 See the [Ingress reference](/reference/ingress/) for supported route behavior and validation rules.
 
 ## DNS and ownership
 
-For each active hostname, the controller normally manages two Cloudflare DNS records:
+```mermaid
+flowchart TB
+    Enabled["DNS management enabled"] --> CNAME["Proxied CNAME<br/>app.example.com"]
+    CNAME -->|"points to"| TunnelDomain["Tunnel domain<br/>tunnel-id.cfargotunnel.com"]
+    Enabled --> TXT["Ownership TXT<br/>_ctic_managed.app.example.com"]
+    TXT -.->|"proves this controller and tunnel own the CNAME"| CNAME
 
-* A proxied CNAME from the public hostname to `<tunnel-id>.cfargotunnel.com`
-* A TXT record named `_ctic_managed.<hostname>` that identifies this controller and tunnel
+    Disabled["disable-dns-management = true"] --> Rule["Tunnel ingress rule remains"]
+    Disabled --> External["External system manages DNS"]
+    Disabled --> Relinquish["Controller removes its ownership TXT<br/>and removes the CNAME only if it still points to this tunnel"]
+```
 
-The CNAME sends public traffic toward the tunnel. The TXT record records ownership. Ownership lets the controller remove records when an Exposure disappears without treating every CNAME in the zone as its own. A matching ownership record is required before normal cleanup deletes a CNAME.
+The CNAME sends public traffic toward `<tunnel-id>.cfargotunnel.com`. The TXT record gives cleanup a safe ownership boundary, so a matching ownership record is required before normal reconciliation deletes a CNAME.
 
-The `disable-dns-management` annotation changes only the DNS side of reconciliation. The Exposure still becomes a tunnel ingress rule, but the controller stops creating or updating its CNAME and ownership TXT records. This allows another system, such as external-dns or a Cloudflare Load Balancer, to manage how the hostname reaches the tunnel. It also allows the hostname to live outside the Cloudflare zones visible to the controller.
-
-If DNS was previously managed by this controller, enabling the annotation relinquishes that ownership. The controller removes its TXT record. It removes the CNAME only when the record still points to this tunnel, preserving a CNAME that another system has already repointed.
+With `disable-dns-management: "true"`, only DNS responsibility changes. The Exposure still becomes a tunnel rule, but the controller stops creating or updating DNS records and permits hostnames outside its visible Cloudflare zones. When relinquishing records it previously managed, it preserves any CNAME another system has already repointed.
 
 See the [Ingress annotations reference](/reference/ingress-annotations/) for annotation syntax and related origin settings.
 
