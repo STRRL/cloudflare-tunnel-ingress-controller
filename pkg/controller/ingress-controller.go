@@ -86,7 +86,7 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 		// best effort to extract exposures from all ingresses
 		exposures, err := FromIngressToExposure(ctx, i.logger, i.kubeClient, i.recorder, ingress, i.clusterDomain)
 		if err != nil {
-			i.logger.Info("extract exposures from ingress, skipped", "triggered-by", request.NamespacedName, "ingress", fmt.Sprintf("%s/%s", ingress.Namespace, ingress.Name), "error", err)
+			i.logger.Error(err, "extract exposures from ingress, skipped", "triggered-by", request.NamespacedName, "ingress", fmt.Sprintf("%s/%s", ingress.Namespace, ingress.Name))
 			i.recorder.Event(&ingress, v1.EventTypeWarning, EventReasonTransformFailed, err.Error())
 		}
 		allExposures = append(allExposures, exposures...)

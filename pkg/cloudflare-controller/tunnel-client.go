@@ -192,7 +192,7 @@ func (t *TunnelClient) updateDNSCNAMERecord(ctx context.Context, exposures []exp
 		}
 		err := t.updateDNSCNAMERecordForZone(ctx, items, zone)
 		if err != nil {
-			return errors.Wrapf(err, "update DNS CNAME record for zone %s", zoneNames)
+			return errors.Wrapf(err, "update DNS CNAME record for zone %s", zoneName)
 		}
 	}
 	return nil
@@ -273,7 +273,10 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 	}
 
 	// Migrate legacy comment-based records (separate from normal sync)
-	legacyDeletes := migrateLegacyDNSRecords(t.logger, exposures, cnameDnsRecords, txtDnsRecords, t.tunnelName)
+	legacyDeletes, err := migrateLegacyDNSRecords(t.logger, exposures, cnameDnsRecords, txtDnsRecords, t.tunnelName)
+	if err != nil {
+		return errors.Wrap(err, "migrate legacy DNS records")
+	}
 	toDelete = append(toDelete, legacyDeletes...)
 
 	for _, item := range toDelete {
