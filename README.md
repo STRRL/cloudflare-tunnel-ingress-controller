@@ -6,7 +6,7 @@ We'd love to hear how the project works for you—please take a minute to fill o
 
 ## Prerequisites
 
-To use the Cloudflare Tunnel Ingress Controller, you need to have a Cloudflare account and a domain configured on Cloudflare. You also need a Cloudflare API token with `Zone:Zone:Read`, `Zone:DNS:Edit`, and `Account:Cloudflare Tunnel:Edit` permissions, as described in [Cloudflare credentials](https://tunnel.strrl.dev/reference/cloudflare-credentials/).
+To use the Cloudflare Tunnel Ingress Controller, you need to have a Cloudflare account and a domain configured on Cloudflare. You also need a Cloudflare API token with `Zone:Zone:Read`, `Zone:DNS:Edit`, and `Account:Cloudflare Tunnel:Edit` permissions, which you can create quickly using [this template](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22argotunnel%22%2C%22type%22%3A%22edit%22%7D%5D&name=Cloudflare%20Tunnel%20Ingress%20Controller&accountId=*&zoneId=all); see [Cloudflare credentials](https://tunnel.strrl.dev/reference/cloudflare-credentials/) for details.
 
 Additionally, you need to fetch the Account ID from the Cloudflare dashboard.
 
