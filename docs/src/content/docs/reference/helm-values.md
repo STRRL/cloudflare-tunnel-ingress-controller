@@ -16,6 +16,8 @@ For the complete and up-to-date list of all available Helm values, refer to the 
 | `ingressClass.name`                | `cloudflare-tunnel`                 | Rename if you run multiple controllers in one cluster.                          |
 | `ingressClass.isDefaultClass`      | `false`                             | Set to `true` only if Cloudflare Tunnel should handle every ingress by default. |
 | `cloudflared.image.tag`            | `latest`                            | Pin to a specific cloudflared version for reproducible environments.            |
+| `cloudflared.replicaCount`         | `1`                                 | Number of cloudflared connector pods maintaining the tunnel.                    |
+| `cloudflared.podAntiAffinity`      | `false`                             | Spread connector pods across nodes with a required anti-affinity. Needs at least as many schedulable nodes as replicas, otherwise the extra pods stay pending. Ignored when `cloudflared.affinity` is set. |
 | `cloudflared.extraArgs`            | `[]`                                | Append extra arguments such as `--post-quantum`.                                |
 | `cloudflaredServiceMonitor.create` | `false`                             | Enable when you scrape metrics with Prometheus Operator.                        |
 | `replicaCount`                     | `1`                                 | Scale the controller deployment (enable leader election for >1).                |

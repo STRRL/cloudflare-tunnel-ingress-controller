@@ -36,8 +36,8 @@ helm upgrade --install --wait \
   strrl.dev/cloudflare-tunnel-ingress-controller \
   --namespace cloudflare-tunnel-ingress-controller --create-namespace \
   --set cloudflare.apiToken="<CLOUDFLARE_API_TOKEN>" \
-         cloudflare.accountId="<CLOUDFLARE_ACCOUNT_ID>" \
-         cloudflare.tunnelName="<TUNNEL_NAME>"
+  --set cloudflare.accountId="<CLOUDFLARE_ACCOUNT_ID>" \
+  --set cloudflare.tunnelName="<TUNNEL_NAME>"
 ```
 
 Verify the controller pod and the bundled `cloudflared` connector are running:
