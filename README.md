@@ -14,6 +14,10 @@ Finally, you need to have a Kubernetes cluster with public Internet access.
 
 ## Get Started
 
+Take a look on this video to see how smoothly and easily it works:
+
+[![Less than 4 minutes! Bootstrap a Kubernetes Cluster and Expose Kubernetes Dashboard to the Internet.](https://markdown-videos.vercel.app/youtube/e-ARlEnS4zQ)](http://www.youtube.com/watch?v=e-ARlEnS4zQ "Less than 4 minutes! Bootstrap a Kubernetes Cluster and Expose Kubernetes Dashboard to the Internet.")
+
 Install the controller with Helm:
 
 ```bash
