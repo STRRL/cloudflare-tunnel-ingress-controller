@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import mermaid from "astro-mermaid";
 import starlightBlog from "starlight-blog";
 import starlightOGImages from "./src/routeData";
 
@@ -8,6 +9,7 @@ import starlightOGImages from "./src/routeData";
 export default defineConfig({
   site: "https://tunnel.strrl.dev",
   integrations: [
+    mermaid(),
     starlight({
       title: "Cloudflare Tunnel Ingress Controller",
       customCss: ["./src/styles/custom.css"],
