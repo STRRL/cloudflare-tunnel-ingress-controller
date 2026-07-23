@@ -20,6 +20,11 @@ type ManagedRecordTXTContent struct {
 
 const ControllerIdentifier = "strrl.dev/cloudflare-tunnel-ingress-controller"
 
+// managedTXTRecordComment is attached to ownership TXT records so they are
+// recognizable in the Cloudflare dashboard. Informational only, not used for
+// ownership checks.
+const managedTXTRecordComment = "managed by " + ControllerIdentifier
+
 // LegacyCommentFormat is the old comment-based ownership format.
 // Used for migration: records with this comment are recognized as managed by this controller.
 const LegacyCommentFormat = "managed by strrl.dev/cloudflare-tunnel-ingress-controller, tunnel [%s]"

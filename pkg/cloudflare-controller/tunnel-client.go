@@ -243,6 +243,8 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 			if comment := t.renderDNSComment(item.Hostname); comment != "" {
 				params.Comment = comment
 			}
+		} else if item.Type == "TXT" {
+			params.Comment = managedTXTRecordComment
 		}
 		_, err := t.cfClient.CreateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), params)
 		if err != nil {
@@ -265,6 +267,9 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 			if comment := t.renderDNSComment(item.OldRecord.Name); comment != "" {
 				params.Comment = &comment
 			}
+		} else if item.Type == "TXT" {
+			comment := managedTXTRecordComment
+			params.Comment = &comment
 		}
 		_, err := t.cfClient.UpdateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), params)
 		if err != nil {
