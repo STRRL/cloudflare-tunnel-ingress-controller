@@ -10,7 +10,7 @@ Use this guide to install the controller with Helm and publish a Kubernetes Serv
 - A Kubernetes cluster running version 1.26 or later with cluster-admin access.
 - `kubectl` and `helm` configured for the cluster.
 - A Cloudflare account with an active zone and Argo Tunnel access enabled.
-- A Cloudflare API token with `Account.Cloudflare Tunnel:Edit`, `Zone.DNS:Edit`, and `Zone.Zone:Read` permissions, created by following [Cloudflare credentials](/reference/cloudflare-credentials/).
+- A Cloudflare API token with `Account.Cloudflare Tunnel:Edit`, `Zone.DNS:Edit`, and `Zone.Zone:Read` permissions. Create it quickly using [this template](https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22argotunnel%22%2C%22type%22%3A%22edit%22%7D%5D&name=Cloudflare%20Tunnel%20Ingress%20Controller&accountId=*&zoneId=all), or see [Cloudflare credentials](/reference/cloudflare-credentials/) for details.
 - Your Cloudflare account ID.
 - A Service named `kubernetes-dashboard` in the `kubernetes-dashboard` namespace.
 
