@@ -19,29 +19,7 @@ Each ingress assigned to the `cloudflare-tunnel` class becomes a Cloudflare rout
 | `spec.rules[].http.paths[].backend.service.name` | Target Kubernetes Service name.                  |
 | `spec.rules[].http.paths[].backend.service.port` | Service port number or name to proxy.            |
 
-Example manifest:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: dashboard
-  namespace: kubernetes-dashboard
-  annotations:
-    kubernetes.io/ingress.class: cloudflare-tunnel
-spec:
-  rules:
-    - host: dash.example.com # <- REPLACE ME!
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: kubernetes-dashboard
-                port:
-                  number: 80
-```
+See the [Quickstart Ingress example](/guides/quickstart/#3-publish-a-service-with-ingress) for a complete dashboard manifest. Set `spec.ingressClassName` or the legacy `kubernetes.io/ingress.class` annotation to `cloudflare-tunnel`, then provide the host, backend Service, and port described above.
 
 Consult the [ingress annotations reference](/reference/ingress-annotations/) for advanced routing behaviour such as protocol overrides, TLS verification settings, and host header rewrites.
 
@@ -55,14 +33,6 @@ Hosts may use a leading wildcard label such as `*.example.com`. The controller c
 
 The order of rules inside your Ingress spec does not matter. The controller sorts them deterministically before writing the tunnel configuration.
 
-## Troubleshooting with events
+## Troubleshooting
 
-The Ingress API has no status conditions, so the controller reports problems as Warning events on the Ingress object. Check them with `kubectl describe ingress <name>`:
-
-| Reason            | Meaning                                                                                                          |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `RuleSkipped`     | A rule carries only a host and no `http` section, so it cannot be turned into a tunnel route.                    |
-| `TLSIgnored`      | The ingress has a `tls` section. SSL passthrough is not supported, Cloudflare terminates TLS at the edge.        |
-| `TransformFailed` | A rule could not be transformed, for example a headless Service, a missing Service, or an unsupported `pathType`. |
-
-Rules that fail to transform are skipped while the remaining rules still reconcile, so a single broken rule does not take down the other routes of the ingress.
+See the [troubleshooting guide](/guides/troubleshooting/) for Ingress warning events, log commands, and common DNS and tunnel problems.
