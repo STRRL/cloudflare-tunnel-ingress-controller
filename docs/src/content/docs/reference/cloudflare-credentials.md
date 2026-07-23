@@ -5,13 +5,30 @@ description: Provide the API token, account ID, and tunnel name required by the 
 
 The controller reads Cloudflare credentials from a Kubernetes secret named `cloudflare-api` in its namespace. The Helm chart can create this secret directly from the values you supply or consume an existing secret.
 
+## Create an API token
+
+1. Sign in to the Cloudflare dashboard.
+2. Open this token creation template:
+
+```text
+https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=[{"key":"zone","type":"read"},{"key":"dns","type":"edit"},{"key":"argotunnel","type":"edit"}]&name=Cloudflare%20Tunnel%20Ingress%20Controller&accountId=*&zoneId=all
+```
+
+3. Confirm that the token has all three required permission scopes:
+   1. `Zone:Zone:Read`
+   2. `Zone:DNS:Edit`
+   3. `Account:Cloudflare Tunnel:Edit`
+
+4. Review the account and zone resources covered by the token.
+5. Create the token and copy its value. Store this value under the `api-token` Secret key described below.
+
 ## Secret keys
 
-| Key                      | Purpose                                                                                                        |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| `api-token`              | Cloudflare API token with `Account.Cloudflare Tunnel:Edit`, `Zone.DNS:Edit`, and `Zone.Zone:Read` permissions. |
-| `cloudflare-account-id`  | Account identifier that owns the tunnel.                                                                       |
-| `cloudflare-tunnel-name` | Friendly tunnel name created or reused by the controller.                                                      |
+| Key                      | Purpose                                                                      |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| `api-token`              | Cloudflare API token with the three required permission scopes listed above. |
+| `cloudflare-account-id`  | Account identifier that owns the tunnel.                                     |
+| `cloudflare-tunnel-name` | Friendly tunnel name created or reused by the controller.                    |
 
 To let Helm create the secret, pass the values during installation:
 
@@ -62,9 +79,6 @@ cloudflare:
     apiTokenKey: api_token
 ```
 
-The controller only needs read access to these values. The chart injects them into the controller pod as environment variables, and the controller reads them once at startup, so rotating the secret in place does not refresh a running controller. After updating the secret, restart the controller to pick up the new credentials:
+The controller only needs read access to these values. The chart injects them into the controller pod as environment variables, and the controller reads them once at startup.
 
-```bash
-kubectl rollout restart deployment cloudflare-tunnel-ingress-controller \
-  -n cloudflare-tunnel-ingress-controller
-```
+Follow [Rotate Cloudflare credentials](/how-to/rotate-cloudflare-credentials/) to replace a token and restart the workloads that consume it.
