@@ -102,12 +102,18 @@ func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
 		podSpec.Volumes = customization.Volumes
 	}
 
+	var ownerReferences []metav1.OwnerReference
+	if d.config.Owner != nil {
+		ownerReferences = []metav1.OwnerReference{*d.config.Owner}
+	}
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        appName,
-			Namespace:   d.namespace,
-			Labels:      connectorLabels(),
-			Annotations: deploymentAnnotations,
+			Name:            appName,
+			Namespace:       d.namespace,
+			Labels:          connectorLabels(),
+			Annotations:     deploymentAnnotations,
+			OwnerReferences: ownerReferences,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &d.config.Replicas,

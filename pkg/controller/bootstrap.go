@@ -27,10 +27,5 @@ func RegisterIngressController(logger logr.Logger, mgr manager.Manager, options 
 		return err
 	}
 
-	if err != nil {
-		logger.WithName("register-controller").Error(err, "could not register ingress class controller")
-		return err
-	}
-
 	return nil
 }

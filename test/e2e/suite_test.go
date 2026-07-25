@@ -349,6 +349,12 @@ type controllerHelmValues struct {
 		PullPolicy string `yaml:"pullPolicy"`
 	} `yaml:"image"`
 	ClusterDomain string `yaml:"clusterDomain,omitempty"`
+	// IngressClassName and ControllerClassValue override the cluster scoped
+	// IngressClass the release creates, a second release must not fight over
+	// the shared class name and both controllers must not consider each
+	// other's classes as their own.
+	IngressClassName     string `yaml:"-"`
+	ControllerClassValue string `yaml:"-"`
 }
 
 func parseImageRef(ref string) (imageRef, error) {
@@ -418,6 +424,12 @@ func helmUpgradeInstall(ctx context.Context, kubeconfigPath string, releaseName 
 	}
 	if strings.TrimSpace(values.ClusterDomain) != "" {
 		helmArgs = append(helmArgs, "--set-string", fmt.Sprintf("clusterDomain=%s", values.ClusterDomain))
+	}
+	if strings.TrimSpace(values.IngressClassName) != "" {
+		helmArgs = append(helmArgs, "--set-string", fmt.Sprintf("ingressClass.name=%s", values.IngressClassName))
+	}
+	if strings.TrimSpace(values.ControllerClassValue) != "" {
+		helmArgs = append(helmArgs, "--set-string", fmt.Sprintf("ingressClass.controllerValue=%s", values.ControllerClassValue))
 	}
 
 	cmd := exec.CommandContext(ctx, "helm", helmArgs...)

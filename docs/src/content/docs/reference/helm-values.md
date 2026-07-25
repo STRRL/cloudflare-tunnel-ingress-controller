@@ -69,3 +69,12 @@ These values configure the Prometheus Operator `ServiceMonitor` for managed clou
 | `cloudflaredServiceMonitor.relabelings`       | `[]`    | Target relabeling rules applied before scraping.                                           |
 | `cloudflaredServiceMonitor.labels`            | `{}`    | Additional labels added to the ServiceMonitor.                                             |
 | `cloudflaredServiceMonitor.scheme`            | `http`  | Scheme used to scrape the metrics endpoint.                                                |
+
+## Uninstall behaviour
+
+The connector Deployment and the tunnel token Secret are created by the controller at runtime with an owner reference to the controller Deployment. Kubernetes garbage collection removes them when the release is uninstalled, so no cloudflared pods keep running against a stale tunnel.
+
+External resources are never touched during uninstall, following the same model as other ingress controllers:
+
+- The Cloudflare tunnel is kept. Tunnels are addressed by name, a reinstall with the same `cloudflare.tunnelName` reuses it. Delete it from the Cloudflare dashboard (or via API) when it is no longer needed.
+- DNS records are cleaned up by the controller whenever an Ingress is deleted. Delete your Ingress resources before uninstalling if you want the records removed; records belonging to Ingresses that still exist at uninstall time stay behind together with the tunnel.
