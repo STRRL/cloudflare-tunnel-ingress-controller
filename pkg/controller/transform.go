@@ -22,6 +22,8 @@ const (
 	EventReasonTLSIgnored      = "TLSIgnored"
 	EventReasonRuleSkipped     = "RuleSkipped"
 	EventReasonTransformFailed = "TransformFailed"
+	EventReasonSyncFailed      = "CloudflareSyncFailed"
+	EventReasonSynced          = "CloudflareSynced"
 )
 
 func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient client.Client, recorder record.EventRecorder, ingress networkingv1.Ingress, clusterDomain string) ([]exposure.Exposure, error) {

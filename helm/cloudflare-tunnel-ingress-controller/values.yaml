@@ -96,6 +96,23 @@ clusterDomain: cluster.local
 leaderElection:
   enabled: false
 
+# Metrics endpoint of the controller itself. It serves the controller-runtime
+# built-in metrics (reconcile counts, workqueue depth, and so on) plus custom
+# metrics like cloudflare_tunnel_ingress_controller_last_successful_sync_timestamp_seconds.
+metrics:
+  port: 9090
+  serviceMonitor:
+    create: false
+    interval: ""
+    scrapeTimeout: ""
+    metricRelabelings: []
+    relabelings: []
+    labels: {}
+
+# Health endpoint of the controller, used by liveness and readiness probes.
+healthProbe:
+  port: 8081
+
 cloudflared:
   image:
     repository: cloudflare/cloudflared
