@@ -59,6 +59,7 @@ Pre-commit hooks are managed via [prek](https://prek.j178.dev/) (configured in `
 - `cloudflare-tunnel-ingress-controller.strrl.dev/http-host-header`: Set HTTP Host header for the local webserver
 - `cloudflare-tunnel-ingress-controller.strrl.dev/origin-server-name`: Hostname on the origin server certificate
 - `cloudflare-tunnel-ingress-controller.strrl.dev/disable-dns-management`: Disable Cloudflare DNS record (CNAME/TXT) management for the ingress while still configuring the tunnel ingress rule, so DNS can be delegated to an external system such as external-dns or a Cloudflare Load Balancer ("true" or "false", default "false")
+- Origin request settings mapping to cloudflared `originRequest` fields (see `pkg/controller/well_known_annotations.go`): `connect-timeout`, `tls-timeout`, `tcp-keepalive`, `no-happy-eyeballs`, `keepalive-connections`, `keepalive-timeout`, `no-tls-verify`, `disable-chunked-encoding`, `http2-origin`
 
 ## Testing Strategy
 

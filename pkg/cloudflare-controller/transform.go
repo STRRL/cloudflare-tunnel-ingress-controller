@@ -2,6 +2,7 @@ package cloudflarecontroller
 
 import (
 	"context"
+	"reflect"
 	"strings"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
@@ -26,24 +27,62 @@ func fromExposureToCloudflareIngress(ctx context.Context, exposure exposure.Expo
 		result.Path = exposure.PathPrefix
 	}
 
+	result.OriginRequest = fromExposureToOriginRequest(exposure)
+
+	return &result, nil
+}
+
+// fromExposureToOriginRequest assembles the originRequest settings of a rule,
+// it returns nil when the exposure carries no origin request related setting.
+func fromExposureToOriginRequest(exposure exposure.Exposure) *cloudflare.OriginRequestConfig {
+	config := cloudflare.OriginRequestConfig{}
+
 	if exposure.HTTPHostHeader != nil {
-		if result.OriginRequest == nil {
-			result.OriginRequest = &cloudflare.OriginRequestConfig{}
-		}
-		result.OriginRequest.HTTPHostHeader = exposure.HTTPHostHeader
+		config.HTTPHostHeader = exposure.HTTPHostHeader
 	}
 
 	if strings.HasPrefix(exposure.ServiceTarget, "https://") {
-		if result.OriginRequest == nil {
-			result.OriginRequest = &cloudflare.OriginRequestConfig{}
-		}
-		result.OriginRequest.OriginServerName = exposure.OriginServerName
+		config.OriginServerName = exposure.OriginServerName
 		if exposure.ProxySSLVerifyEnabled == nil {
-			result.OriginRequest.NoTLSVerify = ptr.To(true)
+			config.NoTLSVerify = ptr.To(true)
 		} else {
-			result.OriginRequest.NoTLSVerify = ptr.To(!*exposure.ProxySSLVerifyEnabled)
+			config.NoTLSVerify = ptr.To(!*exposure.ProxySSLVerifyEnabled)
 		}
 	}
 
-	return &result, nil
+	// direct no-tls-verify control takes precedence over the legacy
+	// proxy-ssl-verify derived value above
+	if exposure.NoTLSVerify != nil {
+		config.NoTLSVerify = exposure.NoTLSVerify
+	}
+
+	if exposure.ConnectTimeout != nil {
+		config.ConnectTimeout = &cloudflare.TunnelDuration{Duration: *exposure.ConnectTimeout}
+	}
+	if exposure.TLSTimeout != nil {
+		config.TLSTimeout = &cloudflare.TunnelDuration{Duration: *exposure.TLSTimeout}
+	}
+	if exposure.TCPKeepAlive != nil {
+		config.TCPKeepAlive = &cloudflare.TunnelDuration{Duration: *exposure.TCPKeepAlive}
+	}
+	if exposure.KeepAliveTimeout != nil {
+		config.KeepAliveTimeout = &cloudflare.TunnelDuration{Duration: *exposure.KeepAliveTimeout}
+	}
+	if exposure.NoHappyEyeballs != nil {
+		config.NoHappyEyeballs = exposure.NoHappyEyeballs
+	}
+	if exposure.KeepAliveConnections != nil {
+		config.KeepAliveConnections = exposure.KeepAliveConnections
+	}
+	if exposure.DisableChunkedEncoding != nil {
+		config.DisableChunkedEncoding = exposure.DisableChunkedEncoding
+	}
+	if exposure.HTTP2Origin != nil {
+		config.Http2Origin = exposure.HTTP2Origin
+	}
+
+	if reflect.DeepEqual(config, cloudflare.OriginRequestConfig{}) {
+		return nil
+	}
+	return &config
 }
