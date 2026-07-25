@@ -26,23 +26,55 @@ func fromExposureToCloudflareIngress(ctx context.Context, exposure exposure.Expo
 		result.Path = exposure.PathPrefix
 	}
 
-	if exposure.HTTPHostHeader != nil {
+	originRequest := func() *cloudflare.OriginRequestConfig {
 		if result.OriginRequest == nil {
 			result.OriginRequest = &cloudflare.OriginRequestConfig{}
 		}
-		result.OriginRequest.HTTPHostHeader = exposure.HTTPHostHeader
+		return result.OriginRequest
+	}
+
+	if exposure.HTTPHostHeader != nil {
+		originRequest().HTTPHostHeader = exposure.HTTPHostHeader
 	}
 
 	if strings.HasPrefix(exposure.ServiceTarget, "https://") {
-		if result.OriginRequest == nil {
-			result.OriginRequest = &cloudflare.OriginRequestConfig{}
-		}
-		result.OriginRequest.OriginServerName = exposure.OriginServerName
+		originRequest().OriginServerName = exposure.OriginServerName
 		if exposure.ProxySSLVerifyEnabled == nil {
-			result.OriginRequest.NoTLSVerify = ptr.To(true)
+			originRequest().NoTLSVerify = ptr.To(true)
 		} else {
-			result.OriginRequest.NoTLSVerify = ptr.To(!*exposure.ProxySSLVerifyEnabled)
+			originRequest().NoTLSVerify = ptr.To(!*exposure.ProxySSLVerifyEnabled)
 		}
+	}
+
+	// direct no-tls-verify control takes precedence over the legacy
+	// proxy-ssl-verify derived value above
+	if exposure.NoTLSVerify != nil {
+		originRequest().NoTLSVerify = exposure.NoTLSVerify
+	}
+
+	if exposure.ConnectTimeout != nil {
+		originRequest().ConnectTimeout = &cloudflare.TunnelDuration{Duration: *exposure.ConnectTimeout}
+	}
+	if exposure.TLSTimeout != nil {
+		originRequest().TLSTimeout = &cloudflare.TunnelDuration{Duration: *exposure.TLSTimeout}
+	}
+	if exposure.TCPKeepAlive != nil {
+		originRequest().TCPKeepAlive = &cloudflare.TunnelDuration{Duration: *exposure.TCPKeepAlive}
+	}
+	if exposure.KeepAliveTimeout != nil {
+		originRequest().KeepAliveTimeout = &cloudflare.TunnelDuration{Duration: *exposure.KeepAliveTimeout}
+	}
+	if exposure.NoHappyEyeballs != nil {
+		originRequest().NoHappyEyeballs = exposure.NoHappyEyeballs
+	}
+	if exposure.KeepAliveConnections != nil {
+		originRequest().KeepAliveConnections = exposure.KeepAliveConnections
+	}
+	if exposure.DisableChunkedEncoding != nil {
+		originRequest().DisableChunkedEncoding = exposure.DisableChunkedEncoding
+	}
+	if exposure.HTTP2Origin != nil {
+		originRequest().Http2Origin = exposure.HTTP2Origin
 	}
 
 	return &result, nil

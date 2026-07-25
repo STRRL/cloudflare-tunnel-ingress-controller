@@ -3,6 +3,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -84,6 +86,11 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 			}
 		}
 
+		originRequest, err := parseOriginRequestSettings(ingress.Annotations)
+		if err != nil {
+			return nil, err
+		}
+
 		var proxySSLVerifyEnabled *bool
 
 		if proxySSLVerify, ok := getAnnotation(ingress.Annotations, AnnotationProxySSLVerify); ok {
@@ -143,14 +150,23 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 			}
 
 			result = append(result, exposure.Exposure{
-				Hostname:              hostname,
-				ServiceTarget:         fmt.Sprintf("%s://%s:%d", scheme, host, port),
-				PathPrefix:            path.Path,
-				IsDeleted:             isDeleted,
-				ProxySSLVerifyEnabled: proxySSLVerifyEnabled,
-				HTTPHostHeader:        httpHostHeader,
-				OriginServerName:      originServerName,
-				DisableDNSManagement:  disableDNSManagement,
+				Hostname:               hostname,
+				ServiceTarget:          fmt.Sprintf("%s://%s:%d", scheme, host, port),
+				PathPrefix:             path.Path,
+				IsDeleted:              isDeleted,
+				ProxySSLVerifyEnabled:  proxySSLVerifyEnabled,
+				HTTPHostHeader:         httpHostHeader,
+				OriginServerName:       originServerName,
+				DisableDNSManagement:   disableDNSManagement,
+				ConnectTimeout:         originRequest.ConnectTimeout,
+				TLSTimeout:             originRequest.TLSTimeout,
+				TCPKeepAlive:           originRequest.TCPKeepAlive,
+				NoHappyEyeballs:        originRequest.NoHappyEyeballs,
+				KeepAliveConnections:   originRequest.KeepAliveConnections,
+				KeepAliveTimeout:       originRequest.KeepAliveTimeout,
+				NoTLSVerify:            originRequest.NoTLSVerify,
+				DisableChunkedEncoding: originRequest.DisableChunkedEncoding,
+				HTTP2Origin:            originRequest.HTTP2Origin,
 			})
 		}
 	}
@@ -186,4 +202,105 @@ func getPortWithName(ports []v1.ServicePort, portName string) (bool, int32) {
 func getAnnotation(annotations map[string]string, key string) (string, bool) {
 	value, ok := annotations[key]
 	return value, ok
+}
+
+// originRequestSettings carries the parsed originRequest related annotations,
+// they apply to every rule generated from the ingress.
+type originRequestSettings struct {
+	ConnectTimeout         *time.Duration
+	TLSTimeout             *time.Duration
+	TCPKeepAlive           *time.Duration
+	NoHappyEyeballs        *bool
+	KeepAliveConnections   *int
+	KeepAliveTimeout       *time.Duration
+	NoTLSVerify            *bool
+	DisableChunkedEncoding *bool
+	HTTP2Origin            *bool
+}
+
+func parseOriginRequestSettings(annotations map[string]string) (originRequestSettings, error) {
+	settings := originRequestSettings{}
+	var err error
+
+	if settings.ConnectTimeout, err = parseDurationAnnotation(annotations, AnnotationConnectTimeout); err != nil {
+		return settings, err
+	}
+	if settings.TLSTimeout, err = parseDurationAnnotation(annotations, AnnotationTLSTimeout); err != nil {
+		return settings, err
+	}
+	if settings.TCPKeepAlive, err = parseDurationAnnotation(annotations, AnnotationTCPKeepAlive); err != nil {
+		return settings, err
+	}
+	if settings.NoHappyEyeballs, err = parseBoolAnnotation(annotations, AnnotationNoHappyEyeballs); err != nil {
+		return settings, err
+	}
+	if settings.KeepAliveConnections, err = parseIntAnnotation(annotations, AnnotationKeepAliveConnections); err != nil {
+		return settings, err
+	}
+	if settings.KeepAliveTimeout, err = parseDurationAnnotation(annotations, AnnotationKeepAliveTimeout); err != nil {
+		return settings, err
+	}
+	if settings.NoTLSVerify, err = parseBoolAnnotation(annotations, AnnotationNoTLSVerify); err != nil {
+		return settings, err
+	}
+	if settings.DisableChunkedEncoding, err = parseBoolAnnotation(annotations, AnnotationDisableChunkedEncoding); err != nil {
+		return settings, err
+	}
+	if settings.HTTP2Origin, err = parseBoolAnnotation(annotations, AnnotationHTTP2Origin); err != nil {
+		return settings, err
+	}
+
+	if settings.NoTLSVerify != nil {
+		if _, ok := getAnnotation(annotations, AnnotationProxySSLVerify); ok {
+			return settings, errors.Errorf(
+				"annotations %s and %s are mutually exclusive, they express the same setting inverted",
+				AnnotationNoTLSVerify, AnnotationProxySSLVerify,
+			)
+		}
+	}
+
+	return settings, nil
+}
+
+func parseBoolAnnotation(annotations map[string]string, key string) (*bool, error) {
+	value, ok := getAnnotation(annotations, key)
+	if !ok {
+		return nil, nil
+	}
+	switch value {
+	case "true":
+		return ptr.To(true), nil
+	case "false":
+		return ptr.To(false), nil
+	default:
+		return nil, errors.Errorf("invalid value %q for annotation %s, available values: \"true\" or \"false\"", value, key)
+	}
+}
+
+func parseDurationAnnotation(annotations map[string]string, key string) (*time.Duration, error) {
+	value, ok := getAnnotation(annotations, key)
+	if !ok {
+		return nil, nil
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		return nil, errors.Errorf("invalid value %q for annotation %s, expect a Go duration string like \"30s\"", value, key)
+	}
+	// the Cloudflare API serializes originRequest durations in whole seconds
+	if duration <= 0 || duration != duration.Truncate(time.Second) {
+		return nil, errors.Errorf("invalid value %q for annotation %s, expect a positive duration in whole seconds", value, key)
+	}
+	return ptr.To(duration), nil
+}
+
+func parseIntAnnotation(annotations map[string]string, key string) (*int, error) {
+	value, ok := getAnnotation(annotations, key)
+	if !ok {
+		return nil, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return nil, errors.Errorf("invalid value %q for annotation %s, expect a positive integer", value, key)
+	}
+	return ptr.To(parsed), nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/cloudflare/cloudflare-go"
@@ -232,6 +233,80 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 				Service:  "https://10.0.0.1:443",
 				OriginRequest: &cloudflare.OriginRequestConfig{
 					NoTLSVerify: ptr.To(false),
+				},
+			},
+		}, {
+			name: "all origin request fields set on http target",
+			args: args{
+				ctx: context.Background(),
+				exposure: exposure.Exposure{
+					Hostname:               "ingress.example.com",
+					ServiceTarget:          "http://10.0.0.1:80",
+					PathPrefix:             "/",
+					IsDeleted:              false,
+					ConnectTimeout:         ptr.To(30 * time.Second),
+					TLSTimeout:             ptr.To(10 * time.Second),
+					TCPKeepAlive:           ptr.To(time.Minute),
+					NoHappyEyeballs:        ptr.To(true),
+					KeepAliveConnections:   ptr.To(100),
+					KeepAliveTimeout:       ptr.To(90 * time.Second),
+					DisableChunkedEncoding: ptr.To(true),
+					HTTP2Origin:            ptr.To(true),
+				},
+			},
+			want: &cloudflare.UnvalidatedIngressRule{
+				Hostname: "ingress.example.com",
+				Path:     "/",
+				Service:  "http://10.0.0.1:80",
+				OriginRequest: &cloudflare.OriginRequestConfig{
+					ConnectTimeout:         &cloudflare.TunnelDuration{Duration: 30 * time.Second},
+					TLSTimeout:             &cloudflare.TunnelDuration{Duration: 10 * time.Second},
+					TCPKeepAlive:           &cloudflare.TunnelDuration{Duration: time.Minute},
+					NoHappyEyeballs:        ptr.To(true),
+					KeepAliveConnections:   ptr.To(100),
+					KeepAliveTimeout:       &cloudflare.TunnelDuration{Duration: 90 * time.Second},
+					DisableChunkedEncoding: ptr.To(true),
+					Http2Origin:            ptr.To(true),
+				},
+			},
+		}, {
+			name: "direct no-tls-verify overrides https default",
+			args: args{
+				ctx: context.Background(),
+				exposure: exposure.Exposure{
+					Hostname:      "ingress.example.com",
+					ServiceTarget: "https://10.0.0.1:443",
+					PathPrefix:    "/",
+					IsDeleted:     false,
+					NoTLSVerify:   ptr.To(false),
+				},
+			},
+			want: &cloudflare.UnvalidatedIngressRule{
+				Hostname: "ingress.example.com",
+				Path:     "/",
+				Service:  "https://10.0.0.1:443",
+				OriginRequest: &cloudflare.OriginRequestConfig{
+					NoTLSVerify: ptr.To(false),
+				},
+			},
+		}, {
+			name: "no-tls-verify applies to http target as well",
+			args: args{
+				ctx: context.Background(),
+				exposure: exposure.Exposure{
+					Hostname:      "ingress.example.com",
+					ServiceTarget: "http://10.0.0.1:80",
+					PathPrefix:    "/",
+					IsDeleted:     false,
+					NoTLSVerify:   ptr.To(true),
+				},
+			},
+			want: &cloudflare.UnvalidatedIngressRule{
+				Hostname: "ingress.example.com",
+				Path:     "/",
+				Service:  "http://10.0.0.1:80",
+				OriginRequest: &cloudflare.OriginRequestConfig{
+					NoTLSVerify: ptr.To(true),
 				},
 			},
 		},

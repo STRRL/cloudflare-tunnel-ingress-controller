@@ -100,6 +100,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^any other hostname under the wildcard eventually serves "([^"]*)"$`, theProbeHostnameServes)
 
 	registerUninstallCleanupSteps(ctx)
+	registerOriginRequestSteps(ctx)
 
 	ctx.Step(`^an ingress exposes "([^"]*)" at a generated hostname$`, anIngressExposesEchoService)
 	ctx.Step(`^the controller eventually creates the CNAME and ownership TXT records$`, theControllerCreatesDNSRecords)
