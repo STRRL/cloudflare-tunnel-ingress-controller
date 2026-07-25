@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -88,6 +89,7 @@ func main() {
 			options.clusterDomain = viper.GetString("cluster-domain")
 			options.leaderElect = viper.GetBool("leader-elect")
 			options.dnsCommentTemplate = viper.GetString("dns-comment-template")
+			controllerDeploymentName := viper.GetString("controller-deployment-name")
 
 			stdr.SetVerbosity(options.logLevel)
 			logger := options.logger
@@ -155,12 +157,46 @@ func main() {
 			done := make(chan struct{})
 			defer close(done)
 
+			reconcileConnector := func() {
+				// bind the connector resources to the controller Deployment so
+				// garbage collection removes them when the controller is
+				// uninstalled
+				var ownerReference *metav1.OwnerReference
+				if controllerDeploymentName != "" {
+					resolved, resolveErr := controller.ResolveControllerOwnerReference(ctx, mgr.GetClient(), options.namespace, controllerDeploymentName)
+					if resolveErr != nil {
+						logger.WithName("controlled-cloudflared").Error(resolveErr, "resolve controller owner reference")
+						return
+					}
+					ownerReference = resolved
+				}
+
+				reconcileErr := controller.CreateOrUpdateControlledCloudflared(ctx, mgr.GetClient(), tunnelClient, options.namespace, controller.CloudflaredConfig{
+					Image:             options.cloudflaredImage,
+					ImagePullPolicy:   options.cloudflaredImagePullPolicy,
+					Replicas:          options.cloudflaredReplicaCount,
+					Protocol:          options.cloudflaredProtocol,
+					ExtraArgs:         options.cloudflaredExtraArgs,
+					Customization:     deploymentConfig,
+					CustomizationHash: configHash,
+					Owner:             ownerReference,
+				})
+				if reconcileErr != nil {
+					logger.WithName("controlled-cloudflared").Error(reconcileErr, "create controlled cloudflared")
+				}
+			}
+
 			go func() {
 				select {
 				case <-done:
 					return
 				case <-mgr.Elected():
 				}
+
+				// reconcile immediately so a fresh install gets its connector
+				// without waiting for the first tick, and an upgraded release
+				// adopts pre-existing resources before helm reports it ready
+				reconcileConnector()
 
 				ticker := time.NewTicker(10 * time.Second)
 				defer ticker.Stop()
@@ -169,18 +205,7 @@ func main() {
 					case <-done:
 						return
 					case <-ticker.C:
-						err := controller.CreateOrUpdateControlledCloudflared(ctx, mgr.GetClient(), tunnelClient, options.namespace, controller.CloudflaredConfig{
-							Image:             options.cloudflaredImage,
-							ImagePullPolicy:   options.cloudflaredImagePullPolicy,
-							Replicas:          options.cloudflaredReplicaCount,
-							Protocol:          options.cloudflaredProtocol,
-							ExtraArgs:         options.cloudflaredExtraArgs,
-							Customization:     deploymentConfig,
-							CustomizationHash: configHash,
-						})
-						if err != nil {
-							logger.WithName("controlled-cloudflared").Error(err, "create controlled cloudflared")
-						}
+						reconcileConnector()
 					}
 				}
 			}()
@@ -205,6 +230,7 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.cloudflaredDeploymentConfig, "cloudflared-deployment-config", options.cloudflaredDeploymentConfig, "path to JSON file with cloudflared deployment pod template customization")
 	rootCommand.PersistentFlags().StringVar(&options.clusterDomain, "cluster-domain", options.clusterDomain, "kubernetes cluster domain, used to build service FQDN (should match kubelet --cluster-domain)")
 	rootCommand.PersistentFlags().BoolVar(&options.leaderElect, "leader-elect", options.leaderElect, "enable leader election for high availability")
+	rootCommand.PersistentFlags().String("controller-deployment-name", "", "name of the controller Deployment, set as owner of the connector resources so garbage collection removes them on uninstall")
 	rootCommand.PersistentFlags().StringVar(&options.dnsCommentTemplate, "dns-comment-template", options.dnsCommentTemplate, "Go template for DNS record comments. Available variables: {{.TunnelName}}, {{.TunnelId}}, {{.Hostname}}. Set to empty string to disable. Note: Cloudflare limits comment length by plan (Free: 100, Pro/Biz/Ent: 500 chars). See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/")
 
 	viper.AutomaticEnv()

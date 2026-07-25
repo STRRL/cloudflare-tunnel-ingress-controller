@@ -34,6 +34,9 @@ type world struct {
 	accessCmd        *exec.Cmd
 	cfAPI            *cloudflare.API
 	zoneID           string
+	// uninstall cleanup scenario state, see uninstall_steps_test.go
+	uninstallTunnelName     string
+	uninstallReleaseRemoved bool
 }
 
 type worldCtxKey struct{}
@@ -95,6 +98,8 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^an ingress routes a wildcard hostname to "([^"]*)" before an exact hostname to "([^"]*)"$`, anIngressRoutesWildcardBeforeExact)
 	ctx.Step(`^the exact hostname eventually serves "([^"]*)"$`, theExactHostnameServes)
 	ctx.Step(`^any other hostname under the wildcard eventually serves "([^"]*)"$`, theProbeHostnameServes)
+
+	registerUninstallCleanupSteps(ctx)
 
 	ctx.Step(`^an ingress exposes "([^"]*)" at a generated hostname$`, anIngressExposesEchoService)
 	ctx.Step(`^the controller eventually creates the CNAME and ownership TXT records$`, theControllerCreatesDNSRecords)

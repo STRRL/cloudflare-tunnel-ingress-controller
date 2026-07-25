@@ -50,6 +50,7 @@ spec:
             - --leader-elect
             {{- end }}
             - --cloudflared-deployment-config=/etc/cloudflared-config/config.json
+            - --controller-deployment-name={{ include "cloudflare-tunnel-ingress-controller.fullname" . }}
           env:
             - name: CLOUDFLARE_API_TOKEN
               valueFrom:

@@ -48,6 +48,82 @@ type CloudflaredConfig struct {
 	// CustomizationHash identifies the customization content, drift is
 	// detected through the config hash annotation on the deployment.
 	CustomizationHash string
+	// Owner ties the lifecycle of the connector resources to the controller
+	// Deployment: garbage collection removes them when the controller is
+	// uninstalled. Nil (for example when running outside the cluster) leaves
+	// the resources unowned.
+	Owner *metav1.OwnerReference
+}
+
+// ResolveControllerOwnerReference builds the owner reference pointing at the
+// controller Deployment the connector resources should be bound to.
+func ResolveControllerOwnerReference(ctx context.Context, kubeClient client.Client, namespace string, name string) (*metav1.OwnerReference, error) {
+	deployment := &appsv1.Deployment{}
+	err := kubeClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, deployment)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get controller deployment %s/%s", namespace, name)
+	}
+	return &metav1.OwnerReference{
+		APIVersion: "apps/v1",
+		Kind:       "Deployment",
+		Name:       deployment.Name,
+		UID:        deployment.UID,
+	}, nil
+}
+
+func hasOwnerReference(refs []metav1.OwnerReference, owner *metav1.OwnerReference) bool {
+	for _, ref := range refs {
+		if ref.UID == owner.UID {
+			return true
+		}
+	}
+	return false
+}
+
+// adoptConnectorResources appends the owner reference to connector resources
+// created by older controller versions. It only talks to the Kubernetes API,
+// so adoption succeeds even while Cloudflare is unreachable.
+func adoptConnectorResources(ctx context.Context, kubeClient client.Client, namespace string, owner *metav1.OwnerReference) error {
+	logger := log.FromContext(ctx)
+
+	list := appsv1.DeploymentList{}
+	err := kubeClient.List(ctx, &list, &client.ListOptions{
+		Namespace: namespace,
+		LabelSelector: labels.SelectorFromSet(labels.Set{
+			connectorManagedByLabelKey: connectorAppName,
+		}),
+	})
+	if err != nil {
+		return errors.Wrapf(err, "list controlled-cloudflared-connector in namespace %s", namespace)
+	}
+	for i := range list.Items {
+		deployment := &list.Items[i]
+		if hasOwnerReference(deployment.OwnerReferences, owner) {
+			continue
+		}
+		deployment.OwnerReferences = append(deployment.OwnerReferences, *owner)
+		if err := kubeClient.Update(ctx, deployment); err != nil {
+			return errors.Wrapf(err, "adopt connector deployment %s/%s", namespace, deployment.Name)
+		}
+		logger.Info("adopted connector deployment", "namespace", namespace, "name", deployment.Name)
+	}
+
+	secret := &v1.Secret{}
+	err = kubeClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: tunnelTokenSecretName}, secret)
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return errors.Wrap(err, "get tunnel token secret")
+	}
+	if !hasOwnerReference(secret.OwnerReferences, owner) {
+		secret.OwnerReferences = append(secret.OwnerReferences, *owner)
+		if err := kubeClient.Update(ctx, secret); err != nil {
+			return errors.Wrap(err, "adopt tunnel token secret")
+		}
+		logger.Info("adopted tunnel token secret", "namespace", namespace, "name", tunnelTokenSecretName)
+	}
+	return nil
 }
 
 func CreateOrUpdateControlledCloudflared(
@@ -59,12 +135,20 @@ func CreateOrUpdateControlledCloudflared(
 ) error {
 	logger := log.FromContext(ctx)
 
+	// adopt pre-existing resources before any external call, lifecycle
+	// ownership must not depend on Cloudflare availability
+	if config.Owner != nil {
+		if err := adoptConnectorResources(ctx, kubeClient, namespace, config.Owner); err != nil {
+			return errors.Wrap(err, "adopt connector resources")
+		}
+	}
+
 	token, err := tunnelClient.FetchTunnelToken(ctx)
 	if err != nil {
 		return errors.Wrap(err, "fetch tunnel token")
 	}
 
-	tokenSecretVersion, err := createOrUpdateTunnelTokenSecret(ctx, kubeClient, namespace, token)
+	tokenSecretVersion, err := createOrUpdateTunnelTokenSecret(ctx, kubeClient, namespace, token, config.Owner)
 	if err != nil {
 		return errors.Wrap(err, "create or update tunnel token secret")
 	}
@@ -153,6 +237,7 @@ func createOrUpdateTunnelTokenSecret(
 	kubeClient client.Client,
 	namespace string,
 	token string,
+	owner *metav1.OwnerReference,
 ) (string, error) {
 	logger := log.FromContext(ctx)
 
@@ -173,6 +258,9 @@ func createOrUpdateTunnelTokenSecret(
 		StringData: map[string]string{
 			tunnelTokenSecretKey: token,
 		},
+	}
+	if owner != nil {
+		desiredSecret.OwnerReferences = []metav1.OwnerReference{*owner}
 	}
 
 	if err != nil {

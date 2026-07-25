@@ -15,7 +15,7 @@ For the data flow, DNS ownership model, and connector reconciliation design, see
 - **Exposure** (`pkg/exposure/exposure.go`): Internal representation shared between Kubernetes and Cloudflare logic
 - **TunnelClient** (`pkg/cloudflare-controller/tunnel-client.go`): Reconciles tunnel ingress rules and DNS records through the Cloudflare API
 - **DNS ownership** (`pkg/cloudflare-controller/dns.go`): Plans CNAME and ownership TXT record changes
-- **ControlledCloudflaredConnector** (`pkg/controller/controlled-cloudflared-connector.go`): Reconciles the managed cloudflared Secret and Deployment
+- **ControlledCloudflaredConnector** (`pkg/controller/controlled-cloudflared-connector.go`): Reconciles the managed cloudflared Secret and Deployment, owned by the controller Deployment so garbage collection removes them on uninstall; the Cloudflare tunnel itself is intentionally kept and reused by name
 
 ## Development Commands
 
