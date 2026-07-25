@@ -51,6 +51,8 @@ spec:
             {{- end }}
             - --cloudflared-deployment-config=/etc/cloudflared-config/config.json
             - --controller-deployment-name={{ include "cloudflare-tunnel-ingress-controller.fullname" . }}
+            - --metrics-bind-address=:{{ .Values.metrics.port }}
+            - --health-probe-bind-address=:{{ .Values.healthProbe.port }}
           env:
             - name: CLOUDFLARE_API_TOKEN
               valueFrom:
@@ -92,6 +94,25 @@ spec:
               value: {{ .Values.cloudflared.image.pullPolicy | quote }}
             - name: CLOUDFLARED_REPLICA_COUNT
               value: {{ .Values.cloudflared.replicaCount | quote }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ .Values.healthProbe.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
           volumeMounts:
             - name: cloudflared-config
               mountPath: /etc/cloudflared-config

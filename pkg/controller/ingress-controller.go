@@ -95,7 +95,11 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 
 	err = i.tunnelClient.PutExposures(ctx, allExposures)
 	if err != nil {
+		i.recorder.Event(&origin, v1.EventTypeWarning, EventReasonSyncFailed, err.Error())
 		return reconcile.Result{}, errors.Wrap(err, "put exposures")
+	}
+	if origin.DeletionTimestamp == nil {
+		i.recorder.Event(&origin, v1.EventTypeNormal, EventReasonSynced, "cloudflare tunnel config and DNS records are up to date")
 	}
 
 	if origin.DeletionTimestamp != nil {

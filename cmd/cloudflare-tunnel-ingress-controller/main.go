@@ -20,8 +20,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 type rootCmdFlags struct {
@@ -45,6 +47,8 @@ type rootCmdFlags struct {
 	clusterDomain               string
 	leaderElect                 bool
 	dnsCommentTemplate          string
+	metricsBindAddress          string
+	healthProbeBindAddress      string
 }
 
 func main() {
@@ -64,6 +68,8 @@ func main() {
 		cloudflaredReplicaCount:    1,
 		clusterDomain:              "cluster.local",
 		dnsCommentTemplate:         "managed by cloudflare-tunnel-ingress-controller, tunnel [{{.TunnelName}}]",
+		metricsBindAddress:         ":9090",
+		healthProbeBindAddress:     ":8081",
 	}
 
 	crlog.SetLogger(rootLogger.WithName("controller-runtime"))
@@ -89,6 +95,8 @@ func main() {
 			options.clusterDomain = viper.GetString("cluster-domain")
 			options.leaderElect = viper.GetBool("leader-elect")
 			options.dnsCommentTemplate = viper.GetString("dns-comment-template")
+			options.metricsBindAddress = viper.GetString("metrics-bind-address")
+			options.healthProbeBindAddress = viper.GetString("health-probe-bind-address")
 			controllerDeploymentName := viper.GetString("controller-deployment-name")
 
 			stdr.SetVerbosity(options.logLevel)
@@ -127,12 +135,27 @@ func main() {
 						},
 					},
 				},
+				Metrics: metricsserver.Options{
+					BindAddress: options.metricsBindAddress,
+				},
+				HealthProbeBindAddress:  options.healthProbeBindAddress,
 				LeaderElection:          options.leaderElect,
 				LeaderElectionID:        "cloudflare-tunnel-ingress-controller.strrl.dev",
 				LeaderElectionNamespace: options.namespace,
 			})
 			if err != nil {
 				logger.Error(err, "unable to set up manager")
+				os.Exit(1)
+			}
+
+			if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+				logger.Error(err, "unable to set up health check")
+				os.Exit(1)
+			}
+			// the tunnel client is already bootstrapped at this point, so the
+			// controller is ready once the manager can serve requests
+			if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+				logger.Error(err, "unable to set up ready check")
 				os.Exit(1)
 			}
 
@@ -231,6 +254,8 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.clusterDomain, "cluster-domain", options.clusterDomain, "kubernetes cluster domain, used to build service FQDN (should match kubelet --cluster-domain)")
 	rootCommand.PersistentFlags().BoolVar(&options.leaderElect, "leader-elect", options.leaderElect, "enable leader election for high availability")
 	rootCommand.PersistentFlags().String("controller-deployment-name", "", "name of the controller Deployment, set as owner of the connector resources so garbage collection removes them on uninstall")
+	rootCommand.PersistentFlags().StringVar(&options.metricsBindAddress, "metrics-bind-address", options.metricsBindAddress, "address for the metrics endpoint, set to 0 to disable")
+	rootCommand.PersistentFlags().StringVar(&options.healthProbeBindAddress, "health-probe-bind-address", options.healthProbeBindAddress, "address for the healthz/readyz endpoints, set to 0 to disable")
 	rootCommand.PersistentFlags().StringVar(&options.dnsCommentTemplate, "dns-comment-template", options.dnsCommentTemplate, "Go template for DNS record comments. Available variables: {{.TunnelName}}, {{.TunnelId}}, {{.Hostname}}. Set to empty string to disable. Note: Cloudflare limits comment length by plan (Free: 100, Pro/Biz/Ent: 500 chars). See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/")
 
 	viper.AutomaticEnv()

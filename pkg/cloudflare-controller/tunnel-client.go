@@ -7,8 +7,10 @@ import (
 	"slices"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
+	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/metrics"
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -98,6 +100,9 @@ func (t *TunnelClient) PutExposures(ctx context.Context, exposures []exposure.Ex
 	if err != nil {
 		return errors.Wrap(err, "update DNS CNAME record")
 	}
+
+	metrics.ManagedExposures.Set(float64(len(exposure.Active(exposures))))
+	metrics.LastSuccessfulSyncTimestamp.Set(float64(time.Now().Unix()))
 	return nil
 }
 
@@ -132,6 +137,7 @@ func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures [
 
 	current, err := t.cfClient.GetTunnelConfiguration(ctx, cloudflare.ResourceIdentifier(t.accountId), t.tunnelId)
 	if err != nil {
+		metrics.CloudflareAPIErrors.WithLabelValues("get_tunnel_configuration").Inc()
 		return errors.Wrap(err, "get cloudflare tunnel config")
 	}
 
@@ -151,6 +157,7 @@ func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures [
 	)
 
 	if err != nil {
+		metrics.CloudflareAPIErrors.WithLabelValues("update_tunnel_configuration").Inc()
 		return errors.Wrap(err, "update cloudflare tunnel config")
 	}
 	return nil
@@ -160,6 +167,7 @@ func (t *TunnelClient) updateDNSCNAMERecord(ctx context.Context, exposures []exp
 	t.logger.V(3).Info("list zones")
 	zones, err := t.cfClient.ListZones(ctx)
 	if err != nil {
+		metrics.CloudflareAPIErrors.WithLabelValues("list_zones").Inc()
 		return errors.Wrap(err, "list cloudflare zones")
 	}
 
@@ -203,6 +211,7 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 		Type: "CNAME",
 	})
 	if err != nil {
+		metrics.CloudflareAPIErrors.WithLabelValues("list_dns_records").Inc()
 		return errors.Wrapf(err, "list CNAME records for zone %s", zone.Name)
 	}
 
@@ -210,6 +219,7 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 		Type: "TXT",
 	})
 	if err != nil {
+		metrics.CloudflareAPIErrors.WithLabelValues("list_dns_records").Inc()
 		return errors.Wrapf(err, "list TXT records for zone %s", zone.Name)
 	}
 
@@ -244,8 +254,10 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 		}
 		_, err := t.cfClient.CreateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), params)
 		if err != nil {
+			metrics.CloudflareAPIErrors.WithLabelValues("create_dns_record").Inc()
 			return errors.Wrapf(err, "create DNS record for zone %s, hostname %s", zone.Name, item.Hostname)
 		}
+		metrics.DNSRecordOperations.WithLabelValues("create", item.Type).Inc()
 	}
 
 	for _, item := range toUpdate {
@@ -264,8 +276,10 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 		}
 		_, err := t.cfClient.UpdateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), params)
 		if err != nil {
+			metrics.CloudflareAPIErrors.WithLabelValues("update_dns_record").Inc()
 			return errors.Wrapf(err, "update DNS record for zone %s, hostname %s", zone.Name, item.OldRecord.Name)
 		}
+		metrics.DNSRecordOperations.WithLabelValues("update", item.Type).Inc()
 	}
 
 	// Migrate legacy comment-based records (separate from normal sync)
@@ -279,8 +293,10 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 		t.logger.Info("delete DNS record", "id", item.OldRecord.ID, "type", item.OldRecord.Type, "hostname", item.OldRecord.Name, "content", item.OldRecord.Content)
 		err := t.cfClient.DeleteDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), item.OldRecord.ID)
 		if err != nil {
+			metrics.CloudflareAPIErrors.WithLabelValues("delete_dns_record").Inc()
 			return errors.Wrapf(err, "delete DNS record for zone %s, hostname %s", zone.Name, item.OldRecord.Name)
 		}
+		metrics.DNSRecordOperations.WithLabelValues("delete", item.OldRecord.Type).Inc()
 	}
 
 	return nil
