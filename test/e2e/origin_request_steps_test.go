@@ -9,6 +9,7 @@ import (
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/cucumber/godog"
 	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/utils/ptr"
 )
 
 // the annotations the scenario applies, a representative subset proving the
@@ -17,7 +18,7 @@ import (
 var originRequestTestAnnotations = map[string]string{
 	"cloudflare-tunnel-ingress-controller.strrl.dev/connect-timeout":          "31s",
 	"cloudflare-tunnel-ingress-controller.strrl.dev/keepalive-connections":    "7",
-	"cloudflare-tunnel-ingress-controller.strrl.dev/http2-origin":             "true",
+	"cloudflare-tunnel-ingress-controller.strrl.dev/keepalive-timeout":        "77s",
 	"cloudflare-tunnel-ingress-controller.strrl.dev/disable-chunked-encoding": "true",
 }
 
@@ -50,18 +51,21 @@ func theTunnelRuleCarriesOriginRequestSettings(ctx context.Context) error {
 	}
 	rc := cloudflare.ResourceIdentifier(os.Getenv("CLOUDFLARE_ACCOUNT_ID"))
 
-	tunnels, _, err := api.ListTunnels(context.Background(), rc, cloudflare.TunnelListParams{
-		Name: os.Getenv("CLOUDFLARE_TUNNEL_NAME"),
-	})
-	if err != nil {
-		return fmt.Errorf("list tunnels: %w", err)
-	}
-	if len(tunnels) == 0 {
-		return fmt.Errorf("tunnel %s not found", os.Getenv("CLOUDFLARE_TUNNEL_NAME"))
-	}
-	tunnelID := tunnels[0].ID
-
+	// tunnel discovery lives inside the retry loop so transient API failures
+	// do not abort the scenario
 	return waitFor("tunnel rule carries origin request settings", 5*time.Minute, 10*time.Second, func() error {
+		tunnels, _, err := api.ListTunnels(context.Background(), rc, cloudflare.TunnelListParams{
+			Name:      os.Getenv("CLOUDFLARE_TUNNEL_NAME"),
+			IsDeleted: ptr.To(false),
+		})
+		if err != nil {
+			return fmt.Errorf("list tunnels: %w", err)
+		}
+		if len(tunnels) == 0 {
+			return fmt.Errorf("tunnel %s not found", os.Getenv("CLOUDFLARE_TUNNEL_NAME"))
+		}
+		tunnelID := tunnels[0].ID
+
 		configuration, err := api.GetTunnelConfiguration(context.Background(), rc, tunnelID)
 		if err != nil {
 			return fmt.Errorf("get tunnel configuration: %w", err)
@@ -81,8 +85,8 @@ func theTunnelRuleCarriesOriginRequestSettings(ctx context.Context) error {
 			if origin.KeepAliveConnections == nil || *origin.KeepAliveConnections != 7 {
 				return fmt.Errorf("rule for %s has keepAliveConnections %v, want 7", w.hostname, origin.KeepAliveConnections)
 			}
-			if origin.Http2Origin == nil || !*origin.Http2Origin {
-				return fmt.Errorf("rule for %s has http2Origin %v, want true", w.hostname, origin.Http2Origin)
+			if origin.KeepAliveTimeout == nil || origin.KeepAliveTimeout.Duration != 77*time.Second {
+				return fmt.Errorf("rule for %s has keepAliveTimeout %v, want 77s", w.hostname, origin.KeepAliveTimeout)
 			}
 			if origin.DisableChunkedEncoding == nil || !*origin.DisableChunkedEncoding {
 				return fmt.Errorf("rule for %s has disableChunkedEncoding %v, want true", w.hostname, origin.DisableChunkedEncoding)

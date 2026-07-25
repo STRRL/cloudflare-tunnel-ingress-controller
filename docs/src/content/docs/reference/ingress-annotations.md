@@ -15,7 +15,7 @@ Annotations let you customise how the controller configures Cloudflare for each 
 
 ## Origin request settings
 
-These annotations map to cloudflared `originRequest` settings and apply to every rule generated from the ingress. Omitted annotations keep the cloudflared defaults. Durations are Go duration strings in whole seconds, such as `30s` or `2m`. See the upstream [origin configuration parameters](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/origin-parameters/) reference for the behaviour of each setting.
+These annotations map to cloudflared `originRequest` settings and apply to every rule generated from the ingress. Omitted annotations keep the cloudflared defaults, with one historical exception: for `backend-protocol: https` the controller disables TLS verification unless told otherwise, so enable verification explicitly with `no-tls-verify: "false"` (or the legacy `proxy-ssl-verify: "on"`). Durations are Go duration strings in whole seconds, such as `30s` or `2m`. See the upstream [origin configuration parameters](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/origin-parameters/) reference for the behaviour of each setting.
 
 | Annotation                                                                  | Purpose                                                                                                                  |
 | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -27,7 +27,7 @@ These annotations map to cloudflared `originRequest` settings and apply to every
 | `cloudflare-tunnel-ingress-controller.strrl.dev/keepalive-timeout`          | Timeout for closing idle connections to the origin.                                                                      |
 | `cloudflare-tunnel-ingress-controller.strrl.dev/no-tls-verify`              | Set to `"true"` to disable TLS certificate verification of the origin. Mutually exclusive with `proxy-ssl-verify`.       |
 | `cloudflare-tunnel-ingress-controller.strrl.dev/disable-chunked-encoding`   | Set to `"true"` to disable chunked transfer encoding towards the origin, useful for WSGI servers.                        |
-| `cloudflare-tunnel-ingress-controller.strrl.dev/http2-origin`               | Set to `"true"` to connect to the origin with HTTP/2.                                                                    |
+| `cloudflare-tunnel-ingress-controller.strrl.dev/http2-origin`               | Set to `"true"` to connect to the origin with HTTP/2. Requires `backend-protocol: https`, HTTP/2 needs TLS.              |
 
 Example Ingress snippet:
 

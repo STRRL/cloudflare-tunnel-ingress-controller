@@ -86,7 +86,7 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 			}
 		}
 
-		originRequest, err := parseOriginRequestSettings(ingress.Annotations)
+		originRequest, err := parseOriginRequestSettings(ingress.Annotations, scheme)
 		if err != nil {
 			return nil, err
 		}
@@ -218,7 +218,7 @@ type originRequestSettings struct {
 	HTTP2Origin            *bool
 }
 
-func parseOriginRequestSettings(annotations map[string]string) (originRequestSettings, error) {
+func parseOriginRequestSettings(annotations map[string]string, scheme string) (originRequestSettings, error) {
 	settings := originRequestSettings{}
 	var err error
 
@@ -257,6 +257,15 @@ func parseOriginRequestSettings(annotations map[string]string) (originRequestSet
 				AnnotationNoTLSVerify, AnnotationProxySSLVerify,
 			)
 		}
+	}
+
+	// HTTP/2 to the origin needs TLS, cloudflared silently keeps HTTP/1.1 for
+	// cleartext origins, reject the combination instead of not taking effect
+	if settings.HTTP2Origin != nil && *settings.HTTP2Origin && scheme != "https" {
+		return settings, errors.Errorf(
+			"annotation %s requires %s: https, HTTP/2 to the origin only works over TLS",
+			AnnotationHTTP2Origin, AnnotationBackendProtocol,
+		)
 	}
 
 	return settings, nil
@@ -298,9 +307,11 @@ func parseIntAnnotation(annotations map[string]string, key string) (*int, error)
 	if !ok {
 		return nil, nil
 	}
+	// zero is meaningful, for keepalive-connections it disables the idle
+	// connection pool entirely
 	parsed, err := strconv.Atoi(value)
-	if err != nil || parsed <= 0 {
-		return nil, errors.Errorf("invalid value %q for annotation %s, expect a positive integer", value, key)
+	if err != nil || parsed < 0 {
+		return nil, errors.Errorf("invalid value %q for annotation %s, expect a non negative integer", value, key)
 	}
 	return ptr.To(parsed), nil
 }

@@ -11,6 +11,7 @@ import (
 func Test_parseOriginRequestSettings(t *testing.T) {
 	tests := []struct {
 		name        string
+		scheme      string
 		annotations map[string]string
 		want        originRequestSettings
 		wantErr     bool
@@ -21,7 +22,8 @@ func Test_parseOriginRequestSettings(t *testing.T) {
 			want:        originRequestSettings{},
 		},
 		{
-			name: "all fields set",
+			name:   "all fields set",
+			scheme: "https",
 			annotations: map[string]string{
 				AnnotationConnectTimeout:         "30s",
 				AnnotationTLSTimeout:             "10s",
@@ -81,11 +83,46 @@ func Test_parseOriginRequestSettings(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "zero integer rejected",
+			name: "zero keepalive connections disables the idle pool",
 			annotations: map[string]string{
 				AnnotationKeepAliveConnections: "0",
 			},
+			want: originRequestSettings{
+				KeepAliveConnections: ptr.To(0),
+			},
+		},
+		{
+			name: "negative integer rejected",
+			annotations: map[string]string{
+				AnnotationKeepAliveConnections: "-1",
+			},
 			wantErr: true,
+		},
+		{
+			name: "http2-origin requires https backend",
+			annotations: map[string]string{
+				AnnotationHTTP2Origin: "true",
+			},
+			wantErr: true,
+		},
+		{
+			name:   "http2-origin allowed on https backend",
+			scheme: "https",
+			annotations: map[string]string{
+				AnnotationHTTP2Origin: "true",
+			},
+			want: originRequestSettings{
+				HTTP2Origin: ptr.To(true),
+			},
+		},
+		{
+			name: "explicit http2-origin false allowed on http backend",
+			annotations: map[string]string{
+				AnnotationHTTP2Origin: "false",
+			},
+			want: originRequestSettings{
+				HTTP2Origin: ptr.To(false),
+			},
 		},
 		{
 			name: "no-tls-verify conflicts with proxy-ssl-verify",
@@ -98,7 +135,11 @@ func Test_parseOriginRequestSettings(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseOriginRequestSettings(tt.annotations)
+			scheme := tt.scheme
+			if scheme == "" {
+				scheme = "http"
+			}
+			got, err := parseOriginRequestSettings(tt.annotations, scheme)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("parseOriginRequestSettings() error = %v, wantErr %v", err, tt.wantErr)
 				return

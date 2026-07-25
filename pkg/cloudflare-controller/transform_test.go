@@ -251,7 +251,6 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 					KeepAliveConnections:   ptr.To(100),
 					KeepAliveTimeout:       ptr.To(90 * time.Second),
 					DisableChunkedEncoding: ptr.To(true),
-					HTTP2Origin:            ptr.To(true),
 				},
 			},
 			want: &cloudflare.UnvalidatedIngressRule{
@@ -266,11 +265,10 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 					KeepAliveConnections:   ptr.To(100),
 					KeepAliveTimeout:       &cloudflare.TunnelDuration{Duration: 90 * time.Second},
 					DisableChunkedEncoding: ptr.To(true),
-					Http2Origin:            ptr.To(true),
 				},
 			},
 		}, {
-			name: "direct no-tls-verify overrides https default",
+			name: "direct no-tls-verify and http2-origin on https target",
 			args: args{
 				ctx: context.Background(),
 				exposure: exposure.Exposure{
@@ -279,6 +277,7 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 					PathPrefix:    "/",
 					IsDeleted:     false,
 					NoTLSVerify:   ptr.To(false),
+					HTTP2Origin:   ptr.To(true),
 				},
 			},
 			want: &cloudflare.UnvalidatedIngressRule{
@@ -287,6 +286,7 @@ func Test_fromExposureToCloudflareIngress(t *testing.T) {
 				Service:  "https://10.0.0.1:443",
 				OriginRequest: &cloudflare.OriginRequestConfig{
 					NoTLSVerify: ptr.To(false),
+					Http2Origin: ptr.To(true),
 				},
 			},
 		}, {
