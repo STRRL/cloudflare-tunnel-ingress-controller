@@ -63,7 +63,7 @@ func main() {
 		logLevel:                   0,
 		namespace:                  "default",
 		cloudflaredProtocol:        "auto",
-		cloudflaredImage:           "cloudflare/cloudflared:latest",
+		cloudflaredImage:           "ghcr.io/strrl/cloudflared:2026.7.3-host-metrics.1",
 		cloudflaredImagePullPolicy: "IfNotPresent",
 		cloudflaredReplicaCount:    1,
 		clusterDomain:              "cluster.local",

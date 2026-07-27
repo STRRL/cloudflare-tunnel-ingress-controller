@@ -116,7 +116,7 @@ spec:
             - name: CLOUDFLARED_REPLICA_COUNT
               value: "1"
             - name: CLOUDFLARED_IMAGE
-              value: "cloudflare/cloudflared:latest"
+              value: "ghcr.io/strrl/cloudflared:2026.7.3-host-metrics.1"
             - name: CLOUDFLARED_IMAGE_PULL_POLICY
               value: "IfNotPresent"
             - name: CLOUDFLARE_API_TOKEN
