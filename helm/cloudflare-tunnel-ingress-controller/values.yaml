@@ -115,9 +115,9 @@ healthProbe:
 
 cloudflared:
   image:
-    repository: cloudflare/cloudflared
+    repository: ghcr.io/strrl/cloudflared
     pullPolicy: IfNotPresent
-    tag: latest
+    tag: 2026.7.3-host-metrics.1
   replicaCount: 1
   protocol: auto
   # Convenience switch that renders a required pod anti-affinity on
