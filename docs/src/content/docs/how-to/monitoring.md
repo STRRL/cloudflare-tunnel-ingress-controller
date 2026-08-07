@@ -94,6 +94,12 @@ The repository ships two ready to import Grafana dashboards in the
 
 Import each file in Grafana with `Dashboards -> New -> Import` and select your Prometheus data source. Both metrics endpoints described above must be scraped for the panels to show data.
 
+## Load the Prometheus alert rules
+
+The same directory ships `alerts.yaml` with alert rules for stale syncs, Cloudflare API errors, high 5xx rates per hostname, and unreachable origin services.
+
+Add the file to the `rule_files` section of your Prometheus configuration, or wrap its `groups` list in a `PrometheusRule` object when using the Prometheus Operator. See the [mixin README](https://github.com/STRRL/cloudflare-tunnel-ingress-controller/tree/master/mixin) for the full alert list.
+
 ## Add cloudflared health probes
 
 The chart copies `cloudflared.probes.liveness`, `readiness`, and `startup` into the managed connector container as Kubernetes probe objects.
