@@ -84,6 +84,16 @@ kubectl get servicemonitor \
   -n cloudflare-tunnel-ingress-controller
 ```
 
+## Import the Grafana dashboards
+
+The repository ships two ready to import Grafana dashboards in the
+[`mixin/dist`](https://github.com/STRRL/cloudflare-tunnel-ingress-controller/tree/master/mixin/dist) directory:
+
+1. `controller.json` shows controller health: sync freshness, managed exposures, Cloudflare API errors, DNS record changes, and reconcile activity.
+2. `cloudflared.json` shows traffic per exposed hostname: request rate, status codes, latency percentiles, and traffic volume. These panels use the per hostname metrics from the default `ghcr.io/strrl/cloudflared` image.
+
+Import each file in Grafana with `Dashboards -> New -> Import` and select your Prometheus data source. Both metrics endpoints described above must be scraped for the panels to show data.
+
 ## Add cloudflared health probes
 
 The chart copies `cloudflared.probes.liveness`, `readiness`, and `startup` into the managed connector container as Kubernetes probe objects.
