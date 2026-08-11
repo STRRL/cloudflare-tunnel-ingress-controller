@@ -9,23 +9,21 @@ See [Helm values](/reference/helm-values/) for chart defaults.
 
 ## Inspect controller metrics
 
-The controller serves controller runtime metrics over HTTP at `/metrics` on port `8080`. The chart does not create a Service or ServiceMonitor for this endpoint.
+The controller serves controller runtime metrics plus custom sync metrics over HTTP at `/metrics` on port `9090` (`metrics.port`). The chart always creates a metrics Service for this endpoint. When `serviceMonitor.create` is false, the Service carries `prometheus.io/scrape` annotations for annotation based discovery.
 
 Forward the port from one controller pod:
 
 ```bash
 kubectl port-forward deployment/cloudflare-tunnel-ingress-controller \
   -n cloudflare-tunnel-ingress-controller \
-  8080:8080
+  9090:9090
 ```
 
 Read the endpoint from another terminal:
 
 ```bash
-curl http://127.0.0.1:8080/metrics
+curl http://127.0.0.1:9090/metrics
 ```
-
-Create your own Service and scrape configuration if Prometheus must collect controller metrics continuously.
 
 ## Inspect cloudflared metrics
 
@@ -43,39 +41,40 @@ kubectl port-forward service/controlled-cloudflared-connector-headless \
 curl http://127.0.0.1:44483/metrics
 ```
 
-When `cloudflaredServiceMonitor.create` is false, the Service carries `prometheus.io/scrape: "true"` and `prometheus.io/port: "44483"` annotations for annotation based discovery.
+When `serviceMonitor.create` is false, the Service carries `prometheus.io/scrape: "true"` and `prometheus.io/port: "44483"` annotations for annotation based discovery.
 
-## Create a cloudflared ServiceMonitor
+## Create the ServiceMonitors
 
-Prometheus Operator must be installed before you enable this object. Add the following settings to the values file used by the existing release:
+Prometheus Operator must be installed before you enable these objects. One switch creates ServiceMonitors for both metrics endpoints: the controller and the managed cloudflared connectors. Add the following settings to the values file used by the existing release:
 
 ```yaml
-cloudflaredServiceMonitor:
+serviceMonitor:
   create: true
   labels:
     release: kube-prometheus-stack
-  jobLabel: app.kubernetes.io/component
-  scheme: http
   interval: 30s
   scrapeTimeout: 10s
-  honorLabels: false
   metricRelabelings: []
   relabelings: []
+  cloudflared:
+    jobLabel: app.kubernetes.io/component
+    honorLabels: false
+    scheme: http
 ```
 
 Adjust each field for your Prometheus installation:
 
-1. `create` renders the ServiceMonitor.
+1. `create` renders both ServiceMonitors.
 2. `labels` adds metadata labels, commonly used by a Prometheus selector.
-3. `jobLabel` names the selected Service label used as the Prometheus job label.
-4. `scheme` sets the scrape scheme.
-5. `interval` sets the scrape interval.
-6. `scrapeTimeout` sets the timeout for one scrape.
-7. `honorLabels` controls whether labels from scraped metrics take precedence.
-8. `metricRelabelings` adds metric relabel rules after a scrape.
-9. `relabelings` adds target relabel rules before a scrape.
+3. `interval` sets the scrape interval.
+4. `scrapeTimeout` sets the timeout for one scrape.
+5. `metricRelabelings` adds metric relabel rules after a scrape.
+6. `relabelings` adds target relabel rules before a scrape.
+7. `cloudflared.jobLabel` names the selected Service label used as the Prometheus job label for the connector target.
+8. `cloudflared.honorLabels` controls whether labels from scraped connector metrics take precedence.
+9. `cloudflared.scheme` sets the scrape scheme for the connector target.
 
-The generated ServiceMonitor selects only the managed connector Service in the Helm release namespace and scrapes its named `metrics` port at `/metrics`.
+The generated ServiceMonitors select only the chart Services in the Helm release namespace and scrape their named `metrics` ports at `/metrics`.
 
 Run your normal Helm upgrade, then verify the object:
 

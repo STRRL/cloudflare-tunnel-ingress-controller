@@ -55,21 +55,21 @@ The chart writes these values to the deployment customization file consumed by t
 | `cloudflared.pdb.minAvailable`          | unset                           | Minimum available connector pods. Mutually exclusive with `cloudflared.pdb.maxUnavailable`.                                                                                         |
 | `cloudflared.pdb.maxUnavailable`        | unset                           | Maximum unavailable connector pods. Mutually exclusive with `cloudflared.pdb.minAvailable`.                                                                                         |
 
-## Cloudflared ServiceMonitor
+## ServiceMonitor
 
-These values configure the Prometheus Operator `ServiceMonitor` for managed cloudflared connectors.
+These values configure the Prometheus Operator `ServiceMonitor` objects. One switch creates ServiceMonitors for both metrics endpoints: the controller and the managed cloudflared connectors.
 
-| Value                                         | Default | Notes                                                                                      |
-| --------------------------------------------- | ------- | ------------------------------------------------------------------------------------------ |
-| `cloudflaredServiceMonitor.create`            | `false` | Create the ServiceMonitor.                                                                 |
-| `cloudflaredServiceMonitor.jobLabel`          | `""`    | Service label used as the Prometheus job name. Omitted from the ServiceMonitor when empty. |
-| `cloudflaredServiceMonitor.interval`          | `""`    | Scrape interval. Omitted from the endpoint when empty.                                     |
-| `cloudflaredServiceMonitor.scrapeTimeout`     | `""`    | Scrape timeout. Omitted from the endpoint when empty.                                      |
-| `cloudflaredServiceMonitor.honorLabels`       | `false` | Preserve labels from scraped metrics when they conflict with server-side labels.           |
-| `cloudflaredServiceMonitor.metricRelabelings` | `[]`    | Metric relabeling rules applied after scraping.                                            |
-| `cloudflaredServiceMonitor.relabelings`       | `[]`    | Target relabeling rules applied before scraping.                                           |
-| `cloudflaredServiceMonitor.labels`            | `{}`    | Additional labels added to the ServiceMonitor.                                             |
-| `cloudflaredServiceMonitor.scheme`            | `http`  | Scheme used to scrape the metrics endpoint.                                                |
+| Value                              | Default | Notes                                                                                      |
+| ---------------------------------- | ------- | ------------------------------------------------------------------------------------------ |
+| `serviceMonitor.create`            | `false` | Create both ServiceMonitors. Requires the Prometheus Operator CRDs.                        |
+| `serviceMonitor.labels`            | `{}`    | Additional labels added to both ServiceMonitors.                                           |
+| `serviceMonitor.interval`          | `""`    | Scrape interval. Omitted from the endpoints when empty.                                    |
+| `serviceMonitor.scrapeTimeout`     | `""`    | Scrape timeout. Omitted from the endpoints when empty.                                     |
+| `serviceMonitor.metricRelabelings` | `[]`    | Metric relabeling rules applied after scraping.                                            |
+| `serviceMonitor.relabelings`       | `[]`    | Target relabeling rules applied before scraping.                                           |
+| `serviceMonitor.cloudflared.jobLabel` | `""` | Service label used as the Prometheus job name for the connector target. Omitted when empty. |
+| `serviceMonitor.cloudflared.honorLabels` | `false` | Preserve labels from scraped connector metrics when they conflict with server-side labels. |
+| `serviceMonitor.cloudflared.scheme` | `http` | Scheme used to scrape the connector metrics endpoint.                                      |
 
 ## Uninstall behaviour
 

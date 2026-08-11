@@ -1,16 +1,16 @@
-{{- if .Values.cloudflaredServiceMonitor.create }}
+{{- if .Values.serviceMonitor.create }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: {{ include "cloudflare-tunnel-ingress-controller.fullname" . }}-controlled-cloudflared
   labels:
     {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
-    {{- if .Values.cloudflaredServiceMonitor.labels }}
-    {{- toYaml .Values.cloudflaredServiceMonitor.labels | nindent 4 }}
+    {{- if .Values.serviceMonitor.labels }}
+    {{- toYaml .Values.serviceMonitor.labels | nindent 4 }}
     {{- end }}
 spec:
-  {{- if .Values.cloudflaredServiceMonitor.jobLabel }}
-  jobLabel: {{ .Values.cloudflaredServiceMonitor.jobLabel }}
+  {{- if .Values.serviceMonitor.cloudflared.jobLabel }}
+  jobLabel: {{ .Values.serviceMonitor.cloudflared.jobLabel }}
   {{- end }}
   selector:
     matchLabels:
@@ -19,21 +19,21 @@ spec:
   endpoints:
     - port: metrics
       path: /metrics
-      scheme: {{ .Values.cloudflaredServiceMonitor.scheme }}
-      {{- if .Values.cloudflaredServiceMonitor.interval }}
-      interval: {{ .Values.cloudflaredServiceMonitor.interval }}
+      scheme: {{ .Values.serviceMonitor.cloudflared.scheme }}
+      {{- if .Values.serviceMonitor.interval }}
+      interval: {{ .Values.serviceMonitor.interval }}
       {{- end }}
-      {{- if .Values.cloudflaredServiceMonitor.scrapeTimeout }}
-      scrapeTimeout: {{ .Values.cloudflaredServiceMonitor.scrapeTimeout }}
+      {{- if .Values.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}
       {{- end }}
-      {{- if .Values.cloudflaredServiceMonitor.honorLabels }}
-      honorLabels: {{ .Values.cloudflaredServiceMonitor.honorLabels }}
+      {{- if .Values.serviceMonitor.cloudflared.honorLabels }}
+      honorLabels: {{ .Values.serviceMonitor.cloudflared.honorLabels }}
       {{- end }}
-      {{- if .Values.cloudflaredServiceMonitor.metricRelabelings }}
-      metricRelabelings: {{ .Values.cloudflaredServiceMonitor.metricRelabelings }}
+      {{- if .Values.serviceMonitor.metricRelabelings }}
+      metricRelabelings: {{ .Values.serviceMonitor.metricRelabelings }}
       {{- end }}
-      {{- if .Values.cloudflaredServiceMonitor.relabelings }}
-      relabelings: {{ .Values.cloudflaredServiceMonitor.relabelings }}
+      {{- if .Values.serviceMonitor.relabelings }}
+      relabelings: {{ .Values.serviceMonitor.relabelings }}
       {{- end }}
   namespaceSelector:
     matchNames:

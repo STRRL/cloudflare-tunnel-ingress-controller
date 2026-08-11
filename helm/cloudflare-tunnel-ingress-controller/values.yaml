@@ -96,18 +96,27 @@ clusterDomain: cluster.local
 leaderElection:
   enabled: false
 
-# Metrics endpoint of the controller itself. It serves the controller-runtime
+# Port of the controller metrics endpoint. It serves the controller-runtime
 # built-in metrics (reconcile counts, workqueue depth, and so on) plus custom
 # metrics like cloudflare_tunnel_ingress_controller_last_successful_sync_timestamp_seconds.
 metrics:
   port: 9090
-  serviceMonitor:
-    create: false
-    interval: ""
-    scrapeTimeout: ""
-    metricRelabelings: []
-    relabelings: []
-    labels: {}
+
+# ServiceMonitor objects for the Prometheus Operator. One switch creates
+# ServiceMonitors for both metrics endpoints: the controller and the managed
+# cloudflared connectors. Requires the Prometheus Operator CRDs.
+serviceMonitor:
+  create: false
+  labels: {}
+  interval: ""
+  scrapeTimeout: ""
+  metricRelabelings: []
+  relabelings: []
+  # Settings that only apply to the cloudflared connectors endpoint.
+  cloudflared:
+    jobLabel: ""
+    honorLabels: false
+    scheme: http
 
 # Health endpoint of the controller, used by liveness and readiness probes.
 healthProbe:
@@ -154,14 +163,3 @@ cloudflared:
     enabled: false
     # minAvailable: 1
     # maxUnavailable: 1
-
-cloudflaredServiceMonitor:
-  create: false
-  jobLabel: ""
-  interval: ""
-  scrapeTimeout: ""
-  honorLabels: false
-  metricRelabelings: []
-  relabelings: []
-  labels: {}
-  scheme: http

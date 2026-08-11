@@ -1,12 +1,12 @@
-{{- if .Values.metrics.serviceMonitor.create }}
+{{- if .Values.serviceMonitor.create }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: {{ include "cloudflare-tunnel-ingress-controller.fullname" . }}
   labels:
     {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
-    {{- if .Values.metrics.serviceMonitor.labels }}
-    {{- toYaml .Values.metrics.serviceMonitor.labels | nindent 4 }}
+    {{- if .Values.serviceMonitor.labels }}
+    {{- toYaml .Values.serviceMonitor.labels | nindent 4 }}
     {{- end }}
 spec:
   selector:
@@ -16,17 +16,17 @@ spec:
   endpoints:
     - port: metrics
       path: /metrics
-      {{- if .Values.metrics.serviceMonitor.interval }}
-      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      {{- if .Values.serviceMonitor.interval }}
+      interval: {{ .Values.serviceMonitor.interval }}
       {{- end }}
-      {{- if .Values.metrics.serviceMonitor.scrapeTimeout }}
-      scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
+      {{- if .Values.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}
       {{- end }}
-      {{- if .Values.metrics.serviceMonitor.metricRelabelings }}
-      metricRelabelings: {{ .Values.metrics.serviceMonitor.metricRelabelings }}
+      {{- if .Values.serviceMonitor.metricRelabelings }}
+      metricRelabelings: {{ .Values.serviceMonitor.metricRelabelings }}
       {{- end }}
-      {{- if .Values.metrics.serviceMonitor.relabelings }}
-      relabelings: {{ .Values.metrics.serviceMonitor.relabelings }}
+      {{- if .Values.serviceMonitor.relabelings }}
+      relabelings: {{ .Values.serviceMonitor.relabelings }}
       {{- end }}
   namespaceSelector:
     matchNames:

@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/component: controller
     {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
   annotations:
-    {{- if not .Values.metrics.serviceMonitor.create }}
+    {{- if not .Values.serviceMonitor.create }}
     prometheus.io/scrape: "true"
     prometheus.io/port: {{ .Values.metrics.port | quote }}
     {{- end }}
