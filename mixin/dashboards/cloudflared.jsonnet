@@ -76,8 +76,8 @@ local panels = [
   g.timeseries(
     'Traffic Volume by Host',
     [
-      g.target('sum by (host) (rate(cloudflared_tunnel_host_request_body_size_bytes_sum{%s}[$__rate_interval]))' % hostFilter, 'in {{host}}'),
-      g.target('sum by (host) (rate(cloudflared_tunnel_host_response_body_size_bytes_sum{%s}[$__rate_interval]))' % hostFilter, 'out {{host}}'),
+      g.target('sum by (host) (rate(cloudflared_tunnel_host_request_body_size_bytes_sum{%s}[$__rate_interval]))' % hostFilter, 'rx {{host}}'),
+      g.target('-sum by (host) (rate(cloudflared_tunnel_host_response_body_size_bytes_sum{%s}[$__rate_interval]))' % hostFilter, 'tx {{host}}'),
     ],
     { x: 12, y: 21, w: 12, h: 8 },
     unit='Bps',

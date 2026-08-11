@@ -492,7 +492,6 @@
             "type": "datasource"
          },
          {
-            "allValue": ".+",
             "datasource": {
                "type": "prometheus",
                "uid": "${datasource}"

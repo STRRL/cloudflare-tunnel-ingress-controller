@@ -37,7 +37,6 @@
     sort: 1,
     multi: multi,
     includeAll: multi,
-    [if multi then 'allValue']: '.+',
   },
 
   target(expr, legend):: {
