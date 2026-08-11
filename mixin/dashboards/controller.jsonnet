@@ -13,14 +13,6 @@ local panels = [
     [g.target('time() - max(cloudflare_tunnel_ingress_controller_last_successful_sync_timestamp_seconds)', 'age')],
     { x: 6, y: 0, w: 6, h: 5 },
     unit='s',
-    thresholds={
-      mode: 'absolute',
-      steps: [
-        { color: 'green', value: null },
-        { color: 'yellow', value: 60 },
-        { color: 'red', value: 300 },
-      ],
-    },
   ),
   g.stat(
     'Cloudflare API Errors (1h)',
