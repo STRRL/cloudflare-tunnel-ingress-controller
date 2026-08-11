@@ -42,6 +42,7 @@ local panels = [
     [g.target('sum by (host) (rate(cloudflared_tunnel_host_requests_total{%s}[$__rate_interval]))' % hostFilter, '{{host}}')],
     { x: 0, y: 5, w: 12, h: 8 },
     unit='reqps',
+    stackedBars=true,
   ),
   g.timeseries(
     'Responses by Status Class',

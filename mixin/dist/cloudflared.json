@@ -183,9 +183,14 @@
          "fieldConfig": {
             "defaults": {
                "custom": {
-                  "fillOpacity": 10,
-                  "lineWidth": 1,
-                  "showPoints": "never"
+                  "drawStyle": "bars",
+                  "fillOpacity": 80,
+                  "lineWidth": 0,
+                  "showPoints": "never",
+                  "stacking": {
+                     "group": "A",
+                     "mode": "normal"
+                  }
                },
                "unit": "reqps"
             },
