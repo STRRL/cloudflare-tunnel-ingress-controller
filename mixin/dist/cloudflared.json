@@ -538,7 +538,7 @@
                   "uid": "${datasource}"
                },
                "expr": "sum by (host) (rate(cloudflared_tunnel_host_request_body_size_bytes_sum{host=~\"$host\"}[$__rate_interval]))",
-               "legendFormat": "rx {{host}}",
+               "legendFormat": "in {{host}}",
                "refId": "A"
             },
             {
@@ -547,7 +547,7 @@
                   "uid": "${datasource}"
                },
                "expr": "-sum by (host) (rate(cloudflared_tunnel_host_response_body_size_bytes_sum{host=~\"$host\"}[$__rate_interval]))",
-               "legendFormat": "tx {{host}}",
+               "legendFormat": "out {{host}}",
                "refId": "B"
             }
          ],
