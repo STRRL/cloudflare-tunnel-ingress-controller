@@ -50,7 +50,7 @@
     targets,
   ),
 
-  timeseries(title, targets, gridPos, unit='short'):: {
+  timeseries(title, targets, gridPos, unit='short', stackedBars=false):: {
     type: 'timeseries',
     title: title,
     datasource: datasource,
@@ -62,7 +62,14 @@
           fillOpacity: 10,
           showPoints: 'never',
           lineWidth: 1,
-        },
+        } + (
+          if stackedBars then {
+            drawStyle: 'bars',
+            fillOpacity: 80,
+            lineWidth: 0,
+            stacking: { mode: 'normal', group: 'A' },
+          } else {}
+        ),
       },
       overrides: [],
     },
