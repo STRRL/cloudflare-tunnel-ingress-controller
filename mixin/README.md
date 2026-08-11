@@ -15,7 +15,10 @@ The compiled dashboards live in `dist/`:
   volume for every exposed hostname.
 
 Import them in Grafana with `Dashboards -> New -> Import`, then pick your
-Prometheus data source.
+Prometheus data source. They are also published on grafana.com:
+[25659](https://grafana.com/grafana/dashboards/25659) (controller) and
+[25660](https://grafana.com/grafana/dashboards/25660) (per hostname traffic),
+so you can import them by ID as well.
 
 The per hostname panels need the patched cloudflared image
 (`ghcr.io/strrl/cloudflared`), which is the chart default. See the

@@ -94,6 +94,11 @@ The repository ships two ready to import Grafana dashboards in the
 
 Import each file in Grafana with `Dashboards -> New -> Import` and select your Prometheus data source. Both metrics endpoints described above must be scraped for the panels to show data.
 
+Both dashboards are also published on grafana.com, so you can import them by ID instead of uploading a file:
+
+1. [25659](https://grafana.com/grafana/dashboards/25659): Cloudflare Tunnel Ingress Controller
+2. [25660](https://grafana.com/grafana/dashboards/25660): Cloudflare Tunnel Traffic by Hostname
+
 ## Load the Prometheus alert rules
 
 The same directory ships `alerts.yaml` with alert rules for stale syncs, Cloudflare API errors, high 5xx rates per hostname, and unreachable origin services.
