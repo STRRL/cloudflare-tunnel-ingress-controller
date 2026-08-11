@@ -3,7 +3,7 @@
 // request and error rates.
 local g = import '../lib/grafana.libsonnet';
 
-local hostFilter = 'host=~"$host"';
+local hostFilter = 'host=~"$host", pod=~"$pod"';
 
 local panels = [
   g.stat(
@@ -96,12 +96,12 @@ local panels = [
 
   g.timeseries(
     'Concurrent Requests per Tunnel',
-    [g.target('sum(cloudflared_tunnel_concurrent_requests_per_tunnel)', 'concurrent')],
+    [g.target('sum(cloudflared_tunnel_concurrent_requests_per_tunnel{pod=~"$pod"})', 'concurrent')],
     { x: 0, y: 37, w: 12, h: 8 },
   ),
   g.timeseries(
     'Active TCP Sessions',
-    [g.target('sum(cloudflared_tcp_active_sessions)', 'sessions')],
+    [g.target('sum(cloudflared_tcp_active_sessions{pod=~"$pod"})', 'sessions')],
     { x: 12, y: 37, w: 12, h: 8 },
   ),
 ];
@@ -112,5 +112,6 @@ g.dashboard(
   panels,
   variables=[
     g.queryVariable('host', 'label_values(cloudflared_tunnel_host_requests_total, host)', multi=true),
+    g.queryVariable('pod', 'label_values(cloudflared_tunnel_host_requests_total, pod)', multi=true),
   ],
 )

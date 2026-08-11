@@ -34,7 +34,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum(rate(cloudflared_tunnel_host_requests_total{host=~\"$host\"}[$__rate_interval]))",
+               "expr": "sum(rate(cloudflared_tunnel_host_requests_total{host=~\"$host\", pod=~\"$pod\"}[$__rate_interval]))",
                "legendFormat": "req/s",
                "refId": "A"
             }
@@ -87,7 +87,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum(rate(cloudflared_tunnel_host_requests_total{host=~\"$host\", status=~\"5..\"}[$__rate_interval])) or vector(0)",
+               "expr": "sum(rate(cloudflared_tunnel_host_requests_total{host=~\"$host\", pod=~\"$pod\", status=~\"5..\"}[$__rate_interval])) or vector(0)",
                "legendFormat": "5xx/s",
                "refId": "A"
             }
@@ -127,7 +127,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "histogram_quantile(0.99, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\"}[$__rate_interval])))",
+               "expr": "histogram_quantile(0.99, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\", pod=~\"$pod\"}[$__rate_interval])))",
                "legendFormat": "p99",
                "refId": "A"
             }
@@ -213,7 +213,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum by (host) (rate(cloudflared_tunnel_host_requests_total{host=~\"$host\"}[$__rate_interval]))",
+               "expr": "sum by (host) (rate(cloudflared_tunnel_host_requests_total{host=~\"$host\", pod=~\"$pod\"}[$__rate_interval]))",
                "legendFormat": "{{host}}",
                "refId": "A"
             }
@@ -259,7 +259,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum by (status) (rate(cloudflared_tunnel_host_requests_total{host=~\"$host\"}[$__rate_interval]))",
+               "expr": "sum by (status) (rate(cloudflared_tunnel_host_requests_total{host=~\"$host\", pod=~\"$pod\"}[$__rate_interval]))",
                "legendFormat": "{{status}}",
                "refId": "A"
             }
@@ -305,7 +305,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "histogram_quantile(0.50, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\"}[$__rate_interval])))",
+               "expr": "histogram_quantile(0.50, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\", pod=~\"$pod\"}[$__rate_interval])))",
                "legendFormat": "p50",
                "refId": "A"
             },
@@ -314,7 +314,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "histogram_quantile(0.90, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\"}[$__rate_interval])))",
+               "expr": "histogram_quantile(0.90, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\", pod=~\"$pod\"}[$__rate_interval])))",
                "legendFormat": "p90",
                "refId": "B"
             },
@@ -323,7 +323,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "histogram_quantile(0.95, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\"}[$__rate_interval])))",
+               "expr": "histogram_quantile(0.95, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\", pod=~\"$pod\"}[$__rate_interval])))",
                "legendFormat": "p95",
                "refId": "C"
             },
@@ -332,7 +332,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "histogram_quantile(0.99, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\"}[$__rate_interval])))",
+               "expr": "histogram_quantile(0.99, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\", pod=~\"$pod\"}[$__rate_interval])))",
                "legendFormat": "p99",
                "refId": "D"
             }
@@ -378,7 +378,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "histogram_quantile(0.99, sum by (le) (rate(cloudflared_tunnel_host_connect_duration_seconds_bucket{host=~\"$host\"}[$__rate_interval])))",
+               "expr": "histogram_quantile(0.99, sum by (le) (rate(cloudflared_tunnel_host_connect_duration_seconds_bucket{host=~\"$host\", pod=~\"$pod\"}[$__rate_interval])))",
                "legendFormat": "connect",
                "refId": "A"
             },
@@ -387,7 +387,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "histogram_quantile(0.99, sum by (le) (rate(cloudflared_tunnel_host_header_duration_seconds_bucket{host=~\"$host\"}[$__rate_interval])))",
+               "expr": "histogram_quantile(0.99, sum by (le) (rate(cloudflared_tunnel_host_header_duration_seconds_bucket{host=~\"$host\", pod=~\"$pod\"}[$__rate_interval])))",
                "legendFormat": "first header",
                "refId": "B"
             },
@@ -396,7 +396,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "histogram_quantile(0.99, sum by (le) (rate(cloudflared_tunnel_host_response_duration_seconds_bucket{host=~\"$host\"}[$__rate_interval])))",
+               "expr": "histogram_quantile(0.99, sum by (le) (rate(cloudflared_tunnel_host_response_duration_seconds_bucket{host=~\"$host\", pod=~\"$pod\"}[$__rate_interval])))",
                "legendFormat": "full response",
                "refId": "C"
             }
@@ -425,7 +425,7 @@
             "color": {
                "mode": "scheme",
                "reverse": false,
-               "scheme": "Oranges",
+               "scheme": "Spectral",
                "steps": 64
             },
             "legend": {
@@ -444,7 +444,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum by (le) (increase(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\"}[$__rate_interval]))",
+               "expr": "sum by (le) (increase(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\", pod=~\"$pod\"}[$__rate_interval]))",
                "format": "heatmap",
                "legendFormat": "{{le}}",
                "refId": "A"
@@ -491,7 +491,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum by (host) (rate(cloudflared_tunnel_host_request_errors_total{host=~\"$host\"}[$__rate_interval]))",
+               "expr": "sum by (host) (rate(cloudflared_tunnel_host_request_errors_total{host=~\"$host\", pod=~\"$pod\"}[$__rate_interval]))",
                "legendFormat": "{{host}}",
                "refId": "A"
             }
@@ -537,7 +537,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum by (host) (rate(cloudflared_tunnel_host_request_body_size_bytes_sum{host=~\"$host\"}[$__rate_interval]))",
+               "expr": "sum by (host) (rate(cloudflared_tunnel_host_request_body_size_bytes_sum{host=~\"$host\", pod=~\"$pod\"}[$__rate_interval]))",
                "legendFormat": "in {{host}}",
                "refId": "A"
             },
@@ -546,7 +546,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "-sum by (host) (rate(cloudflared_tunnel_host_response_body_size_bytes_sum{host=~\"$host\"}[$__rate_interval]))",
+               "expr": "-sum by (host) (rate(cloudflared_tunnel_host_response_body_size_bytes_sum{host=~\"$host\", pod=~\"$pod\"}[$__rate_interval]))",
                "legendFormat": "out {{host}}",
                "refId": "B"
             }
@@ -592,7 +592,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum(cloudflared_tunnel_concurrent_requests_per_tunnel)",
+               "expr": "sum(cloudflared_tunnel_concurrent_requests_per_tunnel{pod=~\"$pod\"})",
                "legendFormat": "concurrent",
                "refId": "A"
             }
@@ -638,7 +638,7 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "sum(cloudflared_tcp_active_sessions)",
+               "expr": "sum(cloudflared_tcp_active_sessions{pod=~\"$pod\"})",
                "legendFormat": "sessions",
                "refId": "A"
             }
@@ -671,6 +671,22 @@
             "query": {
                "query": "label_values(cloudflared_tunnel_host_requests_total, host)",
                "refId": "var-host"
+            },
+            "refresh": 2,
+            "sort": 1,
+            "type": "query"
+         },
+         {
+            "datasource": {
+               "type": "prometheus",
+               "uid": "${datasource}"
+            },
+            "includeAll": true,
+            "multi": true,
+            "name": "pod",
+            "query": {
+               "query": "label_values(cloudflared_tunnel_host_requests_total, pod)",
+               "refId": "var-pod"
             },
             "refresh": 2,
             "sort": 1,
