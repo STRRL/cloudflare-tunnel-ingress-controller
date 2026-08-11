@@ -4,7 +4,30 @@
 {
   local datasource = { type: 'prometheus', uid: '${datasource}' },
 
+  local panelPrettyNames = {
+    timeseries: 'Time series',
+    stat: 'Stat',
+    heatmap: 'Heatmap',
+  },
+
   dashboard(title, uid, panels, variables=[]):: {
+    // The __inputs, __elements and __requires sections are what the
+    // grafana.com upload validator expects from an exported dashboard.
+    // Without them the upload fails with "Old dashboard JSON format".
+    '__inputs': [],
+    '__elements': {},
+    '__requires': [
+      { type: 'grafana', id: 'grafana', name: 'Grafana', version: '10.0.0' },
+      { type: 'datasource', id: 'prometheus', name: 'Prometheus', version: '1.0.0' },
+    ] + [
+      {
+        type: 'panel',
+        id: t,
+        name: if t in panelPrettyNames then panelPrettyNames[t] else t,
+        version: '',
+      }
+      for t in std.set([p.type for p in panels])
+    ],
     title: title,
     uid: uid,
     schemaVersion: 39,
