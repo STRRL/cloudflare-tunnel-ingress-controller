@@ -305,12 +305,39 @@
                   "type": "prometheus",
                   "uid": "${datasource}"
                },
-               "expr": "histogram_quantile(0.99, sum by (host, le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\"}[$__rate_interval])))",
-               "legendFormat": "{{host}}",
+               "expr": "histogram_quantile(0.50, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\"}[$__rate_interval])))",
+               "legendFormat": "p50",
                "refId": "A"
+            },
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "histogram_quantile(0.90, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\"}[$__rate_interval])))",
+               "legendFormat": "p90",
+               "refId": "B"
+            },
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "histogram_quantile(0.95, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\"}[$__rate_interval])))",
+               "legendFormat": "p95",
+               "refId": "C"
+            },
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "histogram_quantile(0.99, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\"}[$__rate_interval])))",
+               "legendFormat": "p99",
+               "refId": "D"
             }
          ],
-         "title": "Request Duration by Host (p99)",
+         "title": "Request Duration Percentiles",
          "type": "timeseries"
       },
       {
@@ -383,6 +410,55 @@
             "uid": "${datasource}"
          },
          "fieldConfig": {
+            "defaults": { },
+            "overrides": [ ]
+         },
+         "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 21
+         },
+         "options": {
+            "calculate": false,
+            "cellGap": 1,
+            "color": {
+               "mode": "scheme",
+               "reverse": true,
+               "scheme": "Spectral",
+               "steps": 64
+            },
+            "legend": {
+               "show": true
+            },
+            "tooltip": {
+               "mode": "single"
+            },
+            "yAxis": {
+               "unit": "s"
+            }
+         },
+         "targets": [
+            {
+               "datasource": {
+                  "type": "prometheus",
+                  "uid": "${datasource}"
+               },
+               "expr": "sum by (le) (increase(cloudflared_tunnel_host_request_duration_seconds_bucket{host=~\"$host\"}[$__rate_interval]))",
+               "format": "heatmap",
+               "legendFormat": "{{le}}",
+               "refId": "A"
+            }
+         ],
+         "title": "Request Duration Heatmap",
+         "type": "heatmap"
+      },
+      {
+         "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+         },
+         "fieldConfig": {
             "defaults": {
                "custom": {
                   "fillOpacity": 10,
@@ -397,7 +473,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 21
+            "y": 29
          },
          "options": {
             "legend": {
@@ -443,7 +519,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 21
+            "y": 29
          },
          "options": {
             "legend": {
@@ -498,7 +574,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 29
+            "y": 37
          },
          "options": {
             "legend": {
@@ -544,7 +620,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 29
+            "y": 37
          },
          "options": {
             "legend": {

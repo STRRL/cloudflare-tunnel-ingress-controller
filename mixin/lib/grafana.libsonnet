@@ -73,6 +73,31 @@
     targets: withRefIds(targets),
   },
 
+  // A heatmap fed by Prometheus histogram buckets. The query must keep the
+  // le label, for example: sum by (le) (increase(some_bucket[interval])).
+  heatmap(title, expr, gridPos, unit='s'):: {
+    type: 'heatmap',
+    title: title,
+    datasource: datasource,
+    gridPos: gridPos,
+    fieldConfig: { defaults: {}, overrides: [] },
+    options: {
+      calculate: false,
+      cellGap: 1,
+      color: { mode: 'scheme', scheme: 'Spectral', steps: 64, reverse: true },
+      yAxis: { unit: unit },
+      tooltip: { mode: 'single' },
+      legend: { show: true },
+    },
+    targets: [{
+      expr: expr,
+      format: 'heatmap',
+      legendFormat: '{{le}}',
+      datasource: datasource,
+      refId: 'A',
+    }],
+  },
+
   stat(title, targets, gridPos, unit='short', thresholds=null):: {
     type: 'stat',
     title: title,

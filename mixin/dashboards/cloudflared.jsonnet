@@ -51,8 +51,13 @@ local panels = [
   ),
 
   g.timeseries(
-    'Request Duration by Host (p99)',
-    [g.target('histogram_quantile(0.99, sum by (host, le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{%s}[$__rate_interval])))' % hostFilter, '{{host}}')],
+    'Request Duration Percentiles',
+    [
+      g.target('histogram_quantile(0.50, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{%s}[$__rate_interval])))' % hostFilter, 'p50'),
+      g.target('histogram_quantile(0.90, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{%s}[$__rate_interval])))' % hostFilter, 'p90'),
+      g.target('histogram_quantile(0.95, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{%s}[$__rate_interval])))' % hostFilter, 'p95'),
+      g.target('histogram_quantile(0.99, sum by (le) (rate(cloudflared_tunnel_host_request_duration_seconds_bucket{%s}[$__rate_interval])))' % hostFilter, 'p99'),
+    ],
     { x: 0, y: 13, w: 12, h: 8 },
     unit='s',
   ),
@@ -67,10 +72,16 @@ local panels = [
     unit='s',
   ),
 
+  g.heatmap(
+    'Request Duration Heatmap',
+    'sum by (le) (increase(cloudflared_tunnel_host_request_duration_seconds_bucket{%s}[$__rate_interval]))' % hostFilter,
+    { x: 0, y: 21, w: 24, h: 8 },
+  ),
+
   g.timeseries(
     'Proxy Errors by Host',
     [g.target('sum by (host) (rate(cloudflared_tunnel_host_request_errors_total{%s}[$__rate_interval]))' % hostFilter, '{{host}}')],
-    { x: 0, y: 21, w: 12, h: 8 },
+    { x: 0, y: 29, w: 12, h: 8 },
     unit='ops',
   ),
   g.timeseries(
@@ -79,19 +90,19 @@ local panels = [
       g.target('sum by (host) (rate(cloudflared_tunnel_host_request_body_size_bytes_sum{%s}[$__rate_interval]))' % hostFilter, 'rx {{host}}'),
       g.target('-sum by (host) (rate(cloudflared_tunnel_host_response_body_size_bytes_sum{%s}[$__rate_interval]))' % hostFilter, 'tx {{host}}'),
     ],
-    { x: 12, y: 21, w: 12, h: 8 },
+    { x: 12, y: 29, w: 12, h: 8 },
     unit='Bps',
   ),
 
   g.timeseries(
     'Concurrent Requests per Tunnel',
     [g.target('sum(cloudflared_tunnel_concurrent_requests_per_tunnel)', 'concurrent')],
-    { x: 0, y: 29, w: 12, h: 8 },
+    { x: 0, y: 37, w: 12, h: 8 },
   ),
   g.timeseries(
     'Active TCP Sessions',
     [g.target('sum(cloudflared_tcp_active_sessions)', 'sessions')],
-    { x: 12, y: 29, w: 12, h: 8 },
+    { x: 12, y: 37, w: 12, h: 8 },
   ),
 ];
 
