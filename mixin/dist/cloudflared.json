@@ -424,8 +424,8 @@
             "cellGap": 1,
             "color": {
                "mode": "scheme",
-               "reverse": true,
-               "scheme": "Spectral",
+               "reverse": false,
+               "scheme": "Oranges",
                "steps": 64
             },
             "legend": {

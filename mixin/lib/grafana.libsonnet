@@ -84,7 +84,7 @@
     options: {
       calculate: false,
       cellGap: 1,
-      color: { mode: 'scheme', scheme: 'Spectral', steps: 64, reverse: true },
+      color: { mode: 'scheme', scheme: 'Oranges', steps: 64, reverse: false },
       yAxis: { unit: unit },
       tooltip: { mode: 'single' },
       legend: { show: true },
