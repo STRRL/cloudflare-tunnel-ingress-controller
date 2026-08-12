@@ -102,12 +102,6 @@ Both dashboards are also published on grafana.com, so you can import them by ID 
 1. [25659](https://grafana.com/grafana/dashboards/25659): Cloudflare Tunnel Ingress Controller
 2. [25660](https://grafana.com/grafana/dashboards/25660): Cloudflare Tunnel Traffic by Hostname
 
-## Load the Prometheus alert rules
-
-The same directory ships `alerts.yaml` with alert rules for stale syncs, Cloudflare API errors, high 5xx rates per hostname, and unreachable origin services.
-
-Add the file to the `rule_files` section of your Prometheus configuration, or wrap its `groups` list in a `PrometheusRule` object when using the Prometheus Operator. See the [mixin README](https://github.com/STRRL/cloudflare-tunnel-ingress-controller/tree/master/mixin) for the full alert list.
-
 ## Add cloudflared health probes
 
 The chart copies `cloudflared.probes.liveness`, `readiness`, and `startup` into the managed connector container as Kubernetes probe objects.

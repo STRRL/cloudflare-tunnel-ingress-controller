@@ -33,10 +33,9 @@ e2e: e2e-image
 setup-envtest:
 	bash ./hack/install-setup-envtest.sh
 
-# Compile the Grafana dashboards and Prometheus alert rules from jsonnet
-# sources into plain files under mixin/dist. Requires the jsonnet binary.
+# Compile the Grafana dashboards from jsonnet sources into plain files
+# under mixin/dist. Requires the jsonnet binary.
 .PHONY: dashboards
 dashboards:
 	jsonnet mixin/dashboards/controller.jsonnet > mixin/dist/controller.json
 	jsonnet mixin/dashboards/cloudflared.jsonnet > mixin/dist/cloudflared.json
-	jsonnet -S mixin/alerts/alerts.jsonnet > mixin/dist/alerts.yaml

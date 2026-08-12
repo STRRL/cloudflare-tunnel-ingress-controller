@@ -1,7 +1,7 @@
-# Grafana Dashboards and Alert Rules
+# Grafana Dashboards
 
-Grafana dashboards and Prometheus alert rules for the controller and its
-managed cloudflared connectors, written in jsonnet.
+Grafana dashboards for the controller and its managed cloudflared
+connectors, written in jsonnet.
 
 ## Ready to import JSON
 
@@ -24,20 +24,6 @@ The per hostname panels need the patched cloudflared image
 (`ghcr.io/strrl/cloudflared`), which is the chart default. See the
 [monitoring guide](https://tunnel.strrl.dev/how-to/monitoring/) for how to
 scrape both metrics endpoints.
-
-## Alert rules
-
-`dist/alerts.yaml` contains Prometheus alert rules:
-
-- `CloudflareTunnelSyncStale`: the controller stopped syncing to Cloudflare.
-- `CloudflareTunnelSyncMissing`: the sync metric is gone, controller down or
-  not scraped.
-- `CloudflareTunnelAPIErrors`: Cloudflare API calls keep failing.
-- `CloudflareTunnelHigh5xxRate`: an exposed hostname returns too many 5xx.
-- `CloudflareTunnelProxyErrors`: cloudflared cannot reach an origin service.
-
-Load the file with Prometheus `rule_files`, or wrap the `groups` list in a
-`PrometheusRule` object when using the Prometheus Operator.
 
 ## Rebuild from source
 
