@@ -61,6 +61,7 @@ These values configure the Prometheus Operator `ServiceMonitor` objects. One swi
 
 | Value                              | Default | Notes                                                                                      |
 | ---------------------------------- | ------- | ------------------------------------------------------------------------------------------ |
+| `crds.install`                     | `true`  | Install the CloudflareAccess CRD. Set to false on every extra release of this chart in the same cluster, only one release can own the cluster scoped CRD. The CRD is kept on uninstall. |
 | `serviceMonitor.create`            | `false` | Create both ServiceMonitors. Requires the Prometheus Operator CRDs.                        |
 | `serviceMonitor.labels`            | `{}`    | Additional labels added to both ServiceMonitors.                                           |
 | `serviceMonitor.interval`          | `""`    | Scrape interval. Omitted from the endpoints when empty.                                    |

@@ -68,6 +68,7 @@ func aDedicatedControllerReleaseIsInstalled(ctx context.Context) error {
 	values.ClusterDomain = e2eClusterDomain
 	values.IngressClassName = uninstallIngressClass
 	values.ControllerClassValue = uninstallControllerClass
+	values.SkipCRDs = true
 
 	installCtx, cancel := context.WithTimeout(suiteCtx, 10*time.Minute)
 	defer cancel()

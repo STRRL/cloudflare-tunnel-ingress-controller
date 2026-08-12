@@ -102,6 +102,13 @@ leaderElection:
 metrics:
   port: 9090
 
+# Custom resource definitions shipped with the chart, currently the
+# CloudflareAccess CRD. The CRD is cluster scoped and only one release can
+# own it, so set install to false on every extra release of this chart in
+# the same cluster. The CRD is kept on uninstall so its objects survive.
+crds:
+  install: true
+
 # ServiceMonitor objects for the Prometheus Operator. One switch creates
 # ServiceMonitors for both metrics endpoints: the controller and the managed
 # cloudflared connectors. Requires the Prometheus Operator CRDs.

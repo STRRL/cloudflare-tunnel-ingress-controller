@@ -355,6 +355,9 @@ type controllerHelmValues struct {
 	// other's classes as their own.
 	IngressClassName     string `yaml:"-"`
 	ControllerClassValue string `yaml:"-"`
+	// SkipCRDs leaves the cluster scoped CRDs to the main release, a
+	// second release cannot own them as well.
+	SkipCRDs bool `yaml:"-"`
 }
 
 func parseImageRef(ref string) (imageRef, error) {
@@ -430,6 +433,9 @@ func helmUpgradeInstall(ctx context.Context, kubeconfigPath string, releaseName 
 	}
 	if strings.TrimSpace(values.ControllerClassValue) != "" {
 		helmArgs = append(helmArgs, "--set-string", fmt.Sprintf("ingressClass.controllerValue=%s", values.ControllerClassValue))
+	}
+	if values.SkipCRDs {
+		helmArgs = append(helmArgs, "--set", "crds.install=false")
 	}
 
 	cmd := exec.CommandContext(ctx, "helm", helmArgs...)
