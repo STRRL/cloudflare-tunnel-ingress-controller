@@ -72,6 +72,10 @@ export default defineConfig({
               label: "Rotate Cloudflare Credentials",
               slug: "how-to/rotate-cloudflare-credentials",
             },
+            {
+              label: "Protect Services with Cloudflare Access",
+              slug: "how-to/cloudflare-access",
+            },
             { label: "Troubleshooting", slug: "guides/troubleshooting" },
           ],
         },

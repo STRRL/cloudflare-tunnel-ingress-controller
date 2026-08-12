@@ -16,6 +16,7 @@ For the data flow, DNS ownership model, and connector reconciliation design, see
 - **TunnelClient** (`pkg/cloudflare-controller/tunnel-client.go`): Reconciles tunnel ingress rules and DNS records through the Cloudflare API
 - **DNS ownership** (`pkg/cloudflare-controller/dns.go`): Plans CNAME and ownership TXT record changes
 - **ControlledCloudflaredConnector** (`pkg/controller/controlled-cloudflared-connector.go`): Reconciles the managed cloudflared Secret and Deployment, owned by the controller Deployment so garbage collection removes them on uninstall; the Cloudflare tunnel itself is intentionally kept and reused by name
+- **AccessController** (`pkg/controller/access-controller.go`): Reconciles CloudflareAccess objects (`pkg/apis/cloudflareaccess/v1alpha1`) into Cloudflare Access Applications through the AccessClient (`pkg/cloudflare-controller/access.go`); see `docs/design/cloudflare-access.md`
 
 ## Development Commands
 

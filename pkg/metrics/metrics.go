@@ -43,6 +43,15 @@ var (
 		Name:      "dns_record_operations_total",
 		Help:      "Total number of DNS record changes applied to Cloudflare.",
 	}, []string{"operation", "record_type"})
+
+	// ManagedAccessApplications is the number of Cloudflare Access
+	// Applications the controller currently manages through
+	// CloudflareAccess objects.
+	ManagedAccessApplications = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "managed_access_applications",
+		Help:      "Number of Cloudflare Access Applications managed by the controller.",
+	})
 )
 
 func init() {
@@ -51,5 +60,6 @@ func init() {
 		ManagedExposures,
 		CloudflareAPIErrors,
 		DNSRecordOperations,
+		ManagedAccessApplications,
 	)
 }

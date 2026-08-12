@@ -33,6 +33,30 @@ e2e: e2e-image
 setup-envtest:
 	bash ./hack/install-setup-envtest.sh
 
+.PHONY: setup-controller-gen
+setup-controller-gen:
+	bash ./hack/install-controller-gen.sh
+
+# Generate deepcopy functions for the API types.
+.PHONY: generate
+generate: setup-controller-gen
+	controller-gen object paths=./pkg/apis/...
+
+# Generate the CRD manifest into the helm chart. The keep policy makes
+# helm leave the CRD and its objects in place on uninstall. The
+# crds.install gate lets extra releases in the same cluster skip the
+# CRD, because only one release can own a cluster scoped resource.
+.PHONY: manifests
+manifests: setup-controller-gen
+	controller-gen crd paths=./pkg/apis/... output:crd:dir=./helm/cloudflare-tunnel-ingress-controller/templates/crds
+	@for f in ./helm/cloudflare-tunnel-ingress-controller/templates/crds/*.yaml; do \
+		awk '/controller-gen.kubebuilder.io\/version/ {print; print "    helm.sh/resource-policy: keep"; next} {print}' $$f > $$f.tmp; \
+		printf '{{- if .Values.crds.install }}\n' > $$f; \
+		cat $$f.tmp >> $$f; \
+		printf '{{- end }}\n' >> $$f; \
+		rm $$f.tmp; \
+	done
+
 # Compile the Grafana dashboards and Prometheus alert rules from jsonnet
 # sources into plain files under mixin/dist. Requires the jsonnet binary.
 .PHONY: dashboards

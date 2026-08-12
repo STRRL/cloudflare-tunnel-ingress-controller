@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/apis/cloudflareaccess/v1alpha1"
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/coverage"
@@ -16,7 +17,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -49,6 +52,22 @@ type rootCmdFlags struct {
 	dnsCommentTemplate          string
 	metricsBindAddress          string
 	healthProbeBindAddress      string
+}
+
+// cloudflareAccessCRDInstalled reports whether the CloudflareAccess
+// CRD exists in the cluster.
+func cloudflareAccessCRDInstalled(mgr manager.Manager) (bool, error) {
+	_, err := mgr.GetRESTMapper().RESTMapping(schema.GroupKind{
+		Group: v1alpha1.GroupVersion.Group,
+		Kind:  "CloudflareAccess",
+	}, v1alpha1.GroupVersion.Version)
+	if err == nil {
+		return true, nil
+	}
+	if apimeta.IsNoMatchError(err) {
+		return false, nil
+	}
+	return false, err
 }
 
 func main() {
@@ -169,6 +188,28 @@ func main() {
 				})
 			if err != nil {
 				return err
+			}
+
+			// the CloudflareAccess controller only starts when the CRD is
+			// installed, so plain installations keep working without it and
+			// without Access permissions on the API token
+			crdInstalled, err := cloudflareAccessCRDInstalled(mgr)
+			if err != nil {
+				logger.Error(err, "check whether the CloudflareAccess CRD is installed")
+				os.Exit(1)
+			}
+			if crdInstalled {
+				if err := v1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
+					logger.Error(err, "add cloudflareaccess types to scheme")
+					os.Exit(1)
+				}
+				accessClient := cloudflarecontroller.NewAccessClient(logger.WithName("access-client"), cloudflareClient, options.cloudflareAccountId, options.cloudflareTunnelName)
+				if err := controller.RegisterAccessController(logger, mgr, accessClient); err != nil {
+					logger.Error(err, "register cloudflareaccess controller")
+					os.Exit(1)
+				}
+			} else {
+				logger.Info("CloudflareAccess CRD not installed, access controller disabled")
 			}
 
 			deploymentConfig, configHash, err := controller.LoadCloudflaredDeploymentConfig(options.cloudflaredDeploymentConfig)

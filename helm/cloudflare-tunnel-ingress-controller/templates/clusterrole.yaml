@@ -46,3 +46,25 @@ rules:
     verbs:
       - create
       - patch
+  - apiGroups:
+      - cloudflare-tunnel-ingress-controller.strrl.dev
+    resources:
+      - cloudflareaccesses
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+  - apiGroups:
+      - cloudflare-tunnel-ingress-controller.strrl.dev
+    resources:
+      - cloudflareaccesses/status
+    verbs:
+      - patch
+      - update
+  - apiGroups:
+      - cloudflare-tunnel-ingress-controller.strrl.dev
+    resources:
+      - cloudflareaccesses/finalizers
+    verbs:
+      - update
