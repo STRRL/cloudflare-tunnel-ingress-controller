@@ -3,7 +3,11 @@ title: Monitor the Controller and cloudflared
 description: Scrape controller and cloudflared metrics and configure connector health probes.
 ---
 
-The controller and its managed `cloudflared` connectors expose separate metrics endpoints.
+The controller and its managed `cloudflared` connectors expose separate metrics endpoints. With the ready made Grafana dashboards below, the collected metrics look like this:
+
+![Grafana dashboard for the controller with sync status, managed exposures, Cloudflare API calls, and reconcile activity panels](../../../assets/grafana-dashboard-controller.png)
+
+![Grafana dashboard for cloudflared traffic with request rate by hostname, status codes, latency percentiles, and traffic volume panels](../../../assets/grafana-dashboard-cloudflared.png)
 
 See [Helm values](/reference/helm-values/) for chart defaults.
 
@@ -89,12 +93,7 @@ The repository ships two ready to import Grafana dashboards in the
 [`mixin/dist`](https://github.com/STRRL/cloudflare-tunnel-ingress-controller/tree/master/mixin/dist) directory:
 
 1. `controller.json` shows controller health: sync freshness, managed exposures, Cloudflare API errors, DNS record changes, and reconcile activity.
-
-   ![Grafana dashboard for the controller with sync status, managed exposures, Cloudflare API calls, and reconcile activity panels](../../../assets/grafana-dashboard-controller.png)
-
 2. `cloudflared.json` shows traffic per exposed hostname: request rate, status codes, latency percentiles, and traffic volume. These panels use the per hostname metrics from the default `ghcr.io/strrl/cloudflared` image.
-
-   ![Grafana dashboard for cloudflared traffic with request rate by hostname, status codes, latency percentiles, and traffic volume panels](../../../assets/grafana-dashboard-cloudflared.png)
 
 Import each file in Grafana with `Dashboards -> New -> Import` and select your Prometheus data source. Both metrics endpoints described above must be scraped for the panels to show data.
 
