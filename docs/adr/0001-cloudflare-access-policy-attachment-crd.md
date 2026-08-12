@@ -81,26 +81,25 @@ Division of responsibility:
   Cloudflare dashboard, Terraform or any other tool. The controller only
   resolves the names and attaches the policies to the application.
 
-Key semantics:
+Key semantics (the full specification lives in
+`docs/design/cloudflare-access.md`):
 
-- `targetRefs` is a list, so one CRD can protect several Ingresses. The
-  Cloudflare model stays one Access Application per hostname; a CRD with
-  several targets means all their hostnames share the same settings.
+- One CloudflareAccess object owns exactly one Access Application. All
+  hostnames of all referenced Ingresses become destinations of that
+  application, so one login covers all of them.
 - `targetRefs` may only reference Ingresses in the same namespace as the
   CRD. This follows GEP 713 and prevents one namespace from attaching
   policies to another namespace's services.
 - Fail closed. If a referenced reusable policy does not exist, the
-  controller reports `Accepted: False` with a reason and does not touch
-  the existing Access Application. It never deletes an application
-  because a name failed to resolve.
-- Conflicts stop, they do not merge. When two CloudflareAccess objects
-  cover the same hostname, both get a `Conflicted` condition and the
-  controller leaves the current state untouched. Security settings must
-  not be decided by hidden precedence rules.
-- Ownership on the Cloudflare side uses a deterministic name with the
-  pattern `ctic:<tunnelName>:<hostname>`, the same idea as the
-  `_ctic_managed` TXT records for DNS. This part is adopted from pull
-  request #277 by @twiechert.
+  controller reports the failure in status and does not touch the
+  existing Access Application. It never deletes an application because
+  a name failed to resolve.
+- Conflicts resolve by age. When two CloudflareAccess objects cover the
+  same hostname, the oldest object wins and every younger one gets a
+  `Conflicted` condition and is not reconciled.
+- Ownership on the Cloudflare side uses an Access tag plus a
+  deterministic application name `ctic:<tunnelName>:<namespace>/<name>`,
+  the same idea as the `_ctic_managed` TXT records for DNS.
 - The API group starts at `v1alpha1`. Field changes are allowed until it
   graduates.
 
