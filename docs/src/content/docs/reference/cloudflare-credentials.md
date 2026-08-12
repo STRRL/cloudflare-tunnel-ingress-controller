@@ -19,6 +19,9 @@ https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=[{"key":"zone
    2. `Zone:DNS:Edit`
    3. `Account:Cloudflare Tunnel:Edit`
 
+One optional scope exists: `Account:Access: Apps and Policies:Edit` is
+required only when you [protect services with Cloudflare Access](/how-to/cloudflare-access/).
+
 4. Review the account and zone resources covered by the token.
 5. Create the token and copy its value. Store this value under the `api-token` Secret key described below.
 

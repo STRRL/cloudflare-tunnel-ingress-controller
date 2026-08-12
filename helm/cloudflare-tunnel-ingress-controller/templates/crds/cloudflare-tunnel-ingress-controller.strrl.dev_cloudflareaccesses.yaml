@@ -1,0 +1,231 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+    helm.sh/resource-policy: keep
+  name: cloudflareaccesses.cloudflare-tunnel-ingress-controller.strrl.dev
+spec:
+  group: cloudflare-tunnel-ingress-controller.strrl.dev
+  names:
+    kind: CloudflareAccess
+    listKind: CloudflareAccessList
+    plural: cloudflareaccesses
+    singular: cloudflareaccess
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Accepted")].status
+      name: Accepted
+      type: string
+    - jsonPath: .status.applicationID
+      name: Application
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          CloudflareAccess puts Cloudflare Access authentication in front of
+          the referenced Ingresses.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: CloudflareAccessSpec is the desired state of a CloudflareAccess.
+            properties:
+              allowedIdentityProviders:
+                description: |-
+                  AllowedIdentityProviders limits which identity providers users
+                  can pick for this application, by identity provider ID. Empty
+                  means every provider configured in the account.
+                items:
+                  type: string
+                maxItems: 16
+                type: array
+              autoRedirectToIdentity:
+                description: |-
+                  AutoRedirectToIdentity skips the identity provider selection
+                  page. The Cloudflare API requires exactly one entry in
+                  allowedIdentityProviders when this is true.
+                type: boolean
+              policies:
+                description: |-
+                  Policies references reusable Access Policies in ascending order
+                  of precedence. The first entry is evaluated first.
+                items:
+                  description: PolicyRef references one reusable Cloudflare Access
+                    Policy.
+                  properties:
+                    id:
+                      description: ID of a reusable Access Policy. Stable when the
+                        policy is renamed.
+                      type: string
+                    name:
+                      description: |-
+                        Name of a reusable Access Policy. Resolved to an ID at reconcile
+                        time. Resolution fails when no policy or more than one policy has
+                        this name.
+                      type: string
+                  type: object
+                  x-kubernetes-validations:
+                  - message: set exactly one of name or id
+                    rule: has(self.name) != has(self.id)
+                maxItems: 32
+                minItems: 1
+                type: array
+              sessionDuration:
+                description: |-
+                  SessionDuration is how long a session lasts before the user has
+                  to authenticate again.
+                enum:
+                - 30m
+                - 6h
+                - 12h
+                - 24h
+                - 168h
+                - 730h
+                type: string
+              targetRefs:
+                description: |-
+                  TargetRefs selects the Ingresses to protect. Only Ingresses in
+                  the same namespace as this object can be referenced. All
+                  hostnames of all targets become destinations of one shared
+                  Access Application, so one login covers all of them.
+                items:
+                  description: TargetRef points at a resource to protect.
+                  properties:
+                    kind:
+                      description: Kind of the target resource.
+                      enum:
+                      - Ingress
+                      type: string
+                    name:
+                      description: Name of the target resource.
+                      minLength: 1
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  type: object
+                maxItems: 16
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - kind
+                - name
+                x-kubernetes-list-type: map
+            required:
+            - policies
+            - targetRefs
+            type: object
+            x-kubernetes-validations:
+            - message: autoRedirectToIdentity requires exactly one allowedIdentityProviders
+                entry
+              rule: '!(has(self.autoRedirectToIdentity) && self.autoRedirectToIdentity)
+                || (has(self.allowedIdentityProviders) && size(self.allowedIdentityProviders)
+                == 1)'
+          status:
+            description: CloudflareAccessStatus is the observed state of a CloudflareAccess.
+            properties:
+              applicationID:
+                description: ApplicationID of the managed Access Application.
+                type: string
+              aud:
+                description: |-
+                  AUD is the application audience tag. Origins that validate the
+                  Cf-Access-Jwt-Assertion header need this value.
+                type: string
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              hostnames:
+                description: Hostnames currently covered by the Access Application.
+                items:
+                  type: string
+                type: array
+              observedGeneration:
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

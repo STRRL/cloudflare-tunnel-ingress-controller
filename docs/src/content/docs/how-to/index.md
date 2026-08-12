@@ -13,4 +13,5 @@ Use these guides after the controller and its managed `cloudflared` connectors a
 2. [Use an external DNS system](/how-to/use-with-external-dns/): Hand DNS ownership to ExternalDNS or a Cloudflare Load Balancer.
 3. [Configure high availability](/how-to/high-availability/): Run redundant controller and `cloudflared` replicas across failure domains.
 4. [Monitor the controller and cloudflared](/how-to/monitoring/): Scrape metrics and add health probes.
-5. [Rotate Cloudflare credentials](/how-to/rotate-cloudflare-credentials/): Replace the API token without leaving workloads on stale credentials.
+5. [Protect services with Cloudflare Access](/how-to/cloudflare-access/): Put authentication in front of exposed services.
+6. [Rotate Cloudflare credentials](/how-to/rotate-cloudflare-credentials/): Replace the API token without leaving workloads on stale credentials.
