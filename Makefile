@@ -17,9 +17,13 @@ image:
 unit-test:
 	CGO_ENABLED=1 go test -race ./pkg/... -coverprofile ./cover.out
 
+# Fetch the envtest assets path in its own shell step, so a failed download
+# stops the build instead of running the tests with an empty KUBEBUILDER_ASSETS.
 .PHONY: integration-test
 integration-test: setup-envtest
-	KUBEBUILDER_ASSETS="$(shell setup-envtest use $(ENVTEST_K8S_VERSION) -p path)" CGO_ENABLED=1 go test -race -v -coverpkg=./... -coverprofile ./test/integration/cover.out ./test/integration/...
+	set -e; \
+	envtest_assets="$$(setup-envtest use $(ENVTEST_K8S_VERSION) -p path)"; \
+	KUBEBUILDER_ASSETS="$$envtest_assets" CGO_ENABLED=1 go test -race -v -coverpkg=./... -coverprofile ./test/integration/cover.out ./test/integration/...
 
 .PHONY: e2e-image
 e2e-image:
