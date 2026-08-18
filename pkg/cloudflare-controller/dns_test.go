@@ -2,6 +2,7 @@ package cloudflarecontroller
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
@@ -11,6 +12,14 @@ import (
 
 const WhateverTunnelId = "whatever"
 const WhateverTunnelDomain = "whatever.cfargotunnel.com"
+
+func mustRenderTXTContent(tunnelName string) string {
+	content, err := renderTXTContent(tunnelName)
+	if err != nil {
+		panic(err)
+	}
+	return content
+}
 
 func Test_syncDNSRecord(t *testing.T) {
 	type args struct {
@@ -69,7 +78,7 @@ func Test_syncDNSRecord(t *testing.T) {
 				{
 					Hostname: "_ctic_managed.test.example.com",
 					Type:     "TXT",
-					Content:  `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					Content:  mustRenderTXTContent("tunnel-in-test"),
 				},
 			},
 			wantUpdate: nil,
@@ -108,7 +117,7 @@ func Test_syncDNSRecord(t *testing.T) {
 				{
 					Hostname: "_ctic_managed.test2.example.com",
 					Type:     "TXT",
-					Content:  `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					Content:  mustRenderTXTContent("tunnel-in-test"),
 				},
 			},
 			wantUpdate: nil,
@@ -136,7 +145,7 @@ func Test_syncDNSRecord(t *testing.T) {
 					{
 						Name:    "_ctic_managed.test.example.com",
 						Type:    "TXT",
-						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+						Content: mustRenderTXTContent("tunnel-in-test"),
 					},
 				},
 				tunnelId:   WhateverTunnelId,
@@ -156,7 +165,7 @@ func Test_syncDNSRecord(t *testing.T) {
 					OldRecord: cloudflare.DNSRecord{
 						Name:    "_ctic_managed.test.example.com",
 						Type:    "TXT",
-						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+						Content: mustRenderTXTContent("tunnel-in-test"),
 					},
 				},
 			},
@@ -189,7 +198,7 @@ func Test_syncDNSRecord(t *testing.T) {
 				{
 					Hostname: "_ctic_managed.test.example.com",
 					Type:     "TXT",
-					Content:  `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					Content:  mustRenderTXTContent("tunnel-in-test"),
 				},
 			},
 			wantUpdate: []DNSOperationUpdate{
@@ -229,7 +238,7 @@ func Test_syncDNSRecord(t *testing.T) {
 					{
 						Name:    "_ctic_managed.test.example.com",
 						Type:    "TXT",
-						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+						Content: mustRenderTXTContent("tunnel-in-test"),
 					},
 				},
 				tunnelId:   WhateverTunnelId,
@@ -249,7 +258,7 @@ func Test_syncDNSRecord(t *testing.T) {
 					OldRecord: cloudflare.DNSRecord{
 						Name:    "_ctic_managed.test.example.com",
 						Type:    "TXT",
-						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+						Content: mustRenderTXTContent("tunnel-in-test"),
 					},
 				},
 			},
@@ -257,6 +266,59 @@ func Test_syncDNSRecord(t *testing.T) {
 		},
 		{
 			name: "always update existing record with TXT",
+			args: args{
+				logger: logr.Discard(),
+				exposures: []exposure.Exposure{
+					{
+						Hostname:      "test.example.com",
+						ServiceTarget: "http://10.0.0.1:233",
+						PathPrefix:    "/",
+						IsDeleted:     false,
+					},
+				},
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: mustRenderTXTContent("tunnel-in-test"),
+					},
+				},
+				tunnelId:   WhateverTunnelId,
+				tunnelName: "tunnel-in-test",
+			},
+			wantCreate: nil,
+			wantUpdate: []DNSOperationUpdate{
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+					},
+					Type:    "CNAME",
+					Content: WhateverTunnelDomain,
+				},
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: mustRenderTXTContent("tunnel-in-test"),
+					},
+					Type:    "TXT",
+					Content: mustRenderTXTContent("tunnel-in-test"),
+				},
+			},
+			wantDelete: nil,
+			wantErr:    false,
+		},
+		{
+			name: "rewrites unquoted ownership TXT to RFC 1035 quoted form",
 			args: args{
 				logger: logr.Discard(),
 				exposures: []exposure.Exposure{
@@ -302,7 +364,7 @@ func Test_syncDNSRecord(t *testing.T) {
 						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
 					},
 					Type:    "TXT",
-					Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					Content: mustRenderTXTContent("tunnel-in-test"),
 				},
 			},
 			wantDelete: nil,
@@ -324,7 +386,7 @@ func Test_syncDNSRecord(t *testing.T) {
 					{
 						Name:    "_ctic_managed.test.example.com",
 						Type:    "TXT",
-						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"different-tunnel"}`,
+						Content: mustRenderTXTContent("different-tunnel"),
 					},
 				},
 				tunnelId:   "current-tunnel-id",
@@ -382,7 +444,7 @@ func Test_syncDNSRecord(t *testing.T) {
 					{
 						Name:    "_ctic_managed.test.example.com",
 						Type:    "TXT",
-						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+						Content: mustRenderTXTContent("tunnel-in-test"),
 					},
 				},
 				tunnelId:   WhateverTunnelId,
@@ -402,7 +464,7 @@ func Test_syncDNSRecord(t *testing.T) {
 					OldRecord: cloudflare.DNSRecord{
 						Name:    "_ctic_managed.test.example.com",
 						Type:    "TXT",
-						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+						Content: mustRenderTXTContent("tunnel-in-test"),
 					},
 				},
 			},
@@ -432,7 +494,7 @@ func Test_syncDNSRecord(t *testing.T) {
 					{
 						Name:    "_ctic_managed.test.example.com",
 						Type:    "TXT",
-						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+						Content: mustRenderTXTContent("tunnel-in-test"),
 					},
 				},
 				tunnelId:   WhateverTunnelId,
@@ -445,7 +507,7 @@ func Test_syncDNSRecord(t *testing.T) {
 					OldRecord: cloudflare.DNSRecord{
 						Name:    "_ctic_managed.test.example.com",
 						Type:    "TXT",
-						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+						Content: mustRenderTXTContent("tunnel-in-test"),
 					},
 				},
 			},
@@ -475,13 +537,433 @@ func Test_syncDNSRecord(t *testing.T) {
 					{
 						Name:    "_ctic_managed.test.example.com",
 						Type:    "TXT",
-						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"another-tunnel"}`,
+						Content: mustRenderTXTContent("another-tunnel"),
 					},
 				},
 				tunnelId:   WhateverTunnelId,
 				tunnelName: "tunnel-in-test",
 			},
 			wantCreate: nil,
+			wantUpdate: nil,
+			wantDelete: nil,
+			wantErr:    false,
+		},
+		{
+			name: "wildcard hostname uses wildcard-safe TXT name",
+			args: args{
+				logger: logr.Discard(),
+				exposures: []exposure.Exposure{
+					{
+						Hostname:      "*.example.com",
+						ServiceTarget: "http://10.0.0.1:233",
+						PathPrefix:    "/",
+						IsDeleted:     false,
+					},
+				},
+				existedCNAMERecords: nil,
+				existedTXTRecords:   nil,
+				tunnelId:            WhateverTunnelId,
+				tunnelName:          "tunnel-in-test",
+			},
+			wantCreate: []DNSOperationCreate{
+				{
+					Hostname: "*.example.com",
+					Type:     "CNAME",
+					Content:  WhateverTunnelDomain,
+				},
+				{
+					Hostname: "_ctic_managed._wildcard.example.com",
+					Type:     "TXT",
+					Content:  mustRenderTXTContent("tunnel-in-test"),
+				},
+			},
+			wantUpdate: nil,
+			wantDelete: nil,
+			wantErr:    false,
+		},
+		{
+			name: "migrates unquoted asterisk TXT name to quoted _wildcard name",
+			args: args{
+				logger: logr.Discard(),
+				exposures: []exposure.Exposure{
+					{
+						Hostname:      "*.example.com",
+						ServiceTarget: "http://10.0.0.1:233",
+						PathPrefix:    "/",
+						IsDeleted:     false,
+					},
+				},
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						Name:    "*.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed.*.example.com",
+						Type:    "TXT",
+						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					},
+				},
+				tunnelId:   WhateverTunnelId,
+				tunnelName: "tunnel-in-test",
+			},
+			wantCreate: []DNSOperationCreate{
+				{
+					Hostname: "_ctic_managed._wildcard.example.com",
+					Type:     "TXT",
+					Content:  mustRenderTXTContent("tunnel-in-test"),
+				},
+			},
+			wantUpdate: []DNSOperationUpdate{
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "*.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+					},
+					Type:    "CNAME",
+					Content: WhateverTunnelDomain,
+				},
+			},
+			wantDelete: []DNSOperationDelete{
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "_ctic_managed.*.example.com",
+						Type:    "TXT",
+						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "deduplicates wildcard migration operations for multiple paths",
+			args: args{
+				logger: logr.Discard(),
+				exposures: []exposure.Exposure{
+					{
+						Hostname:      "*.example.com",
+						ServiceTarget: "http://10.0.0.1:233",
+						PathPrefix:    "/api",
+						IsDeleted:     false,
+					},
+					{
+						Hostname:      "*.example.com",
+						ServiceTarget: "http://10.0.0.2:233",
+						PathPrefix:    "/",
+						IsDeleted:     false,
+					},
+				},
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						ID:      "wildcard-cname",
+						Name:    "*.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						ID:      "legacy-wildcard-txt",
+						Name:    "_ctic_managed.*.example.com",
+						Type:    "TXT",
+						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					},
+				},
+				tunnelId:   WhateverTunnelId,
+				tunnelName: "tunnel-in-test",
+			},
+			wantCreate: []DNSOperationCreate{
+				{
+					Hostname: "_ctic_managed._wildcard.example.com",
+					Type:     "TXT",
+					Content:  mustRenderTXTContent("tunnel-in-test"),
+				},
+			},
+			wantUpdate: []DNSOperationUpdate{
+				{
+					OldRecord: cloudflare.DNSRecord{
+						ID:      "wildcard-cname",
+						Name:    "*.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+					},
+					Type:    "CNAME",
+					Content: WhateverTunnelDomain,
+				},
+			},
+			wantDelete: []DNSOperationDelete{
+				{
+					OldRecord: cloudflare.DNSRecord{
+						ID:      "legacy-wildcard-txt",
+						Name:    "_ctic_managed.*.example.com",
+						Type:    "TXT",
+						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "unquoted legacy TXT content still proves ownership",
+			args: args{
+				logger:    logr.Discard(),
+				exposures: nil,
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					},
+				},
+				tunnelId:   WhateverTunnelId,
+				tunnelName: "tunnel-in-test",
+			},
+			wantCreate: nil,
+			wantUpdate: nil,
+			wantDelete: []DNSOperationDelete{
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "test.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+					},
+				},
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "_ctic_managed.test.example.com",
+						Type:    "TXT",
+						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "deletes wildcard CNAME using wildcard-safe TXT name",
+			args: args{
+				logger:    logr.Discard(),
+				exposures: nil,
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						Name:    "*.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed._wildcard.example.com",
+						Type:    "TXT",
+						Content: mustRenderTXTContent("tunnel-in-test"),
+					},
+				},
+				tunnelId:   WhateverTunnelId,
+				tunnelName: "tunnel-in-test",
+			},
+			wantCreate: nil,
+			wantUpdate: nil,
+			wantDelete: []DNSOperationDelete{
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "*.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+					},
+				},
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "_ctic_managed._wildcard.example.com",
+						Type:    "TXT",
+						Content: mustRenderTXTContent("tunnel-in-test"),
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "wildcard and literal wildcard hostname get distinct TXT names",
+			args: args{
+				logger: logr.Discard(),
+				exposures: []exposure.Exposure{
+					{
+						Hostname:      "*.example.com",
+						ServiceTarget: "http://10.0.0.1:233",
+						PathPrefix:    "/",
+						IsDeleted:     false,
+					},
+					{
+						Hostname:      "wildcard.example.com",
+						ServiceTarget: "http://10.0.0.1:233",
+						PathPrefix:    "/",
+						IsDeleted:     false,
+					},
+				},
+				existedCNAMERecords: nil,
+				existedTXTRecords:   nil,
+				tunnelId:            WhateverTunnelId,
+				tunnelName:          "tunnel-in-test",
+			},
+			wantCreate: []DNSOperationCreate{
+				{
+					Hostname: "*.example.com",
+					Type:     "CNAME",
+					Content:  WhateverTunnelDomain,
+				},
+				{
+					Hostname: "_ctic_managed._wildcard.example.com",
+					Type:     "TXT",
+					Content:  mustRenderTXTContent("tunnel-in-test"),
+				},
+				{
+					Hostname: "wildcard.example.com",
+					Type:     "CNAME",
+					Content:  WhateverTunnelDomain,
+				},
+				{
+					Hostname: "_ctic_managed.wildcard.example.com",
+					Type:     "TXT",
+					Content:  mustRenderTXTContent("tunnel-in-test"),
+				},
+			},
+			wantUpdate: nil,
+			wantDelete: nil,
+			wantErr:    false,
+		},
+		{
+			name: "wildcard exposure with DNS management disabled relinquishes the legacy asterisk TXT",
+			args: args{
+				logger: logr.Discard(),
+				exposures: []exposure.Exposure{
+					{
+						Hostname:             "*.example.com",
+						ServiceTarget:        "http://10.0.0.1:233",
+						PathPrefix:           "/",
+						IsDeleted:            false,
+						DisableDNSManagement: true,
+					},
+				},
+				existedCNAMERecords: []cloudflare.DNSRecord{
+					{
+						Name:    "*.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+					},
+				},
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed.*.example.com",
+						Type:    "TXT",
+						Content: mustRenderTXTContent("tunnel-in-test"),
+					},
+				},
+				tunnelId:   WhateverTunnelId,
+				tunnelName: "tunnel-in-test",
+			},
+			wantCreate: nil,
+			wantUpdate: nil,
+			wantDelete: []DNSOperationDelete{
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "*.example.com",
+						Type:    "CNAME",
+						Content: WhateverTunnelDomain,
+					},
+				},
+				{
+					OldRecord: cloudflare.DNSRecord{
+						Name:    "_ctic_managed.*.example.com",
+						Type:    "TXT",
+						Content: mustRenderTXTContent("tunnel-in-test"),
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "legacy asterisk TXT owned by another tunnel is left untouched",
+			args: args{
+				logger: logr.Discard(),
+				exposures: []exposure.Exposure{
+					{
+						Hostname:      "*.example.com",
+						ServiceTarget: "http://10.0.0.1:233",
+						PathPrefix:    "/",
+						IsDeleted:     false,
+					},
+				},
+				existedCNAMERecords: nil,
+				existedTXTRecords: []cloudflare.DNSRecord{
+					{
+						Name:    "_ctic_managed.*.example.com",
+						Type:    "TXT",
+						Content: mustRenderTXTContent("another-tunnel"),
+					},
+				},
+				tunnelId:   WhateverTunnelId,
+				tunnelName: "tunnel-in-test",
+			},
+			wantCreate: []DNSOperationCreate{
+				{
+					Hostname: "*.example.com",
+					Type:     "CNAME",
+					Content:  WhateverTunnelDomain,
+				},
+				{
+					Hostname: "_ctic_managed._wildcard.example.com",
+					Type:     "TXT",
+					Content:  mustRenderTXTContent("tunnel-in-test"),
+				},
+			},
+			wantUpdate: nil,
+			wantDelete: nil,
+			wantErr:    false,
+		},
+		{
+			name: "hostname exposed on several paths yields one operation per record",
+			args: args{
+				logger: logr.Discard(),
+				exposures: []exposure.Exposure{
+					{
+						Hostname:      "test.example.com",
+						ServiceTarget: "http://10.0.0.1:233",
+						PathPrefix:    "/api",
+						IsDeleted:     false,
+					},
+					{
+						Hostname:      "test.example.com",
+						ServiceTarget: "http://10.0.0.2:233",
+						PathPrefix:    "/",
+						IsDeleted:     false,
+					},
+				},
+				existedCNAMERecords: nil,
+				existedTXTRecords:   nil,
+				tunnelId:            WhateverTunnelId,
+				tunnelName:          "tunnel-in-test",
+			},
+			wantCreate: []DNSOperationCreate{
+				{
+					Hostname: "test.example.com",
+					Type:     "CNAME",
+					Content:  WhateverTunnelDomain,
+				},
+				{
+					Hostname: "_ctic_managed.test.example.com",
+					Type:     "TXT",
+					Content:  mustRenderTXTContent("tunnel-in-test"),
+				},
+			},
 			wantUpdate: nil,
 			wantDelete: nil,
 			wantErr:    false,
@@ -614,7 +1096,7 @@ func Test_migrateLegacyDNSRecords(t *testing.T) {
 					{
 						Name:    "_ctic_managed.test.example.com",
 						Type:    "TXT",
-						Content: `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"tunnel-in-test"}`,
+						Content: mustRenderTXTContent("tunnel-in-test"),
 					},
 				},
 				tunnelName: "tunnel-in-test",
@@ -646,23 +1128,102 @@ func Test_renderTXTContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("renderTXTContent() unexpected error: %v", err)
 	}
-	expected := `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"my-tunnel"}`
+	expected := `"{\"controller\":\"strrl.dev/cloudflare-tunnel-ingress-controller\",\"tunnel\":\"my-tunnel\"}"`
 	if result != expected {
 		t.Errorf("renderTXTContent() = %v, want %v", result, expected)
 	}
 }
 
 func Test_parseTXTContent(t *testing.T) {
-	content := `{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"my-tunnel"}`
-	result, err := parseTXTContent(content)
-	if err != nil {
-		t.Errorf("parseTXTContent() error = %v", err)
-		return
+	payloads := []string{
+		`{"controller":"strrl.dev/cloudflare-tunnel-ingress-controller","tunnel":"my-tunnel"}`,
+		`"{\"controller\":\"strrl.dev/cloudflare-tunnel-ingress-controller\",\"tunnel\":\"my-tunnel\"}"`,
 	}
-	if result.Controller != ControllerIdentifier {
-		t.Errorf("parseTXTContent() Controller = %v, want %v", result.Controller, ControllerIdentifier)
+	for _, content := range payloads {
+		result, err := parseTXTContent(content)
+		if err != nil {
+			t.Errorf("parseTXTContent(%q) error = %v", content, err)
+			continue
+		}
+		if result.Controller != ControllerIdentifier {
+			t.Errorf("parseTXTContent(%q) Controller = %v, want %v", content, result.Controller, ControllerIdentifier)
+		}
+		if result.Tunnel != "my-tunnel" {
+			t.Errorf("parseTXTContent(%q) Tunnel = %v, want %v", content, result.Tunnel, "my-tunnel")
+		}
 	}
-	if result.Tunnel != "my-tunnel" {
-		t.Errorf("parseTXTContent() Tunnel = %v, want %v", result.Tunnel, "my-tunnel")
+}
+
+func Test_managedTXTRecordName(t *testing.T) {
+	tests := []struct {
+		hostname string
+		want     string
+	}{
+		{hostname: "test.example.com", want: "_ctic_managed.test.example.com"},
+		{hostname: "example.com", want: "_ctic_managed.example.com"},
+		{hostname: "wildcard.example.com", want: "_ctic_managed.wildcard.example.com"},
+		{hostname: "*.example.com", want: "_ctic_managed._wildcard.example.com"},
+		{hostname: "*.foo.example.com", want: "_ctic_managed._wildcard.foo.example.com"},
+	}
+	for _, tt := range tests {
+		if got := managedTXTRecordName(tt.hostname); got != tt.want {
+			t.Errorf("managedTXTRecordName(%q) = %q, want %q", tt.hostname, got, tt.want)
+		}
+	}
+}
+
+func Test_quoteTXTContent(t *testing.T) {
+	quoted := quoteTXTContent(`{"controller":"example","tunnel":"t"}`)
+	expected := `"{\"controller\":\"example\",\"tunnel\":\"t\"}"`
+	if quoted != expected {
+		t.Errorf("quoteTXTContent() = %q, want %q", quoted, expected)
+	}
+	if got := unquoteTXTContent(quoted); got != `{"controller":"example","tunnel":"t"}` {
+		t.Errorf("unquoteTXTContent() = %q, want original JSON", got)
+	}
+	if got := unquoteTXTContent(`{"controller":"example","tunnel":"t"}`); got != `{"controller":"example","tunnel":"t"}` {
+		t.Errorf("unquoteTXTContent() unquoted input = %q", got)
+	}
+}
+
+func Test_quoteTXTContentSplitsLongPayload(t *testing.T) {
+	payload := strings.Repeat("a", txtCharacterStringLimit) + strings.Repeat("b", 10)
+	quoted := quoteTXTContent(payload)
+	expected := `"` + strings.Repeat("a", txtCharacterStringLimit) + `" "` + strings.Repeat("b", 10) + `"`
+	if quoted != expected {
+		t.Errorf("quoteTXTContent() = %q, want %q", quoted, expected)
+	}
+	if got := unquoteTXTContent(quoted); got != payload {
+		t.Errorf("unquoteTXTContent() = %q, want the original payload", got)
+	}
+}
+
+// Cloudflare splits stored TXT values into multiple character-strings, so the
+// ownership record must still be recognised after a round trip through the API.
+func Test_txtContentEqualAcrossCloudflareSplitting(t *testing.T) {
+	expected := mustRenderTXTContent(strings.Repeat("long-tunnel-name", 20))
+	payload := unquoteTXTContent(expected)
+	var split strings.Builder
+	for start := 0; start < len(payload); start += 100 {
+		if start > 0 {
+			split.WriteString(" ")
+		}
+		split.WriteString(quoteTXTContent(payload[start:min(start+100, len(payload))]))
+	}
+	if !txtContentEqual(split.String(), expected) {
+		t.Errorf("txtContentEqual() = false for re-split content %q", split.String())
+	}
+}
+
+func Test_unquoteTXTContentMalformedInput(t *testing.T) {
+	tests := []string{
+		`"unterminated`,
+		`"quoted" then bare`,
+		`"`,
+	}
+	for _, content := range tests {
+		if got := unquoteTXTContent(content); got != content {
+			t.Errorf("unquoteTXTContent(%q) = %q, want the input unchanged", content, got)
+		}
 	}
 }
