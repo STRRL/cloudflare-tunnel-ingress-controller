@@ -12,7 +12,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -26,14 +26,14 @@ const IngressControllerFinalizer = "strrl.dev/cloudflare-tunnel-ingress-controll
 type IngressController struct {
 	logger              logr.Logger
 	kubeClient          client.Client
-	recorder            record.EventRecorder
+	recorder            events.EventRecorder
 	ingressClassName    string
 	controllerClassName string
 	clusterDomain       string
 	tunnelClient        *cloudflarecontroller.TunnelClient
 }
 
-func NewIngressController(logger logr.Logger, kubeClient client.Client, recorder record.EventRecorder, ingressClassName string, controllerClassName string, clusterDomain string, tunnelClient *cloudflarecontroller.TunnelClient) *IngressController {
+func NewIngressController(logger logr.Logger, kubeClient client.Client, recorder events.EventRecorder, ingressClassName string, controllerClassName string, clusterDomain string, tunnelClient *cloudflarecontroller.TunnelClient) *IngressController {
 	return &IngressController{logger: logger, kubeClient: kubeClient, recorder: recorder, ingressClassName: ingressClassName, controllerClassName: controllerClassName, clusterDomain: clusterDomain, tunnelClient: tunnelClient}
 }
 
@@ -87,7 +87,7 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 		exposures, err := FromIngressToExposure(ctx, i.logger, i.kubeClient, i.recorder, ingress, i.clusterDomain)
 		if err != nil {
 			i.logger.Error(err, "extract exposures from ingress, skipped", "triggered-by", request.NamespacedName, "ingress", fmt.Sprintf("%s/%s", ingress.Namespace, ingress.Name))
-			i.recorder.Event(&ingress, v1.EventTypeWarning, EventReasonTransformFailed, err.Error())
+			i.recorder.Eventf(&ingress, nil, v1.EventTypeWarning, EventReasonTransformFailed, EventReasonTransformFailed, "%s", err.Error())
 		}
 		allExposures = append(allExposures, exposures...)
 	}
@@ -95,11 +95,11 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 
 	err = i.tunnelClient.PutExposures(ctx, allExposures)
 	if err != nil {
-		i.recorder.Event(&origin, v1.EventTypeWarning, EventReasonSyncFailed, err.Error())
+		i.recorder.Eventf(&origin, nil, v1.EventTypeWarning, EventReasonSyncFailed, EventReasonSyncFailed, "%s", err.Error())
 		return reconcile.Result{}, errors.Wrap(err, "put exposures")
 	}
 	if origin.DeletionTimestamp == nil {
-		i.recorder.Event(&origin, v1.EventTypeNormal, EventReasonSynced, "cloudflare tunnel config and DNS records are up to date")
+		i.recorder.Eventf(&origin, nil, v1.EventTypeNormal, EventReasonSynced, EventReasonSynced, "cloudflare tunnel config and DNS records are up to date")
 	}
 
 	if origin.DeletionTimestamp != nil {

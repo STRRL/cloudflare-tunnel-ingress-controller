@@ -25,7 +25,11 @@ Consult the [ingress annotations reference](/reference/ingress-annotations/) for
 
 ## Wildcard hostnames
 
-Hosts may use a leading wildcard label such as `*.example.com`. The controller creates the matching wildcard DNS record and orders the tunnel rules so that routing behaves as you would expect:
+Hosts may use a leading wildcard label such as `*.example.com`. The controller creates the matching wildcard CNAME and an ownership TXT record at `_ctic_managed._wildcard.example.com`.
+
+The `_wildcard` label stands in for `*` for two reasons: Cloudflare warns about an asterisk that is not the leftmost `*.` prefix, and the leading underscore keeps the name distinct from a host that is literally `wildcard.example.com`.
+
+Tunnel rules are ordered so that routing behaves as you would expect:
 
 - An exact hostname always wins over a wildcard. With rules for `app.example.com` and `*.example.com`, requests to `app.example.com` reach the exact rule and any other subdomain falls back to the wildcard.
 - A more specific wildcard wins over a broader one. `*.internal.example.com` is matched before `*.example.com`.
