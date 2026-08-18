@@ -14,7 +14,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/ptr"
 )
 
@@ -26,12 +26,12 @@ const (
 	EventReasonSynced          = "CloudflareSynced"
 )
 
-func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient client.Client, recorder record.EventRecorder, ingress networkingv1.Ingress, clusterDomain string) ([]exposure.Exposure, error) {
+func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient client.Client, recorder events.EventRecorder, ingress networkingv1.Ingress, clusterDomain string) ([]exposure.Exposure, error) {
 	isDeleted := ingress.DeletionTimestamp != nil
 
 	if len(ingress.Spec.TLS) > 0 {
 		logger.Info("ingress has tls specified, SSL Passthrough is not supported, it will be ignored.")
-		recorder.Event(&ingress, v1.EventTypeWarning, EventReasonTLSIgnored, "ingress has tls specified, SSL Passthrough is not supported, it will be ignored")
+		recorder.Eventf(&ingress, nil, v1.EventTypeWarning, EventReasonTLSIgnored, EventReasonTLSIgnored, "ingress has tls specified, SSL Passthrough is not supported, it will be ignored")
 	}
 
 	var result []exposure.Exposure
@@ -47,7 +47,7 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 				"ingress", fmt.Sprintf("%s/%s", ingress.GetNamespace(), ingress.GetName()),
 				"host", rule.Host,
 			)
-			recorder.Eventf(&ingress, v1.EventTypeWarning, EventReasonRuleSkipped, "rule for host %s has no http section, skipped", rule.Host)
+			recorder.Eventf(&ingress, nil, v1.EventTypeWarning, EventReasonRuleSkipped, EventReasonRuleSkipped, "rule for host %s has no http section, skipped", rule.Host)
 			continue
 		}
 

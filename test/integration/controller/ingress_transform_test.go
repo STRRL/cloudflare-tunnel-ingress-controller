@@ -14,7 +14,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 )
 
 const IntegrationTestNamespace = "cf-tunnel-ingress-controller-test"
@@ -26,7 +26,7 @@ var pathTypeImplementationSpecific = networkingv1.PathTypeImplementationSpecific
 
 var _ = Describe("transform ingress to exposure", func() {
 	logger := stdr.NewWithOptions(log.New(os.Stderr, "", log.LstdFlags), stdr.Options{LogCaller: stdr.All})
-	recorder := record.NewFakeRecorder(100)
+	recorder := events.NewFakeRecorder(100)
 
 	It("should resolve ingress with PathType Prefix", func() {
 		// prepare
