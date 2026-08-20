@@ -96,6 +96,11 @@ clusterDomain: cluster.local
 leaderElection:
   enabled: false
 
+# Minimum age the stored tunnel token reaches before it is read from the
+# Cloudflare API again. A rotated token is picked up within this interval.
+# Set to 0 to read the token on every reconcile.
+tunnelTokenRefreshInterval: 1h
+
 # Port of the controller metrics endpoint. It serves the controller-runtime
 # built-in metrics (reconcile counts, workqueue depth, and so on) plus custom
 # metrics like cloudflare_tunnel_ingress_controller_last_successful_sync_timestamp_seconds.

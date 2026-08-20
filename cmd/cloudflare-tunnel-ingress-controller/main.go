@@ -42,6 +42,7 @@ type rootCmdFlags struct {
 	cloudflaredImage           string
 	cloudflaredImagePullPolicy string
 	cloudflaredReplicaCount    int32
+	tunnelTokenRefreshInterval time.Duration
 	// path to the JSON file with cloudflared pod template customization
 	cloudflaredDeploymentConfig string
 	clusterDomain               string
@@ -66,6 +67,7 @@ func main() {
 		cloudflaredImage:           "ghcr.io/strrl/cloudflared:2026.7.3-host-metrics.1",
 		cloudflaredImagePullPolicy: "IfNotPresent",
 		cloudflaredReplicaCount:    1,
+		tunnelTokenRefreshInterval: time.Hour,
 		clusterDomain:              "cluster.local",
 		dnsCommentTemplate:         "managed by cloudflare-tunnel-ingress-controller, tunnel [{{.TunnelName}}]",
 		metricsBindAddress:         ":9090",
@@ -91,6 +93,7 @@ func main() {
 			options.cloudflaredImage = viper.GetString("cloudflared-image")
 			options.cloudflaredImagePullPolicy = viper.GetString("cloudflared-image-pull-policy")
 			options.cloudflaredReplicaCount = viper.GetInt32("cloudflared-replica-count")
+			options.tunnelTokenRefreshInterval = viper.GetDuration("tunnel-token-refresh-interval")
 			options.cloudflaredDeploymentConfig = viper.GetString("cloudflared-deployment-config")
 			options.clusterDomain = viper.GetString("cluster-domain")
 			options.leaderElect = viper.GetBool("leader-elect")
@@ -195,14 +198,15 @@ func main() {
 				}
 
 				reconcileErr := controller.CreateOrUpdateControlledCloudflared(ctx, mgr.GetClient(), tunnelClient, options.namespace, controller.CloudflaredConfig{
-					Image:             options.cloudflaredImage,
-					ImagePullPolicy:   options.cloudflaredImagePullPolicy,
-					Replicas:          options.cloudflaredReplicaCount,
-					Protocol:          options.cloudflaredProtocol,
-					ExtraArgs:         options.cloudflaredExtraArgs,
-					Customization:     deploymentConfig,
-					CustomizationHash: configHash,
-					Owner:             ownerReference,
+					Image:                options.cloudflaredImage,
+					ImagePullPolicy:      options.cloudflaredImagePullPolicy,
+					Replicas:             options.cloudflaredReplicaCount,
+					Protocol:             options.cloudflaredProtocol,
+					ExtraArgs:            options.cloudflaredExtraArgs,
+					Customization:        deploymentConfig,
+					CustomizationHash:    configHash,
+					Owner:                ownerReference,
+					TokenRefreshInterval: options.tunnelTokenRefreshInterval,
 				})
 				if reconcileErr != nil {
 					logger.WithName("controlled-cloudflared").Error(reconcileErr, "create controlled cloudflared")
@@ -250,6 +254,7 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.cloudflaredImage, "cloudflared-image", options.cloudflaredImage, "container image for the managed cloudflared connector")
 	rootCommand.PersistentFlags().StringVar(&options.cloudflaredImagePullPolicy, "cloudflared-image-pull-policy", options.cloudflaredImagePullPolicy, "image pull policy for the managed cloudflared connector")
 	rootCommand.PersistentFlags().Int32Var(&options.cloudflaredReplicaCount, "cloudflared-replica-count", options.cloudflaredReplicaCount, "replica count for the managed cloudflared connector")
+	rootCommand.PersistentFlags().DurationVar(&options.tunnelTokenRefreshInterval, "tunnel-token-refresh-interval", options.tunnelTokenRefreshInterval, "minimum age the stored tunnel token reaches before it is read from the Cloudflare API again; the token stays valid until the tunnel secret is rotated. Set to 0 to read on every reconcile")
 	rootCommand.PersistentFlags().StringVar(&options.cloudflaredDeploymentConfig, "cloudflared-deployment-config", options.cloudflaredDeploymentConfig, "path to JSON file with cloudflared deployment pod template customization")
 	rootCommand.PersistentFlags().StringVar(&options.clusterDomain, "cluster-domain", options.clusterDomain, "kubernetes cluster domain, used to build service FQDN (should match kubelet --cluster-domain)")
 	rootCommand.PersistentFlags().BoolVar(&options.leaderElect, "leader-elect", options.leaderElect, "enable leader election for high availability")
