@@ -50,6 +50,7 @@ spec:
             - --leader-elect
             {{- end }}
             - --cloudflared-deployment-config=/etc/cloudflared-config/config.json
+            - --tunnel-token-refresh-interval={{ .Values.tunnelTokenRefreshInterval }}
             - --controller-deployment-name={{ include "cloudflare-tunnel-ingress-controller.fullname" . }}
             - --metrics-bind-address=:{{ .Values.metrics.port }}
             - --health-probe-bind-address=:{{ .Values.healthProbe.port }}

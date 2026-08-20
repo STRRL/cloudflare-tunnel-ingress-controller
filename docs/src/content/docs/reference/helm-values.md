@@ -25,6 +25,7 @@ These values apply to the controller Deployment, not the managed cloudflared con
 | Value                | Default                                                              | Notes                                                                                        |
 | -------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | `replicaCount`       | `1`                                                                  | Number of controller pods. Enable `leaderElection.enabled` when using more than one replica. |
+| `tunnelTokenRefreshInterval` | `1h`                                                         | Minimum age the stored tunnel token reaches before it is read from the Cloudflare API again. A rotated token is picked up within this interval. Set to `0` to read it on every reconcile. |
 | `resources`          | CPU requests and limits: `100m`; memory requests and limits: `128Mi` | Controller container resource requests and limits.                                           |
 | `securityContext`    | `{}`                                                                 | Kubernetes container security context for the controller container.                          |
 | `podSecurityContext` | `{}`                                                                 | Kubernetes pod security context for controller pods.                                         |

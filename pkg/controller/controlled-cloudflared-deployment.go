@@ -7,9 +7,9 @@ import (
 )
 
 type controlledCloudflaredDeployment struct {
-	config             CloudflaredConfig
-	tokenSecretVersion string
-	namespace          string
+	config    CloudflaredConfig
+	tokenHash string
+	namespace string
 }
 
 func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
@@ -33,7 +33,7 @@ func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
 	for k, v := range customization.PodAnnotations {
 		podAnnotations[k] = v
 	}
-	podAnnotations[tunnelTokenSecretVersionAnnotation] = d.tokenSecretVersion
+	podAnnotations[tunnelTokenHashAnnotation] = d.tokenHash
 
 	deploymentAnnotations := map[string]string{}
 	if d.config.CustomizationHash != "" {
