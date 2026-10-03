@@ -38,6 +38,14 @@ Follow the [quickstart](https://tunnel.strrl.dev/guides/quickstart/) to publish 
 
 The controller supports CLI flags and matching environment variables. See [controller configuration](https://tunnel.strrl.dev/reference/controller-configuration/) for the complete list and defaults.
 
+## Monitoring
+
+Ready made Grafana dashboards are available for the controller ([25659](https://grafana.com/grafana/dashboards/25659)) and cloudflared traffic ([25660](https://grafana.com/grafana/dashboards/25660)). See [monitoring](https://tunnel.strrl.dev/how-to/monitoring/) for setup.
+
+![Grafana dashboard for the controller](./docs/src/assets/grafana-dashboard-controller.png)
+
+![Grafana dashboard for cloudflared traffic](./docs/src/assets/grafana-dashboard-cloudflared.png)
+
 ## Alternative
 
 There is also an awesome project which could integrate with Cloudflare Tunnel as CRD, check it out [adyanth/cloudflare-operator](https://github.com/adyanth/cloudflare-operator)!
