@@ -1,6 +1,6 @@
 # Gateway API support: concept mapping, data plane, and conformance driven TDD
 
-Status: draft, companion to ADR 0002.
+Status: proof of concept implemented, companion to ADR 0002.
 
 Tracking issue: #232.
 
@@ -11,21 +11,37 @@ HTTPRoute) next to the existing Ingress support, test first against the
 official conformance suite, with traffic flowing through the real
 Cloudflare edge.
 
+## Result
+
+Gateway API `v1.6.2`, profile `GATEWAY-HTTP`, core features Gateway,
+HTTPRoute and ReferenceGrant: 37 core tests, 33 pass through the real
+edge, 4 are skipped (see the skip list), 0 fail. Two full runs in a row
+pass, each takes about one minute.
+
+Measured on a local minikube:
+
+- a new Gateway is Programmed in about 3s and answers through the edge
+  in about 6s
+- a route change reaches the proxy in about 1s and costs no Cloudflare
+  API call
+- one full run makes about 160 to 210 Cloudflare API calls within about
+  a minute, far below the limit of 1200 per 5 minutes
+
 ## Concept mapping
 
 ### Core resources
 
 | Today | Gateway API | Notes |
 |---|---|---|
-| IngressClass + `--controller-class` flag | GatewayClass `spec.controllerName` | Same matching logic, one field instead of two objects |
-| Tunnel fixed by `--cloudflare-tunnel-name` | One Gateway = one tunnel | Tunnel becomes a per Gateway resource with its own lifecycle |
-| ControlledCloudflaredConnector (global) | Per Gateway cloudflared deployment | Owned by the Gateway, garbage collected with it |
+| IngressClass + `--controller-class` flag | GatewayClass `spec.controllerName` | The GatewayClass reuses the value of `--controller-class` |
+| Tunnel fixed by `--cloudflare-tunnel-name` | Shared tunnel | The PoC keeps one tunnel for Ingress and every Gateway, see PoC deviations |
+| ControlledCloudflaredConnector (global) | The same connector | Carries the traffic of every Gateway |
 | (new) | Per Gateway data plane proxy deployment | Implements HTTPRoute semantics, see below |
 | Ingress rule (host + paths) | HTTPRoute (`hostnames`, `rules`) | |
 | `kubernetes.io/ingress.class` annotation | HTTPRoute `parentRefs` | Binding direction reverses: the route names its Gateway |
 | Ingress `status.loadBalancer.ingress[].hostname` | `Gateway.status.addresses` (Hostname type) | The address is a per Gateway zone hostname, not the shared tunnel domain |
-| Warning events (TLSIgnored, RuleSkipped, TransformFailed) | Status conditions: Accepted, ResolvedRefs, Programmed | Events stay as a secondary channel |
-| Finalizer on Ingress | Finalizer on Gateway and HTTPRoute | Same mechanism |
+| Warning events (TLSIgnored, RuleSkipped, TransformFailed) | Status conditions: Accepted, ResolvedRefs, Programmed | |
+| Finalizer on Ingress | No finalizer | Every reconcile recomputes the full state, stale proxies and DNS records are removed when their Gateway is gone |
 
 ### Annotations
 
@@ -37,165 +53,269 @@ Cloudflare edge.
 | originRequest family (timeouts, keepalive, http2 origin) | New policy attachment CRD targeting HTTPRoute, same pattern as CloudflareAccess (ADR 0001) |
 | `disable-dns-management` | Annotation on the Gateway or route, or folded into the policy CRD |
 
+None of these are implemented in the PoC.
+
 ### Listener semantics
 
-- Protocol HTTP and HTTPS are both accepted. The edge serves both for
-  every exposed hostname; listeners only declare intent.
-- `certificateRefs` on HTTPS listeners are not required and are
-  ignored when present. The listener condition explains that
-  certificates live at the Cloudflare edge. This is the structured
-  replacement of today's TLSIgnored event for `Ingress.spec.tls`.
-- TLS mode Passthrough gets `Accepted: False`. The edge must terminate
-  TLS, passthrough is impossible.
+- Protocol HTTP and HTTPS are accepted, every other protocol gets
+  `Accepted: False` with reason UnsupportedProtocol. The edge serves
+  every Gateway address over both schemes, so the proxy does not
+  separate requests by scheme. The scheme the client used at the edge
+  arrives as `X-Forwarded-Proto`: redirects without an explicit scheme
+  keep it, and backends receive it together with `X-Forwarded-For` and
+  `X-Forwarded-Host`.
+- `certificateRefs` are validated but never used: wrong group or kind,
+  a missing Secret or an unparsable certificate give `ResolvedRefs:
+  False` with reason InvalidCertificateRef, a cross namespace reference
+  without ReferenceGrant gives RefNotPermitted. The certificate the
+  client sees is the Cloudflare edge certificate.
+- TLS mode Passthrough gets `Accepted: False`, the edge must terminate
+  TLS.
+- A listener with unresolved references is `Programmed: False`, the
+  Gateway as a whole is still Programmed when at least one listener is
+  accepted.
+- `spec.infrastructure.parametersRef` on a Gateway is not supported and
+  gives `Accepted: False` with reason InvalidParameters.
 
 ### Path types
 
-cloudflared path matching is regular expression based, so Gateway API
-path matching maps completely: Exact becomes an anchored expression,
-PathPrefix and RegularExpression map directly. This is wider than the
-Ingress path support today (Prefix and ImplementationSpecific only).
-With the data plane proxy, path matching moves into the proxy anyway
-and the tunnel rule stays a catch all.
+Path matching lives in the proxy: Exact, PathPrefix (on whole path
+segments, a trailing slash in the prefix is ignored) and
+RegularExpression. Header and query parameter matches support Exact and
+RegularExpression.
 
 ### New semantics without an Ingress equivalent
 
 - Cross namespace backend references require a ReferenceGrant check.
 - Gateway `allowedRoutes` (namespaces, kinds) gates route attachment.
-- `status.listeners[].attachedRoutes` must be counted and reported.
-- Route level status: every HTTPRoute reports per parent conditions.
+- `status.listeners[].attachedRoutes` counts every accepted route once
+  per listener.
+- Route level status: every HTTPRoute reports Accepted and ResolvedRefs
+  per parent. Entries of other controllers are kept untouched.
 
 ## Architecture
 
 ```
 client
   -> Cloudflare edge          (TLS termination, routes by Host)
-  -> tunnel                   (one per Gateway)
-  -> cloudflared deployment   (managed, catch all rule)
-  -> data plane proxy         (managed, implements HTTPRoute semantics)
+  -> tunnel                   (shared, one rule per Gateway address)
+  -> cloudflared deployment   (the existing managed connector)
+  -> data plane proxy         (one per Gateway, implements HTTPRoute semantics)
   -> backend Service / Pod
 ```
 
-The tunnel configuration for a Gateway contains a single catch all rule
-pointing at the proxy Service. All routing intelligence lives in the
-proxy:
+The tunnel configuration has one rule per Gateway: the Gateway address
+points at the ClusterIP Service of its proxy. All routing intelligence
+lives in the proxy:
 
-- hostname matching (exact and wildcard listeners and route hostnames)
-- path matching (Exact, PathPrefix, RegularExpression)
-- method, header and query parameter matching
-- core filters: RequestRedirect, RequestHeaderModifier
-- extended filters as we adopt them: ResponseHeaderModifier,
-  URLRewrite, RequestMirror
-- backend selection including weights
+- hostname matching: the most specific matching hostname (exact, then
+  wildcards with more labels, then any host) is chosen first, then only
+  its routes are considered
+- path, method, header and query parameter matching
+- core filters RequestRedirect and RequestHeaderModifier, a rule with an
+  unsupported filter answers 500
+- weighted backend selection, invalid backends answer 500
 
-The proxy is a small Go reverse proxy. The controller compiles the
-accepted routes of a Gateway into a routing table and publishes it to
-the proxy. The transport for that table (ConfigMap reload, a tiny gRPC
-push, or the proxy reading a CRD) is an open implementation question;
-whatever is chosen, the proxy must apply updates without dropping
-connections, because conformance tests modify routes constantly.
+### Controller
 
-DNS stays as today: every route hostname gets a proxied CNAME to the
-tunnel domain plus the `_ctic_managed` ownership TXT record. The
-Gateway itself additionally gets one address hostname (below).
+One reconcile loop handles every Gateway and HTTPRoute. Any watched
+change (Gateway, HTTPRoute, GatewayClass, ReferenceGrant, Namespace
+labels, Service, EndpointSlice, parameter ConfigMap, proxy Deployment)
+enqueues the same key, so bursts collapse into one run and route status,
+which depends on several Gateways, and Gateway status, which depends on
+several routes, are always computed from one consistent snapshot. A run:
+
+1. validates the GatewayClasses and their parameters
+2. validates every Gateway and its listeners
+3. attaches every route to its parents: sectionName and port, listener
+   kinds and namespaces, hostname intersection
+4. compiles one routing table per accepted Gateway, sorted by Gateway
+   API precedence, and writes it with the proxy Deployment and Service
+5. pushes the Gateway exposures to Cloudflare, skipped when the set did
+   not change since the last successful push
+6. writes status: `Programmed: True` and the address only after the
+   Cloudflare push succeeded and the proxy is ready
+7. removes proxy resources whose Gateway is gone
+
+The GatewayClass has its own small controller that sets `Accepted`.
+
+Headless Services have no cluster IP: the controller resolves them
+through their EndpointSlices and writes the endpoint addresses into the
+routing table.
+
+### Route table transport
+
+The controller writes the compiled table as JSON into the ConfigMap
+`gateway-<hash of namespace/name>` in the controller namespace. The
+proxy watches exactly that object through the API and swaps the table
+atomically, requests in flight keep the table they started with. A
+mounted volume was not used, its update delay of up to a minute is too
+slow for the suite.
+
+The proxy is the `proxy` subcommand of the controller binary, so it
+ships in the same image. Its Deployment, Service and ConfigMap carry the
+label `strrl.dev/gateway-proxy` and the controller Deployment as owner,
+so uninstalling the controller removes them.
+
+### Tunnel sync
+
+`PutExposures` replaces the whole tunnel configuration and removes DNS
+records it does not see, so Ingress and Gateway exposures are always
+pushed together under one lock. The Ingress side keeps pushing on every
+reconcile like before. The Gateway side remembers the last pushed set and
+only calls Cloudflare when it changed, so route churn is free. DNS
+records whose content already matches are no longer updated, and every
+call is counted in `cloudflare_tunnel_ingress_controller_cloudflare_api_requests_total{operation}`.
+A zone whose last exposure was removed is reconciled once more, so its
+records are deleted as well.
 
 ### Gateway addressing
 
 The conformance suite reads the address from `Gateway.status.addresses`
 and sends every request to it. The shared tunnel domain
-(`<tunnel-id>.cfargotunnel.com`) is not reliably reachable directly, so
-each Gateway needs a hostname inside a real zone:
+(`<tunnel-id>.cfargotunnel.com`) is not used for that, every Gateway
+gets a hostname inside a real zone instead, which also carries the edge
+certificate.
 
-- GatewayClass `parametersRef` points at a config object carrying
-  `baseDomain` (for e2e: `strrl.cloud` from `.env.e2e`).
-- The controller provisions `<gateway-name>-<namespace>.<baseDomain>`
-  as a proxied record to the tunnel and publishes it in
-  `status.addresses`.
-- Requests whose Host equals the address hostname match listeners and
-  routes without explicit hostnames, which is exactly what most
-  conformance tests rely on.
+- GatewayClass `parametersRef` points at a ConfigMap in the controller
+  namespace (created by the helm chart) with the keys `baseDomain`
+  (required) and `labelSuffix` (optional). A missing ref, a ConfigMap in
+  another namespace, a missing ConfigMap or an empty `baseDomain` give
+  `Accepted: False` with reason InvalidParameters.
+- The address is `<name>-<namespace><labelSuffix>.<baseDomain>`. A first
+  label longer than 63 characters is cut, gets 8 hex characters of
+  sha256(`namespace/name`) and keeps the suffix.
+- With `baseDomain` set to the zone apex the address is one level below
+  the zone, so the Universal SSL certificate covers it and https works.
+  A deeper `baseDomain` needs Advanced Certificate Manager for https.
+- The address is a proxied CNAME to the tunnel plus the `_ctic_managed`
+  ownership TXT record, written by the existing DNS code.
+- Requests whose Host equals the address match listeners and routes
+  without explicit hostnames, which is what most conformance tests rely
+  on.
+
+Per route hostnames get no DNS records in the PoC: every route hostname
+in the core tests is outside the zone.
 
 ## Conformance driven TDD
 
 ### Harness
 
-Reuse the e2e harness: `.env.e2e` (`CLOUDFLARE_API_TOKEN`,
-`CLOUDFLARE_ACCOUNT_ID`, `E2E_BASE_DOMAIN`), a minikube (or kind)
-profile, helm install of the controller. On top of that:
-
-- Install the Gateway API CRDs, standard channel, version identical to
-  the pinned `sigs.k8s.io/gateway-api` module version.
-- A `test/conformance` package calling
-  `conformance.RunConformanceWithOptions` with profile `GATEWAY-HTTP`,
-  modeled on the invocation in pl4nty/cloudflare-kubernetes-gateway.
-- `--timeout-config-overrides` raised generously: every assertion
-  crosses the public internet and waits for DNS records, tunnel
-  configuration and connector pods to converge.
-- The zone must not rewrite traffic: Always Use HTTPS and automatic
-  HTTPS rewrites stay off for the test zone, otherwise the suite sees
-  redirects it did not ask for.
-
-### The loop
-
-The suite setup is the first red test: base manifests wait for the
-GatewayClass to report `Accepted: True`. From there, one conformance
-test at a time:
-
 ```
-go test ./test/conformance -args \
-  --gateway-class=cloudflare-tunnel \
-  --run-test=HTTPRouteSimpleSameNamespace \
-  --debug
+make conformance-up                              # cleanup, minikube, CRDs, deploy
+make conformance-deploy                          # rebuild image, helm upgrade
+make conformance RUN_TEST=HTTPRouteSimpleSameNamespace
+make conformance                                 # full run, writes test/conformance/artifacts/report.yaml
+make conformance-down                            # namespaces, release, Cloudflare leftovers, cluster
+make conformance-clean                           # Cloudflare leftovers only, no cluster needed
 ```
 
-Suggested order, each step a red green cycle:
+- Credentials come from `ENV_FILE` (default `./.env.e2e`), loaded with
+  `set -a` and never printed.
+- `RUN_ID` (default `local-$(whoami)`, CI uses `ci`) separates
+  environments: minikube profile `ctic-gwc-<RUN_ID>`, tunnel
+  `<CLOUDFLARE_TUNNEL_NAME>-gwc-<RUN_ID>`, address suffix
+  `-gwc-<RUN_ID>`. The cleanup tool deletes every record ending in
+  `-gwc-<RUN_ID>.<E2E_BASE_DOMAIN>` and resets the tunnel to the single
+  `http_status:404` rule, also after a crashed run.
+- A single test run keeps the base Gateways (`--cleanup-base-resources=false`),
+  a rerun takes about 5 seconds. A full run cleans them up.
+- The runner resolves Gateway addresses with the zone's authoritative
+  nameservers (`CONFORMANCE_RESOLVER` overrides), so no local resolver
+  caches a negative answer from before the record existed.
+- The suite talks plain http on port 80 to the edge, exactly as
+  upstream sends it, and every request travels edge, tunnel,
+  cloudflared, proxy, backend.
+- Timeouts: `MaxTimeToConsistency:90;GatewayMustHaveAddress:240;GatewayMustHaveCondition:240`.
 
-1. GatewayClass acceptance (suite setup gate), then
-   `GatewayClassObservedGenerationBump`.
-2. Gateway control plane: invalid listener rejection, observed
-   generation, `GatewayWithAttachedRoutes`, listener conditions.
-3. Gateway provisioning: tunnel, cloudflared, proxy, address in
-   `status.addresses`. First moment real infrastructure exists.
-4. HTTPRoute control plane: the `httproute-invalid-*` family,
-   ReferenceGrant tests, cross namespace rules.
-5. Data plane basics through the edge:
-   `HTTPRouteSimpleSameNamespace`, exact and prefix path matching.
-6. Matching depth: header, method, query parameter tests.
-7. Filters: redirects, header modifiers, then extended features.
+### Zone requirement
 
-Full profile runs (with the skip list) happen in CI with
-`--report-output`, uploading the report as an artifact.
+The conformance hostnames must accept plain http at the edge. Zone wide
+Always Use HTTPS answers every http request with its own 301 before the
+tunnel, so it must be off. To keep the rest of the zone on https, use a
+Redirect Rule instead that skips the conformance hostnames:
+
+```
+when:   (not ssl and not http.host contains "-gwc-")
+then:   301 to https, same host, path and query
+```
+
+Check before a run: `curl -sI http://<some>-gwc-<RUN_ID>.<zone>/` must not
+answer a Cloudflare 301 to https, while any other hostname of the zone
+still does. The API token of the harness has no permission for zone
+settings, the preflight of the cleanup tool can only warn.
 
 ### Skip list for the edge run
 
-These tests send a `Host` header for domains that cannot exist in the
-test zone. The edge routes by Host, so the requests never reach the
-tunnel. They are skipped in the edge run with this reason recorded;
-they can only pass in a cluster local run against the proxy Service,
-which may be added later as a supplement.
+Verified against `conformance/v1.6.2`. These tests send a `Host` header
+for domains that cannot exist in the test zone, or check the served
+certificate. The edge routes by Host and presents its own certificate,
+so the requests never reach the tunnel.
 
-Candidates found by scanning the suite (verify per test during
-implementation):
+| Skipped test | Reason |
+|---|---|
+| HTTPRouteHTTPSListener | TLS with SNI and Host `example.org` variants, checks the served certificate against the test's own Secret |
+| HTTPRouteHostnameIntersection | Hosts `very.specific.com`, `foo.wildcard.io`, `first.com` and others are outside the zone |
+| HTTPRouteListenerHostnameMatching | Hosts `bar.com`, `foo.bar.com`, `foo.com` are outside the zone |
+| HTTPRouteMatchingAcrossRoutes | Hosts `example.com` and `example.net` are outside the zone |
 
-- `GatewayHTTPListenerIsolation`
-- `HTTPRouteHostnameIntersection`
-- `HTTPRouteListenerHostnameMatching`
-- `HTTPRouteListenerPortMatching`
-- `HTTPRouteMatchingAcrossRoutes`
-- `HTTPRouteRedirectHostAndStatus`
-- `HTTPRouteRedirectPath`
-- `HTTPRouteRedirectPort`
-- `HTTPRouteRewriteHost`
+The logic behind them is implemented: hostname intersection drives
+attachment, `attachedRoutes` and the NoMatchingListenerHostname reason.
+The request cases of HTTPRouteHostnameIntersection,
+HTTPRouteListenerHostnameMatching and HTTPRouteMatchingAcrossRoutes run
+as unit tests in `pkg/controller`: the controller compiles the test
+manifests, the real proxy serves the table and real HTTP backends
+answer. HTTPRouteHTTPSListener has no unit test equivalent: what it
+checks is TLS with the listener's own certificate, which the edge never
+serves.
 
-## Open questions
+HTTPRouteRedirectHostAndStatus is not skipped: `example.org` only
+appears in the expected Location header.
 
-1. Route table transport between controller and proxy (ConfigMap
-   reload vs push vs proxy side informers).
-2. Whether the proxy and cloudflared run as two deployments or two
-   containers in one pod. Two containers remove a Service hop but
-   couple their lifecycles.
-3. Exact `parametersRef` schema (ConfigMap vs a small CRD) and what
-   else belongs in it (proxy image, replica counts, resources).
-4. Whether direct requests to `<tunnel-id>.cfargotunnel.com` work at
-   all today; if they do, the address hostname could become optional.
-5. Rate limit behavior of the Cloudflare API under conformance churn;
-   the suite creates and deletes routes far faster than human users.
+## PoC deviations
+
+- Shared tunnel: one tunnel for the Ingress rules and every Gateway, the
+  existing cloudflared connector carries all traffic. One tunnel and one
+  connector per Gateway stays the target after the PoC; for about 20
+  Gateways per run it would add tunnel creation, token fetch, a
+  connector Deployment and 10 to 20 seconds of connector registration
+  each, and leak tunnels after crashes.
+- `certificateRefs` are validated but unused, the edge certificate is
+  served.
+- A `baseDomain` below the zone apex needs Advanced Certificate Manager
+  for https.
+- Per route hostnames get no DNS records.
+
+## Known limitations
+
+- A rule with an unsupported filter (anything but RequestHeaderModifier
+  and RequestRedirect) keeps the route `Accepted: True` and answers 500,
+  the route status does not name the filter.
+- Service and EndpointSlice watches are cluster wide and every event
+  enqueues the one Gateway reconcile key. Busy clusters recompute the
+  whole Gateway state often; a later version should filter events to
+  the referenced Services.
+- With `--enable-gateway-api` set, the Ingress sync waits for the first
+  Gateway reconcile so it never deletes Gateway DNS records. Without the
+  Gateway API CRDs that reconcile never runs, so Ingress syncs keep
+  failing and retrying.
+- The zones a sync touched are remembered in memory only. A zone whose
+  last exposure is removed while the controller is down keeps its stale
+  records until a later exposure in that zone.
+- A failed Cloudflare sync keeps an already published Gateway
+  `Programmed` with its address and reports the error in the condition
+  message; the push is retried with backoff.
+
+## Resolved questions
+
+1. Route table transport: a ConfigMap per Gateway, watched by the proxy
+   through the API.
+2. Proxy and cloudflared: separate Deployments. cloudflared is the shared
+   connector, the proxy is per Gateway.
+3. `parametersRef` schema: a ConfigMap in the controller namespace with
+   `baseDomain` and the optional `labelSuffix`. Proxy image and
+   resources come from controller flags.
+4. Direct requests to `<tunnel-id>.cfargotunnel.com` are not used, every
+   Gateway needs a zone hostname anyway for the edge certificate.
+5. Rate limits: pushing only changed exposure sets keeps a full run at
+   about 160 to 210 calls and route churn at zero.

@@ -43,3 +43,27 @@ setup-envtest:
 dashboards:
 	jsonnet mixin/dashboards/controller.jsonnet > mixin/dist/controller.json
 	jsonnet mixin/dashboards/cloudflared.jsonnet > mixin/dist/cloudflared.json
+
+# Gateway API conformance through the real Cloudflare edge, see
+# test/conformance/conformance.sh. ENV_FILE points at the credentials
+# (default ./.env.e2e), RUN_ID separates environments (default local-$USER).
+# `make conformance RUN_TEST=HTTPRouteSimpleSameNamespace` runs one test.
+.PHONY: conformance-up
+conformance-up:
+	bash ./test/conformance/conformance.sh up
+
+.PHONY: conformance-deploy
+conformance-deploy:
+	bash ./test/conformance/conformance.sh deploy
+
+.PHONY: conformance
+conformance:
+	RUN_TEST=$(RUN_TEST) bash ./test/conformance/conformance.sh run
+
+.PHONY: conformance-down
+conformance-down:
+	bash ./test/conformance/conformance.sh down
+
+.PHONY: conformance-clean
+conformance-clean:
+	bash ./test/conformance/conformance.sh clean

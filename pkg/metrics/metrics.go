@@ -37,6 +37,15 @@ var (
 		Help:      "Total number of failed Cloudflare API calls.",
 	}, []string{"operation"})
 
+	// CloudflareAPIRequests counts every Cloudflare API call by operation,
+	// failed or not. It shows how close the controller gets to the API
+	// rate limit.
+	CloudflareAPIRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "cloudflare_api_requests_total",
+		Help:      "Total number of Cloudflare API calls.",
+	}, []string{"operation"})
+
 	// DNSRecordOperations counts DNS record changes applied to Cloudflare.
 	DNSRecordOperations = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
@@ -50,6 +59,7 @@ func init() {
 		LastSuccessfulSyncTimestamp,
 		ManagedExposures,
 		CloudflareAPIErrors,
+		CloudflareAPIRequests,
 		DNSRecordOperations,
 	)
 }

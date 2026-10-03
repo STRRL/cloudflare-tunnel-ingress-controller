@@ -1,0 +1,27 @@
+apiVersion: gateway.networking.k8s.io/v1
+date: "2026-10-02T20:02:52-07:00"
+gatewayAPIChannel: standard
+gatewayAPIVersion: v1.6.2
+implementation:
+  contact:
+  - '@STRRL'
+  organization: STRRL
+  project: cloudflare-tunnel-ingress-controller
+  url: https://github.com/STRRL/cloudflare-tunnel-ingress-controller
+  version: dev
+kind: ConformanceReport
+mode: default
+profiles:
+- core:
+    result: partial
+    skippedTests:
+    - HTTPRouteHTTPSListener
+    - HTTPRouteHostnameIntersection
+    - HTTPRouteListenerHostnameMatching
+    - HTTPRouteMatchingAcrossRoutes
+    statistics:
+      Failed: 0
+      Passed: 33
+      Skipped: 4
+  name: GATEWAY-HTTP
+  summary: Core tests partially succeeded with 4 test skips.

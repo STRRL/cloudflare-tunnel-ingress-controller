@@ -31,6 +31,10 @@ type TunnelClient struct {
 	tunnelId           string
 	tunnelName         string
 	dnsCommentTemplate *template.Template // nil if disabled (empty template string)
+	// zonesWithExposures are the zones that had exposures in the last
+	// successful sync. A zone whose last exposure is removed must still be
+	// reconciled once, otherwise its records are never deleted.
+	zonesWithExposures map[string]bool
 }
 
 // DNSCommentTemplateData contains the variables available in the DNS comment template.
@@ -135,6 +139,7 @@ func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures [
 
 	t.logger.V(3).Info("update cloudflare tunnel config", "ingress-rules", ingressRules)
 
+	metrics.CloudflareAPIRequests.WithLabelValues("get_tunnel_configuration").Inc()
 	current, err := t.cfClient.GetTunnelConfiguration(ctx, cloudflare.ResourceIdentifier(t.accountId), t.tunnelId)
 	if err != nil {
 		metrics.CloudflareAPIErrors.WithLabelValues("get_tunnel_configuration").Inc()
@@ -146,6 +151,7 @@ func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures [
 		return nil
 	}
 
+	metrics.CloudflareAPIRequests.WithLabelValues("update_tunnel_configuration").Inc()
 	_, err = t.cfClient.UpdateTunnelConfiguration(ctx,
 		cloudflare.ResourceIdentifier(t.accountId),
 		cloudflare.TunnelConfigurationParams{
@@ -165,6 +171,7 @@ func (t *TunnelClient) updateTunnelIngressRules(ctx context.Context, exposures [
 
 func (t *TunnelClient) updateDNSCNAMERecord(ctx context.Context, exposures []exposure.Exposure) error {
 	t.logger.V(3).Info("list zones")
+	metrics.CloudflareAPIRequests.WithLabelValues("list_zones").Inc()
 	zones, err := t.cfClient.ListZones(ctx)
 	if err != nil {
 		metrics.CloudflareAPIErrors.WithLabelValues("list_zones").Inc()
@@ -193,8 +200,22 @@ func (t *TunnelClient) updateDNSCNAMERecord(ctx context.Context, exposures []exp
 		}
 	}
 
+	currentZones := map[string]bool{}
+	for zoneName := range exposuresByZone {
+		currentZones[zoneName] = true
+	}
+	for zoneName := range t.zonesWithExposures {
+		if _, ok := exposuresByZone[zoneName]; !ok {
+			exposuresByZone[zoneName] = nil
+		}
+	}
+
 	for zoneName, items := range exposuresByZone {
 		ok, zone := findZoneByName(zoneName, zones)
+		if !ok && len(items) == 0 {
+			// the zone left the account, nothing to clean up there
+			continue
+		}
 		if !ok {
 			return errors.Errorf("zone %s not found", zoneName)
 		}
@@ -203,10 +224,12 @@ func (t *TunnelClient) updateDNSCNAMERecord(ctx context.Context, exposures []exp
 			return errors.Wrapf(err, "update DNS CNAME record for zone %s", zoneName)
 		}
 	}
+	t.zonesWithExposures = currentZones
 	return nil
 }
 
 func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposures []exposure.Exposure, zone cloudflare.Zone) error {
+	metrics.CloudflareAPIRequests.WithLabelValues("list_dns_records").Inc()
 	cnameDnsRecords, _, err := t.cfClient.ListDNSRecords(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.ListDNSRecordsParams{
 		Type: "CNAME",
 	})
@@ -215,6 +238,7 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 		return errors.Wrapf(err, "list CNAME records for zone %s", zone.Name)
 	}
 
+	metrics.CloudflareAPIRequests.WithLabelValues("list_dns_records").Inc()
 	allTxtDnsRecords, _, err := t.cfClient.ListDNSRecords(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.ListDNSRecordsParams{
 		Type: "TXT",
 	})
@@ -252,6 +276,7 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 		if comment := t.renderDNSComment(item.Hostname); comment != "" {
 			params.Comment = comment
 		}
+		metrics.CloudflareAPIRequests.WithLabelValues("create_dns_record").Inc()
 		_, err := t.cfClient.CreateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), params)
 		if err != nil {
 			metrics.CloudflareAPIErrors.WithLabelValues("create_dns_record").Inc()
@@ -261,6 +286,11 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 	}
 
 	for _, item := range toUpdate {
+		comment := t.renderDNSComment(item.OldRecord.Name)
+		if dnsRecordUpToDate(item.OldRecord, item.Content, comment) {
+			t.logger.V(3).Info("DNS record up to date, skipping update", "type", item.Type, "hostname", item.OldRecord.Name)
+			continue
+		}
 		t.logger.Info("update DNS record", "id", item.OldRecord.ID, "type", item.Type, "hostname", item.OldRecord.Name, "content", item.Content)
 		params := cloudflare.UpdateDNSRecordParams{
 			ID:      item.OldRecord.ID,
@@ -271,9 +301,10 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 			TTL:     1,
 		}
 		// Add comment to every managed record if template is configured.
-		if comment := t.renderDNSComment(item.OldRecord.Name); comment != "" {
+		if comment != "" {
 			params.Comment = &comment
 		}
+		metrics.CloudflareAPIRequests.WithLabelValues("update_dns_record").Inc()
 		_, err := t.cfClient.UpdateDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), params)
 		if err != nil {
 			metrics.CloudflareAPIErrors.WithLabelValues("update_dns_record").Inc()
@@ -291,6 +322,7 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 
 	for _, item := range toDelete {
 		t.logger.Info("delete DNS record", "id", item.OldRecord.ID, "type", item.OldRecord.Type, "hostname", item.OldRecord.Name, "content", item.OldRecord.Content)
+		metrics.CloudflareAPIRequests.WithLabelValues("delete_dns_record").Inc()
 		err := t.cfClient.DeleteDNSRecord(ctx, cloudflare.ResourceIdentifier(zone.ID), item.OldRecord.ID)
 		if err != nil {
 			metrics.CloudflareAPIErrors.WithLabelValues("delete_dns_record").Inc()
@@ -300,6 +332,14 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 	}
 
 	return nil
+}
+
+// dnsRecordUpToDate reports whether an existing record already has the
+// content, proxy setting and comment an update would write, so the update
+// call can be skipped.
+func dnsRecordUpToDate(record cloudflare.DNSRecord, content string, comment string) bool {
+	proxied := record.Proxied != nil && *record.Proxied
+	return record.Content == content && proxied == (record.Type == "CNAME") && record.Comment == comment
 }
 
 func zoneBelongedByExposure(exposure exposure.Exposure, zones []string) (bool, string) {
@@ -324,6 +364,7 @@ func findZoneByName(zoneName string, zones []cloudflare.Zone) (bool, cloudflare.
 }
 
 func (t *TunnelClient) FetchTunnelToken(ctx context.Context) (string, error) {
+	metrics.CloudflareAPIRequests.WithLabelValues("get_tunnel_token").Inc()
 	return t.cfClient.GetTunnelToken(ctx, cloudflare.ResourceIdentifier(t.accountId), t.tunnelId)
 }
 

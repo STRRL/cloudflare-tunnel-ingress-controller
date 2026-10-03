@@ -19,6 +19,24 @@ ingressClass:
   controllerValue: strrl.dev/cloudflare-tunnel-ingress-controller
   isDefaultClass: false
 
+# Gateway API support (GatewayClass, Gateway, HTTPRoute). Requires the
+# Gateway API CRDs (standard channel) installed before the chart. Every
+# Gateway gets the address <name>-<namespace><labelSuffix>.<baseDomain>,
+# published as a proxied DNS record in the Cloudflare zone of baseDomain, and
+# a small proxy Deployment in the release namespace that implements the
+# HTTPRoute rules.
+gatewayAPI:
+  enabled: false
+  gatewayClassName: cloudflare-tunnel
+  # Cloudflare zone of the account, required when enabled. With the zone apex
+  # the addresses are one level below it and covered by the Universal SSL
+  # certificate. A deeper baseDomain needs Advanced Certificate Manager for
+  # HTTPS.
+  baseDomain: ""
+  # Optional suffix of the first address label, keeps several installations
+  # apart in one zone, for example "-staging".
+  labelSuffix: ""
+
 replicaCount: 1
 
 image:

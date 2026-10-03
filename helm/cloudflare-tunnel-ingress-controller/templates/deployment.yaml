@@ -53,6 +53,12 @@ spec:
             - --controller-deployment-name={{ include "cloudflare-tunnel-ingress-controller.fullname" . }}
             - --metrics-bind-address=:{{ .Values.metrics.port }}
             - --health-probe-bind-address=:{{ .Values.healthProbe.port }}
+            {{- if .Values.gatewayAPI.enabled }}
+            - --enable-gateway-api
+            - --gateway-proxy-image={{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+            - --gateway-proxy-image-pull-policy={{ .Values.image.pullPolicy }}
+            - --gateway-proxy-service-account={{ include "cloudflare-tunnel-ingress-controller.fullname" . }}-gateway-proxy
+            {{- end }}
           env:
             - name: CLOUDFLARE_API_TOKEN
               valueFrom:

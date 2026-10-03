@@ -13,10 +13,16 @@ type IngressControllerOptions struct {
 	ControllerClassName string
 	ClusterDomain       string
 	CFTunnelClient      *cloudflarecontroller.TunnelClient
+	TunnelSync          *TunnelSync
 }
 
 func RegisterIngressController(logger logr.Logger, mgr manager.Manager, options IngressControllerOptions) error {
-	controller := NewIngressController(logger.WithName("ingress-controller"), mgr.GetClient(), mgr.GetEventRecorderFor("cloudflare-tunnel-ingress-controller"), options.IngressClassName, options.ControllerClassName, options.ClusterDomain, options.CFTunnelClient)
+	// the Ingress events still use the old events API, moving to
+	// GetEventRecorder changes every event call
+	//nolint:staticcheck
+	controller := NewIngressController(logger.WithName("ingress-controller"), mgr.GetClient(), mgr.GetEventRecorderFor("cloudflare-tunnel-ingress-controller"), options.IngressClassName, options.ControllerClassName, options.ClusterDomain, options.CFTunnelClient, options.TunnelSync)
+	// the Gateway side needs the Ingress exposures to push the full tunnel state
+	options.TunnelSync.listIngressExposures = controller.listExposures
 	err := builder.
 		ControllerManagedBy(mgr).
 		For(&networkingv1.Ingress{}).

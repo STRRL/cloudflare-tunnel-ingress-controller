@@ -17,6 +17,8 @@ import (
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -24,6 +26,7 @@ import (
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 type rootCmdFlags struct {
@@ -49,6 +52,10 @@ type rootCmdFlags struct {
 	dnsCommentTemplate          string
 	metricsBindAddress          string
 	healthProbeBindAddress      string
+	enableGatewayAPI            bool
+	gatewayProxyImage           string
+	gatewayProxyPullPolicy      string
+	gatewayProxyServiceAccount  string
 }
 
 func main() {
@@ -70,6 +77,7 @@ func main() {
 		dnsCommentTemplate:         "managed by cloudflare-tunnel-ingress-controller, tunnel [{{.TunnelName}}]",
 		metricsBindAddress:         ":9090",
 		healthProbeBindAddress:     ":8081",
+		gatewayProxyPullPolicy:     "IfNotPresent",
 	}
 
 	crlog.SetLogger(rootLogger.WithName("controller-runtime"))
@@ -97,6 +105,10 @@ func main() {
 			options.dnsCommentTemplate = viper.GetString("dns-comment-template")
 			options.metricsBindAddress = viper.GetString("metrics-bind-address")
 			options.healthProbeBindAddress = viper.GetString("health-probe-bind-address")
+			options.enableGatewayAPI = viper.GetBool("enable-gateway-api")
+			options.gatewayProxyImage = viper.GetString("gateway-proxy-image")
+			options.gatewayProxyPullPolicy = viper.GetString("gateway-proxy-image-pull-policy")
+			options.gatewayProxyServiceAccount = viper.GetString("gateway-proxy-service-account")
 			controllerDeploymentName := viper.GetString("controller-deployment-name")
 
 			stdr.SetVerbosity(options.logLevel)
@@ -125,10 +137,29 @@ func main() {
 				os.Exit(1)
 			}
 
+			scheme := runtime.NewScheme()
+			if err := clientgoscheme.AddToScheme(scheme); err != nil {
+				logger.Error(err, "build scheme")
+				os.Exit(1)
+			}
+			if err := gatewayv1.Install(scheme); err != nil {
+				logger.Error(err, "build scheme")
+				os.Exit(1)
+			}
+
 			mgr, err := manager.New(cfg, manager.Options{
+				Scheme: scheme,
 				Cache: cache.Options{
 					ByObject: map[client.Object]cache.ByObject{
 						&corev1.Secret{}: {
+							Namespaces: map[string]cache.Config{
+								options.namespace: {},
+							},
+						},
+						// the Gateway API support only reads ConfigMaps of
+						// the controller namespace: GatewayClass parameters
+						// and proxy route tables
+						&corev1.ConfigMap{}: {
 							Namespaces: map[string]cache.Config{
 								options.namespace: {},
 							},
@@ -160,15 +191,45 @@ func main() {
 			}
 
 			logger.Info("cloudflare-tunnel-ingress-controller start serving")
+			tunnelSync := controller.NewTunnelSync(tunnelClient, options.enableGatewayAPI)
 			err = controller.RegisterIngressController(logger, mgr,
 				controller.IngressControllerOptions{
 					IngressClassName:    options.ingressClass,
 					ControllerClassName: options.controllerClass,
 					ClusterDomain:       options.clusterDomain,
 					CFTunnelClient:      tunnelClient,
+					TunnelSync:          tunnelSync,
 				})
 			if err != nil {
 				return err
+			}
+
+			if options.enableGatewayAPI {
+				logger.Info("gateway api support enabled", "controller-name", options.controllerClass)
+				err = controller.RegisterGatewayControllers(logger, mgr, controller.GatewayControllerOptions{
+					ControllerName: options.controllerClass,
+					Namespace:      options.namespace,
+					ClusterDomain:  options.clusterDomain,
+					TunnelSync:     tunnelSync,
+					ProxyConfig: func(ctx context.Context) (controller.GatewayProxyConfig, error) {
+						config := controller.GatewayProxyConfig{
+							Image:           options.gatewayProxyImage,
+							ImagePullPolicy: options.gatewayProxyPullPolicy,
+							ServiceAccount:  options.gatewayProxyServiceAccount,
+						}
+						if controllerDeploymentName != "" {
+							owner, err := controller.ResolveControllerOwnerReference(ctx, mgr.GetClient(), options.namespace, controllerDeploymentName)
+							if err != nil {
+								return config, err
+							}
+							config.Owner = owner
+						}
+						return config, nil
+					},
+				})
+				if err != nil {
+					return err
+				}
 			}
 
 			deploymentConfig, configHash, err := controller.LoadCloudflaredDeploymentConfig(options.cloudflaredDeploymentConfig)
@@ -257,6 +318,12 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.metricsBindAddress, "metrics-bind-address", options.metricsBindAddress, "address for the metrics endpoint, set to 0 to disable")
 	rootCommand.PersistentFlags().StringVar(&options.healthProbeBindAddress, "health-probe-bind-address", options.healthProbeBindAddress, "address for the healthz/readyz endpoints, set to 0 to disable")
 	rootCommand.PersistentFlags().StringVar(&options.dnsCommentTemplate, "dns-comment-template", options.dnsCommentTemplate, "Go template for DNS record comments. Available variables: {{.TunnelName}}, {{.TunnelId}}, {{.Hostname}}. Set to empty string to disable. Note: Cloudflare limits comment length by plan (Free: 100, Pro/Biz/Ent: 500 chars). See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/")
+
+	rootCommand.PersistentFlags().BoolVar(&options.enableGatewayAPI, "enable-gateway-api", options.enableGatewayAPI, "enable Gateway API support (GatewayClass, Gateway, HTTPRoute), requires the Gateway API CRDs")
+	rootCommand.PersistentFlags().StringVar(&options.gatewayProxyImage, "gateway-proxy-image", options.gatewayProxyImage, "container image of the per Gateway proxy, normally the controller image itself")
+	rootCommand.PersistentFlags().StringVar(&options.gatewayProxyPullPolicy, "gateway-proxy-image-pull-policy", options.gatewayProxyPullPolicy, "image pull policy of the per Gateway proxy")
+	rootCommand.PersistentFlags().StringVar(&options.gatewayProxyServiceAccount, "gateway-proxy-service-account", options.gatewayProxyServiceAccount, "service account of the per Gateway proxy, it needs to read ConfigMaps in the controller namespace")
+	rootCommand.AddCommand(newProxyCommand(rootLogger))
 
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))

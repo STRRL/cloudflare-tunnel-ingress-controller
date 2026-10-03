@@ -1,0 +1,176 @@
+{{- if .Values.gatewayAPI.enabled }}
+{{- $fullname := include "cloudflare-tunnel-ingress-controller.fullname" . }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: {{ .Values.gatewayAPI.gatewayClassName }}
+  labels:
+    {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
+spec:
+  controllerName: {{ .Values.ingressClass.controllerValue }}
+  parametersRef:
+    group: ""
+    kind: ConfigMap
+    name: {{ $fullname }}-gateway-parameters
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-gateway-parameters
+  labels:
+    {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
+data:
+  baseDomain: {{ required "gatewayAPI.baseDomain is required when gatewayAPI.enabled is true" .Values.gatewayAPI.baseDomain | quote }}
+  labelSuffix: {{ .Values.gatewayAPI.labelSuffix | quote }}
+---
+# The per Gateway proxies only read their routing table ConfigMap.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $fullname }}-gateway-proxy
+  labels:
+    {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $fullname }}-gateway-proxy
+  labels:
+    {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $fullname }}-gateway-proxy
+  labels:
+    {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $fullname }}-gateway-proxy
+subjects:
+  - name: {{ $fullname }}-gateway-proxy
+    kind: ServiceAccount
+    namespace: {{ .Release.Namespace | quote }}
+---
+# The controller manages the proxy Deployments, Services and routing table
+# ConfigMaps in its own namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $fullname }}-gateway-controller
+  labels:
+    {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - delete
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $fullname }}-gateway-controller
+  labels:
+    {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $fullname }}-gateway-controller
+subjects:
+  - name: {{ include "cloudflare-tunnel-ingress-controller.serviceAccountName" . }}
+    kind: ServiceAccount
+    namespace: {{ .Release.Namespace | quote }}
+---
+# Cluster wide read access for Gateway API resources and the objects routes
+# point at. Secrets are only read to validate listener certificateRefs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $fullname }}-gateway-api
+  labels:
+    {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - gateway.networking.k8s.io
+    resources:
+      - gatewayclasses
+      - gateways
+      - httproutes
+      - referencegrants
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - gateway.networking.k8s.io
+    resources:
+      - gatewayclasses/status
+      - gateways/status
+      - httproutes/status
+    verbs:
+      - update
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $fullname }}-gateway-api
+  labels:
+    {{- include "cloudflare-tunnel-ingress-controller.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $fullname }}-gateway-api
+subjects:
+  - name: {{ include "cloudflare-tunnel-ingress-controller.serviceAccountName" . }}
+    kind: ServiceAccount
+    namespace: {{ .Release.Namespace | quote }}
+{{- end }}

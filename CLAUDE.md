@@ -15,6 +15,9 @@ For the data flow, DNS ownership model, and connector reconciliation design, see
 - **Exposure** (`pkg/exposure/exposure.go`): Internal representation shared between Kubernetes and Cloudflare logic
 - **TunnelClient** (`pkg/cloudflare-controller/tunnel-client.go`): Reconciles tunnel ingress rules and DNS records through the Cloudflare API
 - **DNS ownership** (`pkg/cloudflare-controller/dns.go`): Plans CNAME and ownership TXT record changes
+- **Gateway API** (`pkg/controller/gateway*.go`, behind `--enable-gateway-api`): one reconcile loop for Gateways and HTTPRoutes, pure route compile in `gateway-routes.go`, see `docs/design/gateway-api.md`
+- **Gateway proxy** (`pkg/gatewayproxy/`): the per Gateway data plane, the `proxy` subcommand of the same binary
+- **TunnelSync** (`pkg/controller/tunnel-sync.go`): pushes Ingress and Gateway exposures to the shared tunnel together
 - **ControlledCloudflaredConnector** (`pkg/controller/controlled-cloudflared-connector.go`): Reconciles the managed cloudflared Secret and Deployment, owned by the controller Deployment so garbage collection removes them on uninstall; the Cloudflare tunnel itself is intentionally kept and reused by name
 
 ## Development Commands
@@ -34,6 +37,9 @@ make integration-test
 
 # Build Docker image
 make image
+
+# Gateway API conformance through the real Cloudflare edge
+make conformance-up && make conformance RUN_TEST=HTTPRouteSimpleSameNamespace
 
 # Development with live reload (also runs setup)
 make dev

@@ -123,3 +123,17 @@ conformance suite running through the real Cloudflare edge.
   batching of tunnel configuration updates stays mandatory.
 - The CloudflareAccess CRD (ADR 0001) later extends `targetRefs` to
   `kind: HTTPRoute` unchanged, as planned.
+
+## Proof of concept
+
+The PoC (`docs/design/gateway-api.md`) passes 33 of the 37 core tests
+of the `GATEWAY-HTTP` profile at `v1.6.2` through the real edge, with 0
+failures. The 4 skipped tests (HTTPRouteHTTPSListener,
+HTTPRouteHostnameIntersection, HTTPRouteListenerHostnameMatching,
+HTTPRouteMatchingAcrossRoutes) need a foreign Host or the test's own
+certificate. The request cases of the three hostname tests are covered
+by unit tests that run the compiled routing table through the real
+proxy; HTTPRouteHTTPSListener checks the listener's own certificate,
+which the edge never serves, and has no unit test equivalent. The PoC shares one
+tunnel and one cloudflared connector between Ingress and all Gateways;
+one tunnel per Gateway (decision 1) remains the target.
