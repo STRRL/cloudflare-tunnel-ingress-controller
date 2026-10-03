@@ -24,8 +24,8 @@ Measured on a local minikube:
   in about 6s
 - a route change reaches the proxy in about 1s and costs no Cloudflare
   API call
-- one full run makes about 120 to 160 Cloudflare API calls, far below
-  the limit of 1200 per 5 minutes
+- one full run makes about 160 to 210 Cloudflare API calls within about
+  a minute, far below the limit of 1200 per 5 minutes
 
 ## Concept mapping
 
@@ -165,6 +165,8 @@ reconcile like before. The Gateway side remembers the last pushed set and
 only calls Cloudflare when it changed, so route churn is free. DNS
 records whose content already matches are no longer updated, and every
 call is counted in `cloudflare_tunnel_ingress_controller_cloudflare_api_requests_total{operation}`.
+A zone whose last exposure was removed is reconciled once more, so its
+records are deleted as well.
 
 ### Gateway addressing
 
@@ -276,5 +278,5 @@ appears in the expected Location header.
    resources come from controller flags.
 4. Direct requests to `<tunnel-id>.cfargotunnel.com` are not used, every
    Gateway needs a zone hostname anyway for the edge certificate.
-5. Rate limits: the skip when unchanged push keeps a full run at about
-   120 to 160 calls and route churn at zero.
+5. Rate limits: pushing only changed exposure sets keeps a full run at
+   about 160 to 210 calls and route churn at zero.
