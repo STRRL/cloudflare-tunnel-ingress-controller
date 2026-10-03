@@ -12,6 +12,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -31,10 +32,11 @@ type IngressController struct {
 	controllerClassName string
 	clusterDomain       string
 	tunnelClient        *cloudflarecontroller.TunnelClient
+	tunnelSync          *TunnelSync
 }
 
-func NewIngressController(logger logr.Logger, kubeClient client.Client, recorder record.EventRecorder, ingressClassName string, controllerClassName string, clusterDomain string, tunnelClient *cloudflarecontroller.TunnelClient) *IngressController {
-	return &IngressController{logger: logger, kubeClient: kubeClient, recorder: recorder, ingressClassName: ingressClassName, controllerClassName: controllerClassName, clusterDomain: clusterDomain, tunnelClient: tunnelClient}
+func NewIngressController(logger logr.Logger, kubeClient client.Client, recorder record.EventRecorder, ingressClassName string, controllerClassName string, clusterDomain string, tunnelClient *cloudflarecontroller.TunnelClient, tunnelSync *TunnelSync) *IngressController {
+	return &IngressController{logger: logger, kubeClient: kubeClient, recorder: recorder, ingressClassName: ingressClassName, controllerClassName: controllerClassName, clusterDomain: clusterDomain, tunnelClient: tunnelClient, tunnelSync: tunnelSync}
 }
 
 func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -93,7 +95,7 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 	}
 	i.logger.V(3).Info("all exposures", "exposures", allExposures)
 
-	err = i.tunnelClient.PutExposures(ctx, allExposures)
+	err = i.tunnelSync.SyncIngress(ctx, allExposures)
 	if err != nil {
 		i.recorder.Event(&origin, v1.EventTypeWarning, EventReasonSyncFailed, err.Error())
 		return reconcile.Result{}, errors.Wrap(err, "put exposures")
@@ -129,6 +131,35 @@ func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Req
 
 	i.logger.V(3).Info("reconcile completed", "triggered-by", request.NamespacedName)
 	return reconcile.Result{}, nil
+}
+
+// listExposures returns the exposures of all controlled ingresses without
+// recording events. The Gateway side uses it to push the full tunnel state.
+func (i *IngressController) listExposures(ctx context.Context) ([]exposure.Exposure, error) {
+	ingresses, err := i.listControlledIngresses(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "list controlled ingresses")
+	}
+	var allExposures []exposure.Exposure
+	for _, ingress := range ingresses {
+		exposures, err := FromIngressToExposure(ctx, i.logger, i.kubeClient, discardEventRecorder{}, ingress, i.clusterDomain)
+		if err != nil {
+			i.logger.V(1).Info("extract exposures from ingress, skipped", "ingress", fmt.Sprintf("%s/%s", ingress.Namespace, ingress.Name), "error", err.Error())
+		}
+		allExposures = append(allExposures, exposures...)
+	}
+	return allExposures, nil
+}
+
+// discardEventRecorder drops every event, so repeated listing does not
+// repeat the warnings the reconcile already recorded.
+type discardEventRecorder struct{}
+
+func (discardEventRecorder) Event(runtime.Object, string, string, string) {}
+
+func (discardEventRecorder) Eventf(runtime.Object, string, string, string, ...interface{}) {}
+
+func (discardEventRecorder) AnnotatedEventf(runtime.Object, map[string]string, string, string, string, ...interface{}) {
 }
 
 func (i *IngressController) isControlledByThisController(ctx context.Context, target networkingv1.Ingress) (bool, error) {
