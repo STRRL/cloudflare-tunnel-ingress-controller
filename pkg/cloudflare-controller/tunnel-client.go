@@ -31,6 +31,10 @@ type TunnelClient struct {
 	tunnelId           string
 	tunnelName         string
 	dnsCommentTemplate *template.Template // nil if disabled (empty template string)
+	// zonesWithExposures are the zones that had exposures in the last
+	// successful sync. A zone whose last exposure is removed must still be
+	// reconciled once, otherwise its records are never deleted.
+	zonesWithExposures map[string]bool
 }
 
 // DNSCommentTemplateData contains the variables available in the DNS comment template.
@@ -196,8 +200,22 @@ func (t *TunnelClient) updateDNSCNAMERecord(ctx context.Context, exposures []exp
 		}
 	}
 
+	currentZones := map[string]bool{}
+	for zoneName := range exposuresByZone {
+		currentZones[zoneName] = true
+	}
+	for zoneName := range t.zonesWithExposures {
+		if _, ok := exposuresByZone[zoneName]; !ok {
+			exposuresByZone[zoneName] = nil
+		}
+	}
+
 	for zoneName, items := range exposuresByZone {
 		ok, zone := findZoneByName(zoneName, zones)
+		if !ok && len(items) == 0 {
+			// the zone left the account, nothing to clean up there
+			continue
+		}
 		if !ok {
 			return errors.Errorf("zone %s not found", zoneName)
 		}
@@ -206,6 +224,7 @@ func (t *TunnelClient) updateDNSCNAMERecord(ctx context.Context, exposures []exp
 			return errors.Wrapf(err, "update DNS CNAME record for zone %s", zoneName)
 		}
 	}
+	t.zonesWithExposures = currentZones
 	return nil
 }
 
