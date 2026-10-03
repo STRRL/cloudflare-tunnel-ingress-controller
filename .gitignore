@@ -32,3 +32,5 @@ cover.out
 .env.*
 test/e2e/artifacts/
 .env.e2e
+
+test/conformance/artifacts/kubeconfig-*
