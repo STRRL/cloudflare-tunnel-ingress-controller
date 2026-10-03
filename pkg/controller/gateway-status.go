@@ -139,7 +139,9 @@ func validateCertificateRef(ctx context.Context, gateway *gatewayv1.Gateway, ref
 // gatewayStatusFor builds the new status of a Gateway from its state. The
 // existing status is the starting point, so condition transition times stay
 // stable while nothing changes.
-func gatewayStatusFor(state *gatewayState, programmed bool, existing gatewayv1.GatewayStatus) gatewayv1.GatewayStatus {
+// syncProblem, when not empty, is added to the Programmed message: the
+// Gateway keeps its last good state while a Cloudflare sync is retried.
+func gatewayStatusFor(state *gatewayState, programmed bool, syncProblem string, existing gatewayv1.GatewayStatus) gatewayv1.GatewayStatus {
 	generation := state.gateway.Generation
 	status := gatewayv1.GatewayStatus{Conditions: slicesCloneConditions(existing.Conditions)}
 
@@ -153,13 +155,21 @@ func gatewayStatusFor(state *gatewayState, programmed bool, existing gatewayv1.G
 	case !state.accepted:
 		setCondition(&status.Conditions, string(gatewayv1.GatewayConditionProgrammed), metav1.ConditionFalse, string(gatewayv1.GatewayReasonInvalid), "gateway is not accepted", generation)
 	case programmed:
-		setCondition(&status.Conditions, string(gatewayv1.GatewayConditionProgrammed), metav1.ConditionTrue, string(gatewayv1.GatewayReasonProgrammed), "proxy is ready and the address is published in Cloudflare", generation)
+		message := "proxy is ready and the address is published in Cloudflare"
+		if syncProblem != "" {
+			message += "; " + syncProblem
+		}
+		setCondition(&status.Conditions, string(gatewayv1.GatewayConditionProgrammed), metav1.ConditionTrue, string(gatewayv1.GatewayReasonProgrammed), message, generation)
 		status.Addresses = []gatewayv1.GatewayStatusAddress{{
 			Type:  new(gatewayv1.HostnameAddressType),
 			Value: state.address,
 		}}
 	default:
-		setCondition(&status.Conditions, string(gatewayv1.GatewayConditionProgrammed), metav1.ConditionFalse, string(gatewayv1.GatewayReasonPending), "waiting for the proxy and the Cloudflare DNS record", generation)
+		message := "waiting for the proxy and the Cloudflare DNS record"
+		if syncProblem != "" {
+			message += "; " + syncProblem
+		}
+		setCondition(&status.Conditions, string(gatewayv1.GatewayConditionProgrammed), metav1.ConditionFalse, string(gatewayv1.GatewayReasonPending), message, generation)
 	}
 
 	for _, item := range state.listeners {

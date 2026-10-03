@@ -28,7 +28,9 @@ type TunnelSync struct {
 	gatewayKnown     bool
 	gatewayExposures []exposure.Exposure
 
-	hasSynced  bool
+	// hasSynced is false after a failed push, so the next sync pushes again
+	hasSynced bool
+	// lastSynced is the set of the last successful push
 	lastSynced []exposure.Exposure
 }
 
@@ -86,6 +88,16 @@ func (s *TunnelSync) push(ctx context.Context, all []exposure.Exposure) error {
 	s.hasSynced = true
 	s.lastSynced = all
 	return nil
+}
+
+// GatewayHostnameSynced reports whether the hostname was part of the last
+// successful push, which stays true while a later push fails and is retried.
+func (s *TunnelSync) GatewayHostnameSynced(hostname string) bool {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return slices.ContainsFunc(s.lastSynced, func(item exposure.Exposure) bool {
+		return item.Hostname == hostname && !item.IsDeleted
+	})
 }
 
 // sortedExposures returns a sorted copy, list order from the cache is random.

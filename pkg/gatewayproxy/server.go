@@ -8,6 +8,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"github.com/go-logr/logr"
@@ -38,6 +39,11 @@ func NewServer(logger logr.Logger) *Server {
 			request.Out.URL.Host = target.address
 			// keep the Host the client sent, backends see the original hostname
 			request.Out.Host = request.In.Host
+			// backends see the client chain and the scheme the client used
+			// at the edge, cloudflared sends it as X-Forwarded-Proto
+			request.Out.Header["X-Forwarded-For"] = request.In.Header["X-Forwarded-For"]
+			request.SetXForwarded()
+			request.Out.Header.Set("X-Forwarded-Proto", requestScheme(request.In))
 			applyHeaderModifier(request.Out.Header, target.route.RequestHeaderModifier)
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
@@ -133,14 +139,23 @@ func applyHeaderModifier(header http.Header, modifier *HeaderModifier) {
 	}
 }
 
+// requestScheme is the scheme the client used at the Cloudflare edge,
+// forwarded as X-Forwarded-Proto. A missing header means plain http.
+func requestScheme(r *http.Request) string {
+	if strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		return "https"
+	}
+	return "http"
+}
+
 // redirectLocation builds the Location header. Without an explicit scheme
-// the protocol of the route's listener is used. Well known ports are left
-// out, the edge only listens on them.
+// the scheme of the client request is kept. Well known ports are left out,
+// the edge only listens on them.
 func redirectLocation(r *http.Request, route *Route) string {
 	redirect := route.Redirect
 	scheme := redirect.Scheme
 	if scheme == "" {
-		scheme = route.Protocol
+		scheme = requestScheme(r)
 	}
 	host := redirect.Hostname
 	if host == "" {

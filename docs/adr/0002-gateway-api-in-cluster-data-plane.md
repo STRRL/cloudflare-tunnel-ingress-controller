@@ -131,7 +131,9 @@ of the `GATEWAY-HTTP` profile at `v1.6.2` through the real edge, with 0
 failures. The 4 skipped tests (HTTPRouteHTTPSListener,
 HTTPRouteHostnameIntersection, HTTPRouteListenerHostnameMatching,
 HTTPRouteMatchingAcrossRoutes) need a foreign Host or the test's own
-certificate; their request cases are covered by unit tests that run the
-compiled routing table through the real proxy. The PoC shares one
+certificate. The request cases of the three hostname tests are covered
+by unit tests that run the compiled routing table through the real
+proxy; HTTPRouteHTTPSListener checks the listener's own certificate,
+which the edge never serves, and has no unit test equivalent. The PoC shares one
 tunnel and one cloudflared connector between Ingress and all Gateways;
 one tunnel per Gateway (decision 1) remains the target.

@@ -22,10 +22,9 @@ type Table struct {
 // answer the request.
 type Route struct {
 	// Protocol is "http" or "https", the protocol of the listener the route
-	// came from. Requests do not select listeners by protocol: the
-	// Cloudflare edge serves every Gateway address over both schemes (and a
-	// zone with Always Use HTTPS only over https). Protocol is the default
-	// scheme of redirects.
+	// came from, kept for logs. Requests do not select listeners by
+	// protocol: the Cloudflare edge serves every Gateway address over both
+	// schemes.
 	Protocol string `json:"protocol"`
 	// Hostname is an exact hostname, a wildcard like "*.example.com", or
 	// empty to match any host.

@@ -5,7 +5,6 @@
 package conformance
 
 import (
-	"net"
 	"os"
 	"testing"
 
@@ -20,8 +19,8 @@ import (
 // edgeSkipTests send requests with a Host outside the test zone (example.com,
 // bar.com, ...) or need TLS with the test's own certificate. The Cloudflare
 // edge routes by Host and serves its own certificate, so these requests can
-// never reach the tunnel. Their request cases are covered by unit tests in
-// pkg/gatewayproxy and pkg/controller.
+// never reach the tunnel. The request cases of the three hostname tests run
+// as unit tests in pkg/controller, HTTPRouteHTTPSListener has none.
 var edgeSkipTests = []string{
 	"HTTPRouteHTTPSListener",
 	"HTTPRouteHostnameIntersection",
@@ -51,11 +50,11 @@ func TestConformance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create dialer: %v", err)
 	}
-	options.RoundTripper = &edgeRoundTripper{DefaultRoundTripper: roundtripper.DefaultRoundTripper{
+	options.RoundTripper = &roundtripper.DefaultRoundTripper{
 		Debug:             options.Debug,
 		TimeoutConfig:     options.TimeoutConfig,
 		CustomDialContext: dialer,
-	}}
+	}
 
 	options.Implementation = confv1.Implementation{
 		Organization: "STRRL",
@@ -66,25 +65,4 @@ func TestConformance(t *testing.T) {
 	}
 
 	conformance.RunConformanceWithOptions(t, options)
-}
-
-// edgeRoundTripper sends the suite's plain http requests to the Cloudflare
-// edge over https. A zone with Always Use HTTPS answers http with its own
-// redirect before the tunnel, so https is the scheme every client of the
-// zone ends up with. Gateway addresses are one level below the zone, the
-// Universal SSL certificate covers them. Everything else stays as the suite
-// sent it, and the request still travels edge, tunnel, cloudflared, proxy,
-// backend.
-type edgeRoundTripper struct {
-	roundtripper.DefaultRoundTripper
-}
-
-func (e *edgeRoundTripper) CaptureRoundTrip(request roundtripper.Request) (*roundtripper.CapturedRequest, *roundtripper.CapturedResponse, error) {
-	if request.URL.Scheme == "http" {
-		request.URL.Scheme = "https"
-		if host, port, err := net.SplitHostPort(request.URL.Host); err == nil && port == "80" {
-			request.URL.Host = host
-		}
-	}
-	return e.DefaultRoundTripper.CaptureRoundTrip(request)
 }

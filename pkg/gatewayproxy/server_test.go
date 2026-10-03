@@ -140,6 +140,24 @@ func TestServerNoMatchAndInvalidBackends(t *testing.T) {
 	}
 }
 
+func TestServerForwardedHeaders(t *testing.T) {
+	v1 := startBackend(t, "v1")
+	proxy := startProxy(t, Table{Routes: []Route{{Protocol: "http", Path: PathMatch{Type: PathMatchPathPrefix, Value: "/"}, Backends: backend(v1)}}})
+
+	// cloudflared forwards the edge scheme and the client address
+	_, result, _ := send(t, proxy.URL, http.MethodGet, "gateway.example.net", "/", map[string]string{
+		"X-Forwarded-Proto": "https",
+		"X-Forwarded-For":   "203.0.113.7",
+	})
+	assert.Equal(t, "https", result.Headers.Get("X-Forwarded-Proto"))
+	assert.Equal(t, "gateway.example.net", result.Headers.Get("X-Forwarded-Host"))
+	assert.True(t, strings.HasPrefix(result.Headers.Get("X-Forwarded-For"), "203.0.113.7, "), result.Headers.Get("X-Forwarded-For"))
+
+	// without a forwarded scheme the request was plain http
+	_, result, _ = send(t, proxy.URL, http.MethodGet, "gateway.example.net", "/", nil)
+	assert.Equal(t, "http", result.Headers.Get("X-Forwarded-Proto"))
+}
+
 func TestServerRequestHeaderModifier(t *testing.T) {
 	v1 := startBackend(t, "v1")
 	proxy := startProxy(t, Table{Routes: []Route{{
@@ -169,7 +187,6 @@ func TestServerRedirect(t *testing.T) {
 		{Protocol: "http", Path: PathMatch{Type: PathMatchPathPrefix, Value: "/status"}, Redirect: &Redirect{Hostname: "example.org", StatusCode: 301}},
 		{Protocol: "http", Path: PathMatch{Type: PathMatchPathPrefix, Value: "/scheme"}, Redirect: &Redirect{Scheme: "https", StatusCode: 302}},
 		{Protocol: "http", Path: PathMatch{Type: PathMatchPathPrefix, Value: "/port"}, Redirect: &Redirect{Port: 8443, StatusCode: 302}},
-		{Protocol: "https", Path: PathMatch{Type: PathMatchPathPrefix, Value: "/secure"}, Redirect: &Redirect{Hostname: "example.org", StatusCode: 302}},
 	}})
 
 	cases := []struct {
@@ -181,13 +198,18 @@ func TestServerRedirect(t *testing.T) {
 		{path: "/status", status: 301, location: "http://example.org/status"},
 		{path: "/scheme", status: 302, location: "https://gateway.example.net/scheme"},
 		{path: "/port", status: 302, location: "http://gateway.example.net:8443/port"},
-		{path: "/secure", status: 302, location: "https://example.org/secure"},
 	}
 	for _, tc := range cases {
 		status, _, header := send(t, proxy.URL, http.MethodGet, "gateway.example.net:80", tc.path, nil)
 		assert.Equal(t, tc.status, status, tc.path)
 		assert.Equal(t, tc.location, header.Get("Location"), tc.path)
 	}
+
+	// without an explicit scheme the redirect keeps the scheme the client
+	// used at the edge
+	status, _, header := send(t, proxy.URL, http.MethodGet, "gateway.example.net", "/hostname", map[string]string{"X-Forwarded-Proto": "https"})
+	assert.Equal(t, 302, status)
+	assert.Equal(t, "https://example.org/hostname", header.Get("Location"))
 }
 
 func TestServerWeights(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -210,14 +211,21 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, _ reconcile.Request) 
 	pending := 0
 	for _, state := range orderedStates {
 		key := client.ObjectKeyFromObject(state.gateway)
-		programmed := state.accepted && proxyReady[key] && syncErr == nil
+		// a failed sync keeps a Gateway programmed when its address was
+		// already pushed before, the push is retried with backoff
+		programmed := state.accepted && proxyReady[key] && r.tunnelSync.GatewayHostnameSynced(state.address)
 		if state.accepted && !programmed {
 			pending++
 		}
+		syncProblem := ""
+		if syncErr != nil {
+			syncProblem = "last Cloudflare sync failed, retrying: " + syncErr.Error()
+		}
 		err := updateGatewayStatus(ctx, r.kubeClient, r.apiReader, state.gateway, func(existing gatewayv1.GatewayStatus) gatewayv1.GatewayStatus {
-			return gatewayStatusFor(state, programmed, existing)
+			return gatewayStatusFor(state, programmed, syncProblem, existing)
 		})
-		if err != nil {
+		// the Gateway may be gone already, that must not stop the others
+		if err != nil && !apierrors.IsNotFound(err) {
 			return reconcile.Result{}, errors.Wrapf(err, "update status of gateway %s", key)
 		}
 	}
@@ -236,7 +244,7 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, _ reconcile.Request) 
 		err := updateRouteStatus(ctx, r.kubeClient, r.apiReader, route, func(current *gatewayv1.HTTPRoute) []gatewayv1.RouteParentStatus {
 			return routeParentStatusesFor(current, r.controllerName, results, refsReason, refsMessage)
 		})
-		if err != nil {
+		if err != nil && !apierrors.IsNotFound(err) {
 			return reconcile.Result{}, errors.Wrapf(err, "update status of httproute %s/%s", route.Namespace, route.Name)
 		}
 	}

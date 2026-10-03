@@ -59,10 +59,11 @@ None of these are implemented in the PoC.
 
 - Protocol HTTP and HTTPS are accepted, every other protocol gets
   `Accepted: False` with reason UnsupportedProtocol. The edge serves
-  every Gateway address over both schemes, a zone with Always Use HTTPS
-  only over https. The proxy therefore does not separate requests by
-  scheme, the listener protocol only decides the default scheme of
-  redirects.
+  every Gateway address over both schemes, so the proxy does not
+  separate requests by scheme. The scheme the client used at the edge
+  arrives as `X-Forwarded-Proto`: redirects without an explicit scheme
+  keep it, and backends receive it together with `X-Forwarded-For` and
+  `X-Forwarded-Host`.
 - `certificateRefs` are validated but never used: wrong group or kind,
   a missing Secret or an unparsable certificate give `ResolvedRefs:
   False` with reason InvalidCertificateRef, a cross namespace reference
@@ -222,12 +223,27 @@ make conformance-clean                           # Cloudflare leftovers only, no
 - The runner resolves Gateway addresses with the zone's authoritative
   nameservers (`CONFORMANCE_RESOLVER` overrides), so no local resolver
   caches a negative answer from before the record existed.
-- The runner sends the suite's plain http requests to the edge over
-  https. The test zone answers http with its own redirect (Always Use
-  HTTPS), so https is what every client ends up with. Host, path,
-  headers and the rest of the request stay as the suite sent them, and
-  the request still travels edge, tunnel, cloudflared, proxy, backend.
+- The suite talks plain http on port 80 to the edge, exactly as
+  upstream sends it, and every request travels edge, tunnel,
+  cloudflared, proxy, backend.
 - Timeouts: `MaxTimeToConsistency:90;GatewayMustHaveAddress:240;GatewayMustHaveCondition:240`.
+
+### Zone requirement
+
+The conformance hostnames must accept plain http at the edge. Zone wide
+Always Use HTTPS answers every http request with its own 301 before the
+tunnel, so it must be off. To keep the rest of the zone on https, use a
+Redirect Rule instead that skips the conformance hostnames:
+
+```
+when:   (not ssl and not http.host contains "-gwc-")
+then:   301 to https, same host, path and query
+```
+
+Check before a run: `curl -sI http://<some>-gwc-<RUN_ID>.<zone>/` must not
+answer a Cloudflare 301 to https, while any other hostname of the zone
+still does. The API token of the harness has no permission for zone
+settings, the preflight of the cleanup tool can only warn.
 
 ### Skip list for the edge run
 
@@ -245,9 +261,13 @@ so the requests never reach the tunnel.
 
 The logic behind them is implemented: hostname intersection drives
 attachment, `attachedRoutes` and the NoMatchingListenerHostname reason.
-Their request cases run as unit tests in `pkg/controller`: the
-controller compiles the test manifests, the real proxy serves the table
-and real HTTP backends answer.
+The request cases of HTTPRouteHostnameIntersection,
+HTTPRouteListenerHostnameMatching and HTTPRouteMatchingAcrossRoutes run
+as unit tests in `pkg/controller`: the controller compiles the test
+manifests, the real proxy serves the table and real HTTP backends
+answer. HTTPRouteHTTPSListener has no unit test equivalent: what it
+checks is TLS with the listener's own certificate, which the edge never
+serves.
 
 HTTPRouteRedirectHostAndStatus is not skipped: `example.org` only
 appears in the expected Location header.
@@ -265,7 +285,26 @@ appears in the expected Location header.
 - A `baseDomain` below the zone apex needs Advanced Certificate Manager
   for https.
 - Per route hostnames get no DNS records.
-- The runner talks https to the edge, see Harness.
+
+## Known limitations
+
+- A rule with an unsupported filter (anything but RequestHeaderModifier
+  and RequestRedirect) keeps the route `Accepted: True` and answers 500,
+  the route status does not name the filter.
+- Service and EndpointSlice watches are cluster wide and every event
+  enqueues the one Gateway reconcile key. Busy clusters recompute the
+  whole Gateway state often; a later version should filter events to
+  the referenced Services.
+- With `--enable-gateway-api` set, the Ingress sync waits for the first
+  Gateway reconcile so it never deletes Gateway DNS records. Without the
+  Gateway API CRDs that reconcile never runs, so Ingress syncs keep
+  failing and retrying.
+- The zones a sync touched are remembered in memory only. A zone whose
+  last exposure is removed while the controller is down keeps its stale
+  records until a later exposure in that zone.
+- A failed Cloudflare sync keeps an already published Gateway
+  `Programmed` with its address and reports the error in the condition
+  message; the push is retried with backoff.
 
 ## Resolved questions
 
