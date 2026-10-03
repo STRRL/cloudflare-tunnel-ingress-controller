@@ -67,7 +67,7 @@ deploy() {
 
 up() {
     clean
-    minikube start -p "$PROFILE" --driver=docker --wait=all --cpus=6 --memory=8g
+    minikube start -p "$PROFILE" --driver=docker --wait=all --cpus="${MINIKUBE_CPUS:-4}" --memory="${MINIKUBE_MEMORY:-8g}"
     kubectl apply --server-side -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/$GATEWAY_API_VERSION/standard-install.yaml"
     kubectl wait --for=condition=Established crd --all --timeout=2m
     deploy
