@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
@@ -224,7 +225,11 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, _ reconcile.Request) 
 	for i := range routes.Items {
 		route := &routes.Items[i]
 		results, ok := routeResults[client.ObjectKeyFromObject(route)]
-		if !ok {
+		// a route that no longer points at our Gateways still needs its
+		// stale entries of this controller removed
+		if !ok && !slices.ContainsFunc(route.Status.Parents, func(parent gatewayv1.RouteParentStatus) bool {
+			return string(parent.ControllerName) == r.controllerName
+		}) {
 			continue
 		}
 		refsReason, refsMessage := routeResolvedRefs(route, snapshot)

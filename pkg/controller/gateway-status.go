@@ -205,7 +205,7 @@ func gatewayStatusFor(state *gatewayState, programmed bool, existing gatewayv1.G
 // routeParentStatusesFor builds the parent statuses of a route: entries of
 // other controllers stay as they are, ours are replaced.
 func routeParentStatusesFor(route *gatewayv1.HTTPRoute, controllerName string, results []parentResult, refsReason gatewayv1.RouteConditionReason, refsMessage string) []gatewayv1.RouteParentStatus {
-	var parents []gatewayv1.RouteParentStatus
+	parents := []gatewayv1.RouteParentStatus{}
 	for _, parent := range route.Status.Parents {
 		if string(parent.ControllerName) != controllerName {
 			parents = append(parents, parent)
