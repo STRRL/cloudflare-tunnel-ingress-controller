@@ -6,13 +6,13 @@ toolchain go1.26.5
 
 require (
 	github.com/chromedp/chromedp v0.16.0
-	github.com/cloudflare/cloudflare-go v0.118.0
+	github.com/cloudflare/cloudflare-go v0.119.0
 	github.com/cucumber/godog v0.16.0
 	github.com/go-logr/logr v1.4.4
 	github.com/go-logr/stdr v1.2.2
 	github.com/joho/godotenv v1.5.1
-	github.com/onsi/ginkgo/v2 v2.32.2
-	github.com/onsi/gomega v1.43.0
+	github.com/onsi/ginkgo/v2 v2.33.0
+	github.com/onsi/gomega v1.44.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/spf13/cobra v1.10.2
