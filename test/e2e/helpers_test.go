@@ -242,15 +242,16 @@ func captureDashboardScreenshot(ctx context.Context, url string) (string, error)
 	timeoutCtx, cancelTimeout := context.WithTimeout(browserCtx, 2*time.Minute)
 	defer cancelTimeout()
 
-	var imageBytes []byte
-	tasks := chromedp.Tasks{
+	if err := chromedp.Do(timeoutCtx,
 		chromedp.Navigate(url),
-		chromedp.WaitVisible("body", chromedp.ByQuery),
-		chromedp.Sleep(2 * time.Second),
-		chromedp.FullScreenshot(&imageBytes, 90),
+		chromedp.WaitVisible(chromedp.CSS("body")),
+		chromedp.Sleep(2*time.Second),
+	); err != nil {
+		return "", err
 	}
 
-	if err := chromedp.Run(timeoutCtx, tasks...); err != nil {
+	imageBytes, err := chromedp.Run(timeoutCtx, chromedp.FullScreenshot(90))
+	if err != nil {
 		return "", err
 	}
 
