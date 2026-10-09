@@ -9,7 +9,7 @@ import (
 	"k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -157,7 +157,7 @@ func TestFromIngressToExposureNilHTTP(t *testing.T) {
 		},
 	}
 
-	recorder := record.NewFakeRecorder(8)
+	recorder := events.NewFakeRecorder(8)
 	exposures, err := FromIngressToExposure(context.Background(), logr.Discard(), nil, recorder, ingress, "cluster.local")
 	if err != nil {
 		t.Fatalf("expected a rule with nil HTTP to be skipped, got error: %v", err)
@@ -227,7 +227,7 @@ func TestFromIngressToExposureNilHTTPKeepsOtherRules(t *testing.T) {
 	}
 	kubeClient := fake.NewClientBuilder().WithObjects(&service).Build()
 
-	exposures, err := FromIngressToExposure(context.Background(), logr.Discard(), kubeClient, record.NewFakeRecorder(8), ingress, "cluster.local")
+	exposures, err := FromIngressToExposure(context.Background(), logr.Discard(), kubeClient, events.NewFakeRecorder(8), ingress, "cluster.local")
 	if err != nil {
 		t.Fatalf("expected the host-only rule to be skipped, got error: %v", err)
 	}

@@ -44,7 +44,11 @@ flowchart TB
     Disabled --> Relinquish["Controller removes its ownership TXT<br/>and removes the CNAME only if it still points to this tunnel"]
 ```
 
-The CNAME sends public traffic toward `<tunnel-id>.cfargotunnel.com`. The TXT record gives cleanup a safe ownership boundary, so a matching ownership record is required before normal reconciliation deletes a CNAME.
+The CNAME sends public traffic toward `<tunnel-id>.cfargotunnel.com`. The TXT record gives cleanup a safe ownership boundary, so a matching ownership record is required before normal reconciliation deletes a CNAME. TXT values are RFC 1035-quoted JSON. For a wildcard hostname such as `*.example.com`, the ownership record is `_ctic_managed._wildcard.example.com` so Cloudflare does not warn about a non-prefix asterisk, and so the name cannot collide with a literal `wildcard.example.com` host.
+
+After upgrade, the next reconciliation rewrites existing ownership TXT records automatically: wildcard names move from `_ctic_managed.*.example.com` to `_ctic_managed._wildcard.example.com`, and unquoted JSON is stored as RFC 1035-quoted character-strings. No manual DNS edits are required. The CNAME is unchanged, so traffic is unaffected.
+
+Ownership recognition is not backwards compatible. A release from before the rewrite compares TXT content literally, so it does not recognise the quoted values: it logs its own hostnames as unmanaged and stops deleting their CNAMEs when the Ingress goes away. If you roll back, delete the `_ctic_managed.` TXT records for the affected hostnames so the older release recreates them in the format it understands.
 
 With `disable-dns-management: "true"`, only DNS responsibility changes. The Exposure still becomes a tunnel rule, but the controller stops creating or updating DNS records and permits hostnames outside its visible Cloudflare zones. When relinquishing records it previously managed, it preserves any CNAME another system has already repointed.
 
