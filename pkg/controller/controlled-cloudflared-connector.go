@@ -2,7 +2,10 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"slices"
+	"time"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/pkg/errors"
@@ -53,6 +56,10 @@ type CloudflaredConfig struct {
 	// uninstalled. Nil (for example when running outside the cluster) leaves
 	// the resources unowned.
 	Owner *metav1.OwnerReference
+	// TokenRefreshInterval is the minimum age the stored tunnel token must
+	// reach before it is read from the Cloudflare API again. Zero re-reads on
+	// every reconcile.
+	TokenRefreshInterval time.Duration
 }
 
 // ResolveControllerOwnerReference builds the owner reference pointing at the
@@ -143,14 +150,9 @@ func CreateOrUpdateControlledCloudflared(
 		}
 	}
 
-	token, err := tunnelClient.FetchTunnelToken(ctx)
+	tokenHash, err := reconcileTunnelTokenSecret(ctx, kubeClient, tunnelClient, namespace, config)
 	if err != nil {
-		return errors.Wrap(err, "fetch tunnel token")
-	}
-
-	tokenSecretVersion, err := createOrUpdateTunnelTokenSecret(ctx, kubeClient, namespace, token, config.Owner)
-	if err != nil {
-		return errors.Wrap(err, "create or update tunnel token secret")
+		return errors.Wrap(err, "reconcile tunnel token secret")
 	}
 
 	list := appsv1.DeploymentList{}
@@ -186,7 +188,7 @@ func CreateOrUpdateControlledCloudflared(
 				needsUpdate = true
 			}
 		}
-		if existingDeployment.Spec.Template.Annotations[tunnelTokenSecretVersionAnnotation] != tokenSecretVersion {
+		if existingDeployment.Spec.Template.Annotations[tunnelTokenHashAnnotation] != tokenHash {
 			needsUpdate = true
 		}
 
@@ -196,9 +198,9 @@ func CreateOrUpdateControlledCloudflared(
 
 		if needsUpdate {
 			updatedDeployment := controlledCloudflaredDeployment{
-				config:             config,
-				tokenSecretVersion: tokenSecretVersion,
-				namespace:          namespace,
+				config:    config,
+				tokenHash: tokenHash,
+				namespace: namespace,
 			}.build()
 			existingDeployment.Spec = updatedDeployment.Spec
 			if existingDeployment.Annotations == nil {
@@ -220,9 +222,9 @@ func CreateOrUpdateControlledCloudflared(
 	}
 
 	deployment := controlledCloudflaredDeployment{
-		config:             config,
-		tokenSecretVersion: tokenSecretVersion,
-		namespace:          namespace,
+		config:    config,
+		tokenHash: tokenHash,
+		namespace: namespace,
 	}.build()
 	err = kubeClient.Create(ctx, deployment)
 	if err != nil {
@@ -232,12 +234,17 @@ func CreateOrUpdateControlledCloudflared(
 	return nil
 }
 
-func createOrUpdateTunnelTokenSecret(
+// reconcileTunnelTokenSecret keeps the Secret holding the tunnel token in sync
+// and returns the hash of the token the connector pods should run with.
+//
+// The Cloudflare API is only consulted when the stored token is missing or
+// older than config.TokenRefreshInterval.
+func reconcileTunnelTokenSecret(
 	ctx context.Context,
 	kubeClient client.Client,
+	tunnelClient cloudflarecontroller.TunnelClientInterface,
 	namespace string,
-	token string,
-	owner *metav1.OwnerReference,
+	config CloudflaredConfig,
 ) (string, error) {
 	logger := log.FromContext(ctx)
 
@@ -246,51 +253,109 @@ func createOrUpdateTunnelTokenSecret(
 		Namespace: namespace,
 		Name:      tunnelTokenSecretName,
 	}, existingSecret)
-
-	desiredSecret := &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      tunnelTokenSecretName,
-			Namespace: namespace,
-			Labels: map[string]string{
-				connectorManagedByLabelKey: connectorAppName,
-			},
-		},
-		StringData: map[string]string{
-			tunnelTokenSecretKey: token,
-		},
+	if err != nil && !apierrors.IsNotFound(err) {
+		return "", errors.Wrap(err, "get tunnel token secret")
 	}
-	if owner != nil {
-		desiredSecret.OwnerReferences = []metav1.OwnerReference{*owner}
+	secretExists := err == nil
+
+	storedToken := ""
+	if secretExists {
+		storedToken = string(existingSecret.Data[tunnelTokenSecretKey])
 	}
 
+	if storedToken != "" && !tunnelTokenNeedsRefresh(existingSecret, config.TokenRefreshInterval, time.Now()) {
+		return tunnelTokenHash(storedToken), nil
+	}
+
+	token, err := tunnelClient.FetchTunnelToken(ctx)
 	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return "", errors.Wrap(err, "get tunnel token secret")
+		if storedToken != "" {
+			logger.Error(err, "refresh tunnel token, continuing with the stored token", "namespace", namespace)
+			return tunnelTokenHash(storedToken), nil
 		}
-		err = kubeClient.Create(ctx, desiredSecret)
-		if err != nil {
+		return "", errors.Wrap(err, "fetch tunnel token")
+	}
+
+	refreshedAt := time.Now().UTC().Format(time.RFC3339)
+
+	if !secretExists {
+		desiredSecret := &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      tunnelTokenSecretName,
+				Namespace: namespace,
+				Labels: map[string]string{
+					connectorManagedByLabelKey: connectorAppName,
+				},
+				Annotations: map[string]string{
+					tunnelTokenRefreshedAtAnnotation: refreshedAt,
+				},
+			},
+			StringData: map[string]string{
+				tunnelTokenSecretKey: token,
+			},
+		}
+		if config.Owner != nil {
+			desiredSecret.OwnerReferences = []metav1.OwnerReference{*config.Owner}
+		}
+		if err := kubeClient.Create(ctx, desiredSecret); err != nil {
 			return "", errors.Wrap(err, "create tunnel token secret")
 		}
 		logger.Info("Created tunnel token secret", "namespace", namespace)
-		return desiredSecret.ResourceVersion, nil
+		return tunnelTokenHash(token), nil
 	}
 
-	if string(existingSecret.Data[tunnelTokenSecretKey]) == token {
-		return existingSecret.ResourceVersion, nil
+	if existingSecret.Annotations == nil {
+		existingSecret.Annotations = map[string]string{}
 	}
-
-	existingSecret.StringData = desiredSecret.StringData
-	err = kubeClient.Update(ctx, existingSecret)
-	if err != nil {
+	existingSecret.Annotations[tunnelTokenRefreshedAtAnnotation] = refreshedAt
+	tokenChanged := storedToken != token
+	if tokenChanged {
+		existingSecret.StringData = map[string]string{
+			tunnelTokenSecretKey: token,
+		}
+	}
+	if err := kubeClient.Update(ctx, existingSecret); err != nil {
 		return "", errors.Wrap(err, "update tunnel token secret")
 	}
-	logger.Info("Updated tunnel token secret", "namespace", namespace)
-	return existingSecret.ResourceVersion, nil
+	if tokenChanged {
+		logger.Info("Updated tunnel token secret", "namespace", namespace)
+	}
+	return tunnelTokenHash(token), nil
+}
+
+// tunnelTokenNeedsRefresh reports whether the token held by secret is old
+// enough to be read from the Cloudflare API again. An interval of zero, or a
+// missing or unparseable refresh stamp, refreshes.
+func tunnelTokenNeedsRefresh(secret *v1.Secret, interval time.Duration, now time.Time) bool {
+	if interval <= 0 {
+		return true
+	}
+	refreshedAt, err := time.Parse(time.RFC3339, secret.Annotations[tunnelTokenRefreshedAtAnnotation])
+	if err != nil {
+		return true
+	}
+	return !now.Before(refreshedAt.Add(interval))
+}
+
+// tunnelTokenHash identifies a token value without exposing it through an
+// annotation.
+func tunnelTokenHash(token string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(token)))
 }
 
 const tunnelTokenSecretName = "controlled-cloudflared-token"
 const tunnelTokenSecretKey = "tunnel-token"
-const tunnelTokenSecretVersionAnnotation = "strrl.dev/cloudflare-tunnel-token-secret-version"
+
+// tunnelTokenHashAnnotation carries the hash of the tunnel token on the
+// connector pod template so the pods roll when the token value changes. It
+// tracks the token rather than the Secret resource version on purpose:
+// unrelated writes to the Secret, such as adopting it or stamping a refresh,
+// must not restart the connector.
+const tunnelTokenHashAnnotation = "strrl.dev/cloudflare-tunnel-token-hash"
+
+// tunnelTokenRefreshedAtAnnotation records on the token Secret when the token
+// was last read from the Cloudflare API, in RFC3339.
+const tunnelTokenRefreshedAtAnnotation = "strrl.dev/cloudflare-tunnel-token-refreshed-at"
 
 func buildCloudflaredCommand(protocol string, extraArgs []string) []string {
 	command := []string{
