@@ -3,7 +3,9 @@ package controller
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -154,7 +156,7 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 			result = append(result, exposure.Exposure{
 				Hostname:               hostname,
 				ServiceTarget:          fmt.Sprintf("%s://%s:%d", scheme, host, port),
-				PathPrefix:             path.Path,
+				PathPrefix:             ingressPathRegex(path.Path, *path.PathType),
 				IsDeleted:              isDeleted,
 				ProxySSLVerifyEnabled:  proxySSLVerifyEnabled,
 				HTTPHostHeader:         httpHostHeader,
@@ -174,6 +176,21 @@ func FromIngressToExposure(ctx context.Context, logger logr.Logger, kubeClient c
 	}
 
 	return result, nil
+}
+
+// ingressPathRegex converts Prefix paths to Cloudflare's regex matching while
+// retaining the existing regex pass-through for ImplementationSpecific paths.
+func ingressPathRegex(path string, pathType networkingv1.PathType) string {
+	if pathType != networkingv1.PathTypePrefix {
+		return path
+	}
+
+	// Prefix matching ignores a trailing slash and compares whole path elements.
+	prefix := strings.TrimRight(path, "/")
+	if prefix == "" {
+		return "^/"
+	}
+	return "^" + regexp.QuoteMeta(prefix) + "(/|$)"
 }
 
 func getHostFromService(service *v1.Service, clusterDomain string) (string, error) {
