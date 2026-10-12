@@ -19,15 +19,15 @@ func TestControlledCloudflaredDeploymentBuild(t *testing.T) {
 			Protocol:        "quic",
 			ExtraArgs:       []string{"--post-quantum"},
 		},
-		tokenSecretVersion: "42",
-		namespace:          "controller-system",
+		tokenHash: "42",
+		namespace: "controller-system",
 	}.build()
 
 	assert.Equal(t, "controlled-cloudflared-connector", deployment.Name)
 	assert.Equal(t, "controller-system", deployment.Namespace)
 	require.NotNil(t, deployment.Spec.Replicas)
 	assert.Equal(t, int32(2), *deployment.Spec.Replicas)
-	assert.Equal(t, "42", deployment.Spec.Template.Annotations[tunnelTokenSecretVersionAnnotation])
+	assert.Equal(t, "42", deployment.Spec.Template.Annotations[tunnelTokenHashAnnotation])
 	require.Len(t, deployment.Spec.Template.Spec.Containers, 1)
 
 	container := deployment.Spec.Template.Spec.Containers[0]
@@ -95,7 +95,7 @@ func TestControlledCloudflaredDeploymentBuildCustomization(t *testing.T) {
 				Customization:     customization,
 				CustomizationHash: "abc123",
 			},
-			tokenSecretVersion: "42",
+			tokenHash: "42",
 		}.build()
 
 		podSpec := deployment.Spec.Template.Spec
@@ -110,7 +110,7 @@ func TestControlledCloudflaredDeploymentBuildCustomization(t *testing.T) {
 		assert.Equal(t, "platform", labels["team"])
 		annotations := deployment.Spec.Template.Annotations
 		assert.Equal(t, "true", annotations["prometheus.io/scrape"])
-		assert.Equal(t, "42", annotations[tunnelTokenSecretVersionAnnotation])
+		assert.Equal(t, "42", annotations[tunnelTokenHashAnnotation])
 	})
 
 	t.Run("customization cannot override selector labels or token annotation", func(t *testing.T) {
@@ -123,17 +123,17 @@ func TestControlledCloudflaredDeploymentBuildCustomization(t *testing.T) {
 						"strrl.dev/cloudflare-tunnel-ingress-controller": "hijacked",
 					},
 					PodAnnotations: map[string]string{
-						tunnelTokenSecretVersionAnnotation: "hijacked",
+						tunnelTokenHashAnnotation: "hijacked",
 					},
 				},
 			},
-			tokenSecretVersion: "42",
+			tokenHash: "42",
 		}.build()
 
 		labels := deployment.Spec.Template.Labels
 		assert.Equal(t, "controlled-cloudflared-connector", labels["app"])
 		assert.Equal(t, "controlled-cloudflared-connector", labels["strrl.dev/cloudflare-tunnel-ingress-controller"])
-		assert.Equal(t, "42", deployment.Spec.Template.Annotations[tunnelTokenSecretVersionAnnotation])
+		assert.Equal(t, "42", deployment.Spec.Template.Annotations[tunnelTokenHashAnnotation])
 	})
 }
 
