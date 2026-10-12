@@ -67,7 +67,7 @@ func main() {
 		cloudflaredImage:           "ghcr.io/strrl/cloudflared:2026.7.3-host-metrics.1",
 		cloudflaredImagePullPolicy: "IfNotPresent",
 		cloudflaredReplicaCount:    1,
-		tunnelTokenRefreshInterval: time.Hour,
+		tunnelTokenRefreshInterval: 10 * time.Minute,
 		clusterDomain:              "cluster.local",
 		dnsCommentTemplate:         "managed by cloudflare-tunnel-ingress-controller, tunnel [{{.TunnelName}}]",
 		metricsBindAddress:         ":9090",
