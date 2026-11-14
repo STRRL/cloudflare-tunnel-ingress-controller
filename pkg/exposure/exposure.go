@@ -8,7 +8,7 @@ type Exposure struct {
 	Hostname string
 	// ServiceTarget is the url of the service to expose, eg. http://my-service.default.svc.cluster.local:9117
 	ServiceTarget string
-	// PathPrefix is the path prefix to expose the service, eg. /hello
+	// PathPrefix is the path regex sent to Cloudflare, eg. ^/hello(/|$).
 	PathPrefix string
 	// IsDeleted is the flag to indicate if the exposure is deleted.
 	IsDeleted bool

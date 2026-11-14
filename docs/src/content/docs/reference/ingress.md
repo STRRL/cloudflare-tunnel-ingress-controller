@@ -23,6 +23,23 @@ See the [Quickstart Ingress example](/guides/quickstart/#3-publish-a-service-wit
 
 Consult the [ingress annotations reference](/reference/ingress-annotations/) for advanced routing behaviour such as protocol overrides, TLS verification settings, and host header rewrites.
 
+## Path matching
+
+Cloudflare Tunnel interprets a rule's path as a Go regular expression. The controller converts `pathType: Prefix` to an anchored, escaped regular expression that follows Kubernetes path-element matching:
+
+| Ingress path | Matches | Does not match |
+| --- | --- | --- |
+| `/wp-admin` | `/wp-admin`, `/wp-admin/`, `/wp-admin/edit.php` | `/foo/wp-admin`, `/wp-admin-other` |
+| `/wp-admin/` | The same paths as `/wp-admin` | `/foo/wp-admin`, `/wp-admin-other` |
+| `/v1.0` | `/v1.0`, `/v1.0/users` | `/v1X0`, `/v1.0beta` |
+| `/` | All absolute paths | |
+
+Matching is case-sensitive. For example, `/wp-admin` becomes `^/wp-admin(/|$)`. Regex metacharacters in a `Prefix` path are treated literally.
+
+`ImplementationSpecific` retains the existing behavior: the path is passed to Cloudflare as a regular expression without adding anchors or escaping. Use it if you intentionally depend on regex matching. Kubernetes still requires a nonempty Ingress path to start with `/`, so a path such as `^/wp-admin` is rejected by the Kubernetes API. `Exact` is not supported.
+
+Earlier controller versions also passed `Prefix` paths through as regexes. If you relied on that behavior, change those paths to `ImplementationSpecific` before upgrading.
+
 ## Wildcard hostnames
 
 Hosts may use a leading wildcard label such as `*.example.com`. The controller creates the matching wildcard DNS record and orders the tunnel rules so that routing behaves as you would expect:
