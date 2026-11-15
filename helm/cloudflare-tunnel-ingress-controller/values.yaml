@@ -124,8 +124,9 @@ healthProbe:
 
 # Embedded telemetry store of the controller itself. When dir is set, the
 # controller records reconcile and DNS activity there and the chart mounts an
-# emptyDir volume at that path. Empty disables it. Only works when the
-# controller image is built with duckmon support.
+# emptyDir volume at that path, so the data is lost when the controller pod
+# restarts. Empty disables it. Only works when the controller image is built
+# with duckmon support.
 telemetry:
   dir: ""
 
@@ -149,7 +150,8 @@ cloudflared:
   # Duckmon access log telemetry for the managed cloudflared connector. When
   # dir is set, the controller adds the TUNNEL_DUCKMON_DIR environment
   # variable to the connector pods and mounts an emptyDir volume at that
-  # path. Empty disables it. The image is not switched automatically, point
+  # path, so the logs are lost when a connector pod restarts. Empty disables
+  # it. The image is not switched automatically, point
   # cloudflared.image at a tag with duckmon support (a -duckmon tag).
   telemetry:
     dir: ""
