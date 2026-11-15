@@ -29,6 +29,7 @@ These values apply to the controller Deployment, not the managed cloudflared con
 | `securityContext`    | `{}`                                                                 | Kubernetes container security context for the controller container.                          |
 | `podSecurityContext` | `{}`                                                                 | Kubernetes pod security context for controller pods.                                         |
 | `priorityClassName`  | unset                                                                | PriorityClass assigned to controller pods.                                                   |
+| `telemetry.dir`      | `""`                                                                 | Directory for the controller's embedded telemetry store, mounted as an emptyDir. Empty disables it. |
 
 ## Managed cloudflared connector pods
 
@@ -40,6 +41,7 @@ The chart writes these values to the deployment customization file consumed by t
 | `cloudflared.image.tag`                 | `2026.7.3-host-metrics.1`        | Image tag for managed cloudflared connector pods.                                                                                                                                   |
 | `cloudflared.replicaCount`              | `1`                             | Number of cloudflared connector pods maintaining the tunnel.                                                                                                                        |
 | `cloudflared.extraArgs`                 | `[]`                            | Extra arguments passed to cloudflared, such as `--post-quantum`.                                                                                                                    |
+| `cloudflared.telemetry.dir`             | `""`                            | Directory for duckmon access logs inside the connector pods, mounted as an emptyDir. Empty disables it. Point `cloudflared.image` at a tag with duckmon support (a `-duckmon` tag). |
 | `cloudflared.resources`                 | `{}`                            | Container resource requests and limits.                                                                                                                                             |
 | `cloudflared.securityContext`           | `{}`                            | Kubernetes container security context for the cloudflared container.                                                                                                                |
 | `cloudflared.podSecurityContext`        | `{}`                            | Kubernetes pod security context for connector pods.                                                                                                                                 |

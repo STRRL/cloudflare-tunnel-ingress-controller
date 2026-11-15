@@ -137,6 +137,70 @@ func TestControlledCloudflaredDeploymentBuildCustomization(t *testing.T) {
 	})
 }
 
+func TestControlledCloudflaredDeploymentBuildTelemetry(t *testing.T) {
+	t.Run("telemetry disabled keeps the spec unchanged", func(t *testing.T) {
+		deployment := controlledCloudflaredDeployment{
+			config: CloudflaredConfig{Replicas: 1},
+		}.build()
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		require.Len(t, container.Env, 1)
+		assert.Equal(t, "TUNNEL_TOKEN", container.Env[0].Name)
+		assert.Empty(t, container.VolumeMounts)
+		assert.Empty(t, deployment.Spec.Template.Spec.Volumes)
+	})
+
+	t.Run("telemetry dir adds env and emptyDir volume", func(t *testing.T) {
+		deployment := controlledCloudflaredDeployment{
+			config: CloudflaredConfig{
+				Replicas:     1,
+				TelemetryDir: "/var/lib/duckmon",
+			},
+		}.build()
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		require.Len(t, container.Env, 2)
+		assert.Equal(t, "TUNNEL_DUCKMON_DIR", container.Env[1].Name)
+		assert.Equal(t, "/var/lib/duckmon", container.Env[1].Value)
+
+		require.Len(t, container.VolumeMounts, 1)
+		assert.Equal(t, "cloudflared-telemetry", container.VolumeMounts[0].Name)
+		assert.Equal(t, "/var/lib/duckmon", container.VolumeMounts[0].MountPath)
+
+		volumes := deployment.Spec.Template.Spec.Volumes
+		require.Len(t, volumes, 1)
+		assert.Equal(t, "cloudflared-telemetry", volumes[0].Name)
+		require.NotNil(t, volumes[0].EmptyDir)
+	})
+
+	t.Run("telemetry keeps customization volumes and mounts", func(t *testing.T) {
+		deployment := controlledCloudflaredDeployment{
+			config: CloudflaredConfig{
+				Replicas:     1,
+				TelemetryDir: "/var/lib/duckmon",
+				Customization: &CloudflaredDeploymentConfig{
+					Volumes: []v1.Volume{
+						{Name: "extra"},
+					},
+					VolumeMounts: []v1.VolumeMount{
+						{Name: "extra", MountPath: "/extra"},
+					},
+				},
+			},
+		}.build()
+
+		container := deployment.Spec.Template.Spec.Containers[0]
+		require.Len(t, container.VolumeMounts, 2)
+		assert.Equal(t, "extra", container.VolumeMounts[0].Name)
+		assert.Equal(t, "cloudflared-telemetry", container.VolumeMounts[1].Name)
+
+		volumes := deployment.Spec.Template.Spec.Volumes
+		require.Len(t, volumes, 2)
+		assert.Equal(t, "extra", volumes[0].Name)
+		assert.Equal(t, "cloudflared-telemetry", volumes[1].Name)
+	})
+}
+
 func TestControlledCloudflaredDeploymentBuildUsesConfiguredImage(t *testing.T) {
 	deployment := controlledCloudflaredDeployment{
 		config: CloudflaredConfig{

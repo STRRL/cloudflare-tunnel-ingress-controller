@@ -53,6 +53,12 @@ spec:
             - --controller-deployment-name={{ include "cloudflare-tunnel-ingress-controller.fullname" . }}
             - --metrics-bind-address=:{{ .Values.metrics.port }}
             - --health-probe-bind-address=:{{ .Values.healthProbe.port }}
+            {{- if .Values.telemetry.dir }}
+            - --telemetry-dir={{ .Values.telemetry.dir }}
+            {{- end }}
+            {{- if .Values.cloudflared.telemetry.dir }}
+            - --cloudflared-telemetry-dir={{ .Values.cloudflared.telemetry.dir }}
+            {{- end }}
           env:
             - name: CLOUDFLARE_API_TOKEN
               valueFrom:
@@ -117,12 +123,20 @@ spec:
             - name: cloudflared-config
               mountPath: /etc/cloudflared-config
               readOnly: true
+            {{- if .Values.telemetry.dir }}
+            - name: telemetry
+              mountPath: {{ .Values.telemetry.dir }}
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
         - name: cloudflared-config
           configMap:
             name: {{ include "cloudflare-tunnel-ingress-controller.fullname" . }}-cloudflared-config
+        {{- if .Values.telemetry.dir }}
+        - name: telemetry
+          emptyDir: {}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

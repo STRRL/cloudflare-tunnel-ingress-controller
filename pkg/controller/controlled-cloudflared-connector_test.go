@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	v1 "k8s.io/api/core/v1"
 )
 
 func TestBuildCloudflaredCommand(t *testing.T) {
@@ -85,4 +86,25 @@ func TestBuildCloudflaredCommand(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestTelemetryDirFromContainer(t *testing.T) {
+	t.Run("no telemetry env means empty", func(t *testing.T) {
+		container := &v1.Container{
+			Env: []v1.EnvVar{
+				{Name: "TUNNEL_TOKEN", Value: "token"},
+			},
+		}
+		assert.Equal(t, "", telemetryDirFromContainer(container))
+	})
+
+	t.Run("telemetry env returns the directory", func(t *testing.T) {
+		container := &v1.Container{
+			Env: []v1.EnvVar{
+				{Name: "TUNNEL_TOKEN", Value: "token"},
+				{Name: "TUNNEL_DUCKMON_DIR", Value: "/var/lib/duckmon"},
+			},
+		}
+		assert.Equal(t, "/var/lib/duckmon", telemetryDirFromContainer(container))
+	})
 }

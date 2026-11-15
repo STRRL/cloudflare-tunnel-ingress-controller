@@ -122,6 +122,13 @@ serviceMonitor:
 healthProbe:
   port: 8081
 
+# Embedded telemetry store of the controller itself. When dir is set, the
+# controller records reconcile and DNS activity there and the chart mounts an
+# emptyDir volume at that path. Empty disables it. Only works when the
+# controller image is built with duckmon support.
+telemetry:
+  dir: ""
+
 cloudflared:
   image:
     repository: ghcr.io/strrl/cloudflared
@@ -138,6 +145,14 @@ cloudflared:
   # Extra arguments to pass to cloudflared command
   # Example: ["--post-quantum", "--edge-ip-version", "4"]
   extraArgs: []
+
+  # Duckmon access log telemetry for the managed cloudflared connector. When
+  # dir is set, the controller adds the TUNNEL_DUCKMON_DIR environment
+  # variable to the connector pods and mounts an emptyDir volume at that
+  # path. Empty disables it. The image is not switched automatically, point
+  # cloudflared.image at a tag with duckmon support (a -duckmon tag).
+  telemetry:
+    dir: ""
 
   # Pod template customization for the controlled-cloudflared-connector Deployment.
   # These fields are applied to the cloudflared pods managed by the controller.

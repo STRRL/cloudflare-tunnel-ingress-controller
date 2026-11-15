@@ -45,13 +45,15 @@ type rootCmdFlags struct {
 	cloudflaredReplicaCount    int32
 	// path to the JSON file with cloudflared pod template customization
 	cloudflaredDeploymentConfig string
-	clusterDomain               string
-	leaderElect                 bool
-	dnsCommentTemplate          string
-	metricsBindAddress          string
-	healthProbeBindAddress      string
-	telemetryDir                string
-	telemetryRetentionDays      int
+	// directory for duckmon access logs inside the cloudflared container
+	cloudflaredTelemetryDir string
+	clusterDomain           string
+	leaderElect             bool
+	dnsCommentTemplate      string
+	metricsBindAddress      string
+	healthProbeBindAddress  string
+	telemetryDir            string
+	telemetryRetentionDays  int
 }
 
 func main() {
@@ -96,6 +98,7 @@ func main() {
 			options.cloudflaredImagePullPolicy = viper.GetString("cloudflared-image-pull-policy")
 			options.cloudflaredReplicaCount = viper.GetInt32("cloudflared-replica-count")
 			options.cloudflaredDeploymentConfig = viper.GetString("cloudflared-deployment-config")
+			options.cloudflaredTelemetryDir = viper.GetString("cloudflared-telemetry-dir")
 			options.clusterDomain = viper.GetString("cluster-domain")
 			options.leaderElect = viper.GetBool("leader-elect")
 			options.dnsCommentTemplate = viper.GetString("dns-comment-template")
@@ -211,6 +214,7 @@ func main() {
 					Replicas:          options.cloudflaredReplicaCount,
 					Protocol:          options.cloudflaredProtocol,
 					ExtraArgs:         options.cloudflaredExtraArgs,
+					TelemetryDir:      options.cloudflaredTelemetryDir,
 					Customization:     deploymentConfig,
 					CustomizationHash: configHash,
 					Owner:             ownerReference,
@@ -263,6 +267,7 @@ func main() {
 	rootCommand.PersistentFlags().StringVar(&options.cloudflaredImagePullPolicy, "cloudflared-image-pull-policy", options.cloudflaredImagePullPolicy, "image pull policy for the managed cloudflared connector")
 	rootCommand.PersistentFlags().Int32Var(&options.cloudflaredReplicaCount, "cloudflared-replica-count", options.cloudflaredReplicaCount, "replica count for the managed cloudflared connector")
 	rootCommand.PersistentFlags().StringVar(&options.cloudflaredDeploymentConfig, "cloudflared-deployment-config", options.cloudflaredDeploymentConfig, "path to JSON file with cloudflared deployment pod template customization")
+	rootCommand.PersistentFlags().StringVar(&options.cloudflaredTelemetryDir, "cloudflared-telemetry-dir", options.cloudflaredTelemetryDir, "directory for duckmon access logs inside the managed cloudflared connector, empty disables it, requires a cloudflared image with duckmon support")
 	rootCommand.PersistentFlags().StringVar(&options.clusterDomain, "cluster-domain", options.clusterDomain, "kubernetes cluster domain, used to build service FQDN (should match kubelet --cluster-domain)")
 	rootCommand.PersistentFlags().BoolVar(&options.leaderElect, "leader-elect", options.leaderElect, "enable leader election for high availability")
 	rootCommand.PersistentFlags().String("controller-deployment-name", "", "name of the controller Deployment, set as owner of the connector resources so garbage collection removes them on uninstall")

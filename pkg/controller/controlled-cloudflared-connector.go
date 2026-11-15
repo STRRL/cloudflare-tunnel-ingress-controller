@@ -42,6 +42,10 @@ type CloudflaredConfig struct {
 	Replicas        int32
 	Protocol        string
 	ExtraArgs       []string
+	// TelemetryDir is the directory inside the cloudflared container where
+	// duckmon access logs are written. Empty disables the feature and keeps
+	// the deployment spec unchanged. The image must support duckmon.
+	TelemetryDir string
 	// Customization holds the pod template customization loaded from the
 	// deployment config file, nil means no customization.
 	Customization *CloudflaredDeploymentConfig
@@ -185,6 +189,10 @@ func CreateOrUpdateControlledCloudflared(
 			if !slices.Equal(container.Command, desiredCommand) {
 				needsUpdate = true
 			}
+
+			if telemetryDirFromContainer(container) != config.TelemetryDir {
+				needsUpdate = true
+			}
 		}
 		if existingDeployment.Spec.Template.Annotations[tunnelTokenSecretVersionAnnotation] != tokenSecretVersion {
 			needsUpdate = true
@@ -291,6 +299,25 @@ func createOrUpdateTunnelTokenSecret(
 const tunnelTokenSecretName = "controlled-cloudflared-token"
 const tunnelTokenSecretKey = "tunnel-token"
 const tunnelTokenSecretVersionAnnotation = "strrl.dev/cloudflare-tunnel-token-secret-version"
+
+// cloudflaredTelemetryDirEnvName tells a duckmon enabled cloudflared image
+// where to write access logs, empty or missing means the feature is off.
+const cloudflaredTelemetryDirEnvName = "TUNNEL_DUCKMON_DIR"
+
+// cloudflaredTelemetryVolumeName is the emptyDir volume backing the duckmon
+// telemetry directory in the connector pods.
+const cloudflaredTelemetryVolumeName = "cloudflared-telemetry"
+
+// telemetryDirFromContainer reads the duckmon telemetry directory the
+// container is currently configured with, empty means telemetry is off.
+func telemetryDirFromContainer(container *v1.Container) string {
+	for _, env := range container.Env {
+		if env.Name == cloudflaredTelemetryDirEnvName {
+			return env.Value
+		}
+	}
+	return ""
+}
 
 func buildCloudflaredCommand(protocol string, extraArgs []string) []string {
 	command := []string{

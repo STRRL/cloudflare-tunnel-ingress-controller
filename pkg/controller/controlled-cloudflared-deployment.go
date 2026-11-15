@@ -75,6 +75,19 @@ func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
 		container.StartupProbe = customization.Probes.Startup
 	}
 
+	// Duckmon telemetry: point the image at a writable directory backed by an
+	// emptyDir volume. An empty directory keeps the spec unchanged.
+	if d.config.TelemetryDir != "" {
+		container.Env = append(container.Env, v1.EnvVar{
+			Name:  cloudflaredTelemetryDirEnvName,
+			Value: d.config.TelemetryDir,
+		})
+		container.VolumeMounts = append(container.VolumeMounts, v1.VolumeMount{
+			Name:      cloudflaredTelemetryVolumeName,
+			MountPath: d.config.TelemetryDir,
+		})
+	}
+
 	podSpec := v1.PodSpec{
 		Containers:    []v1.Container{container},
 		RestartPolicy: v1.RestartPolicyAlways,
@@ -100,6 +113,14 @@ func (d controlledCloudflaredDeployment) build() *appsv1.Deployment {
 	}
 	if len(customization.Volumes) > 0 {
 		podSpec.Volumes = customization.Volumes
+	}
+	if d.config.TelemetryDir != "" {
+		podSpec.Volumes = append(podSpec.Volumes, v1.Volume{
+			Name: cloudflaredTelemetryVolumeName,
+			VolumeSource: v1.VolumeSource{
+				EmptyDir: &v1.EmptyDirVolumeSource{},
+			},
+		})
 	}
 
 	var ownerReferences []metav1.OwnerReference
