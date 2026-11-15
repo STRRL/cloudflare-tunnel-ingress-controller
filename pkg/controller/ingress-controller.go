@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
+	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/telemetry"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -31,21 +33,33 @@ type IngressController struct {
 	controllerClassName string
 	clusterDomain       string
 	tunnelClient        *cloudflarecontroller.TunnelClient
+	telemetry           *telemetry.Telemetry
 }
 
-func NewIngressController(logger logr.Logger, kubeClient client.Client, recorder record.EventRecorder, ingressClassName string, controllerClassName string, clusterDomain string, tunnelClient *cloudflarecontroller.TunnelClient) *IngressController {
-	return &IngressController{logger: logger, kubeClient: kubeClient, recorder: recorder, ingressClassName: ingressClassName, controllerClassName: controllerClassName, clusterDomain: clusterDomain, tunnelClient: tunnelClient}
+func NewIngressController(logger logr.Logger, kubeClient client.Client, recorder record.EventRecorder, ingressClassName string, controllerClassName string, clusterDomain string, tunnelClient *cloudflarecontroller.TunnelClient, telemetry *telemetry.Telemetry) *IngressController {
+	return &IngressController{logger: logger, kubeClient: kubeClient, recorder: recorder, ingressClassName: ingressClassName, controllerClassName: controllerClassName, clusterDomain: clusterDomain, tunnelClient: tunnelClient, telemetry: telemetry}
 }
 
-func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (i *IngressController) Reconcile(ctx context.Context, request reconcile.Request) (result reconcile.Result, err error) {
+	start := time.Now()
+	deleted := false
+	defer func() {
+		i.telemetry.Span("ingress.reconcile", start, err, map[string]any{
+			"namespace": request.Namespace,
+			"name":      request.Name,
+			"deleted":   deleted,
+		})
+	}()
+
 	origin := networkingv1.Ingress{}
-	err := i.kubeClient.Get(ctx, request.NamespacedName, &origin)
+	err = i.kubeClient.Get(ctx, request.NamespacedName, &origin)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return reconcile.Result{}, nil
 		}
 		return reconcile.Result{}, errors.Wrapf(err, "fetch ingress %s", request.NamespacedName)
 	}
+	deleted = origin.DeletionTimestamp != nil
 
 	controlled, err := i.isControlledByThisController(ctx, origin)
 	if err != nil && !apierrors.IsNotFound(err) {

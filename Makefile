@@ -37,6 +37,16 @@ e2e: e2e-image
 setup-envtest:
 	bash ./hack/install-setup-envtest.sh
 
+# Build the controller with the embedded duckmon telemetry store. The
+# duckmon build tag links a prebuilt static library and needs cgo.
+.PHONY: telemetry-build
+telemetry-build:
+	CGO_ENABLED=1 go build -tags duckmon ./...
+
+.PHONY: telemetry-test
+telemetry-test:
+	CGO_ENABLED=1 go test -tags duckmon ./pkg/telemetry/...
+
 # Compile the Grafana dashboards from jsonnet sources into plain files
 # under mixin/dist. Requires the jsonnet binary.
 .PHONY: dashboards

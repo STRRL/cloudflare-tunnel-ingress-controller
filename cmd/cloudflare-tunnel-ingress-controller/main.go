@@ -10,6 +10,7 @@ import (
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/coverage"
+	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/telemetry"
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
@@ -49,6 +50,8 @@ type rootCmdFlags struct {
 	dnsCommentTemplate          string
 	metricsBindAddress          string
 	healthProbeBindAddress      string
+	telemetryDir                string
+	telemetryRetentionDays      int
 }
 
 func main() {
@@ -70,6 +73,7 @@ func main() {
 		dnsCommentTemplate:         "managed by cloudflare-tunnel-ingress-controller, tunnel [{{.TunnelName}}]",
 		metricsBindAddress:         ":9090",
 		healthProbeBindAddress:     ":8081",
+		telemetryRetentionDays:     7,
 	}
 
 	crlog.SetLogger(rootLogger.WithName("controller-runtime"))
@@ -97,11 +101,16 @@ func main() {
 			options.dnsCommentTemplate = viper.GetString("dns-comment-template")
 			options.metricsBindAddress = viper.GetString("metrics-bind-address")
 			options.healthProbeBindAddress = viper.GetString("health-probe-bind-address")
+			options.telemetryDir = viper.GetString("telemetry-dir")
+			options.telemetryRetentionDays = viper.GetInt("telemetry-retention-days")
 			controllerDeploymentName := viper.GetString("controller-deployment-name")
 
 			stdr.SetVerbosity(options.logLevel)
 			logger := options.logger
 			logger.Info("logging verbosity", "level", options.logLevel)
+
+			telemetryStore := telemetry.Open(options.telemetryDir, options.telemetryRetentionDays, logger.WithName("telemetry"))
+			defer telemetryStore.Close()
 
 			logger.V(3).Info("build cloudflare client with API Token", "api-token", "<redacted>")
 			cloudflareClient, err := cloudflare.NewWithAPIToken(options.cloudflareAPIToken)
@@ -113,7 +122,7 @@ func main() {
 			var tunnelClient *cloudflarecontroller.TunnelClient
 
 			logger.V(3).Info("bootstrap tunnel client with tunnel name", "account-id", options.cloudflareAccountId, "tunnel-name", options.cloudflareTunnelName)
-			tunnelClient, err = cloudflarecontroller.BootstrapTunnelClientWithTunnelName(ctx, logger.WithName("tunnel-client"), cloudflareClient, options.cloudflareAccountId, options.cloudflareTunnelName, options.dnsCommentTemplate)
+			tunnelClient, err = cloudflarecontroller.BootstrapTunnelClientWithTunnelName(ctx, logger.WithName("tunnel-client"), cloudflareClient, options.cloudflareAccountId, options.cloudflareTunnelName, options.dnsCommentTemplate, telemetryStore)
 			if err != nil {
 				logger.Error(err, "bootstrap tunnel client with tunnel name")
 				os.Exit(1)
@@ -166,6 +175,7 @@ func main() {
 					ControllerClassName: options.controllerClass,
 					ClusterDomain:       options.clusterDomain,
 					CFTunnelClient:      tunnelClient,
+					Telemetry:           telemetryStore,
 				})
 			if err != nil {
 				return err
@@ -189,6 +199,7 @@ func main() {
 					resolved, resolveErr := controller.ResolveControllerOwnerReference(ctx, mgr.GetClient(), options.namespace, controllerDeploymentName)
 					if resolveErr != nil {
 						logger.WithName("controlled-cloudflared").Error(resolveErr, "resolve controller owner reference")
+						telemetryStore.Log("connector.reconcile_failed", resolveErr.Error(), nil)
 						return
 					}
 					ownerReference = resolved
@@ -206,6 +217,7 @@ func main() {
 				})
 				if reconcileErr != nil {
 					logger.WithName("controlled-cloudflared").Error(reconcileErr, "create controlled cloudflared")
+					telemetryStore.Log("connector.reconcile_failed", reconcileErr.Error(), nil)
 				}
 			}
 
@@ -256,6 +268,8 @@ func main() {
 	rootCommand.PersistentFlags().String("controller-deployment-name", "", "name of the controller Deployment, set as owner of the connector resources so garbage collection removes them on uninstall")
 	rootCommand.PersistentFlags().StringVar(&options.metricsBindAddress, "metrics-bind-address", options.metricsBindAddress, "address for the metrics endpoint, set to 0 to disable")
 	rootCommand.PersistentFlags().StringVar(&options.healthProbeBindAddress, "health-probe-bind-address", options.healthProbeBindAddress, "address for the healthz/readyz endpoints, set to 0 to disable")
+	rootCommand.PersistentFlags().StringVar(&options.telemetryDir, "telemetry-dir", options.telemetryDir, "directory for the embedded telemetry store, empty disables telemetry")
+	rootCommand.PersistentFlags().IntVar(&options.telemetryRetentionDays, "telemetry-retention-days", options.telemetryRetentionDays, "how many days of telemetry data to keep")
 	rootCommand.PersistentFlags().StringVar(&options.dnsCommentTemplate, "dns-comment-template", options.dnsCommentTemplate, "Go template for DNS record comments. Available variables: {{.TunnelName}}, {{.TunnelId}}, {{.Hostname}}. Set to empty string to disable. Note: Cloudflare limits comment length by plan (Free: 100, Pro/Biz/Ent: 500 chars). See https://developers.cloudflare.com/dns/manage-dns-records/reference/record-attributes/")
 
 	viper.AutomaticEnv()

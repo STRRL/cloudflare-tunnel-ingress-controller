@@ -11,6 +11,7 @@ import (
 
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/exposure"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/metrics"
+	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/telemetry"
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -31,6 +32,7 @@ type TunnelClient struct {
 	tunnelId           string
 	tunnelName         string
 	dnsCommentTemplate *template.Template // nil if disabled (empty template string)
+	telemetry          *telemetry.Telemetry
 }
 
 // DNSCommentTemplateData contains the variables available in the DNS comment template.
@@ -42,13 +44,14 @@ type DNSCommentTemplateData struct {
 	Hostname   string // DNS record hostname (e.g. "app.example.com")
 }
 
-func NewTunnelClient(logger logr.Logger, cfClient *cloudflare.API, accountId string, tunnelId string, tunnelName string, dnsCommentTemplate string) *TunnelClient {
+func NewTunnelClient(logger logr.Logger, cfClient *cloudflare.API, accountId string, tunnelId string, tunnelName string, dnsCommentTemplate string, tel *telemetry.Telemetry) *TunnelClient {
 	tc := &TunnelClient{
 		logger:     logger,
 		cfClient:   cfClient,
 		accountId:  accountId,
 		tunnelId:   tunnelId,
 		tunnelName: tunnelName,
+		telemetry:  tel,
 	}
 	if dnsCommentTemplate != "" {
 		tmpl, err := template.New("dns-comment").Parse(dnsCommentTemplate)
@@ -90,8 +93,15 @@ func (t *TunnelClient) renderDNSComment(hostname string) string {
 	return comment
 }
 
-func (t *TunnelClient) PutExposures(ctx context.Context, exposures []exposure.Exposure) error {
-	err := t.updateTunnelIngressRules(ctx, exposures)
+func (t *TunnelClient) PutExposures(ctx context.Context, exposures []exposure.Exposure) (err error) {
+	start := time.Now()
+	defer func() {
+		t.telemetry.Span("cloudflare.put_exposures", start, err, map[string]any{
+			"exposures": len(exposures),
+		})
+	}()
+
+	err = t.updateTunnelIngressRules(ctx, exposures)
 	if err != nil {
 		return errors.Wrap(err, "update tunnel ingress rules")
 	}
@@ -206,7 +216,16 @@ func (t *TunnelClient) updateDNSCNAMERecord(ctx context.Context, exposures []exp
 	return nil
 }
 
-func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposures []exposure.Exposure, zone cloudflare.Zone) error {
+func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposures []exposure.Exposure, zone cloudflare.Zone) (err error) {
+	start := time.Now()
+	changes := 0
+	defer func() {
+		t.telemetry.Span("cloudflare.dns_sync", start, err, map[string]any{
+			"zone":    zone.Name,
+			"changes": changes,
+		})
+	}()
+
 	cnameDnsRecords, _, err := t.cfClient.ListDNSRecords(ctx, cloudflare.ResourceIdentifier(zone.ID), cloudflare.ListDNSRecordsParams{
 		Type: "CNAME",
 	})
@@ -236,6 +255,7 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 		return errors.Wrap(err, "sync DNS records")
 	}
 	t.logger.V(3).Info("sync DNS records", "to-create", toCreate, "to-update", toUpdate, "to-delete", toDelete)
+	changes = len(toCreate) + len(toUpdate) + len(toDelete)
 
 	for _, item := range toCreate {
 		t.logger.Info("create DNS record", "type", item.Type, "hostname", item.Hostname, "content", item.Content)
@@ -288,6 +308,7 @@ func (t *TunnelClient) updateDNSCNAMERecordForZone(ctx context.Context, exposure
 		return errors.Wrap(err, "migrate legacy DNS records")
 	}
 	toDelete = append(toDelete, legacyDeletes...)
+	changes += len(legacyDeletes)
 
 	for _, item := range toDelete {
 		t.logger.Info("delete DNS record", "id", item.OldRecord.ID, "type", item.OldRecord.Type, "hostname", item.OldRecord.Name, "content", item.OldRecord.Content)

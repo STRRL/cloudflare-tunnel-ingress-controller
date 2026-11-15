@@ -76,7 +76,7 @@ func TestRenderDNSComment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tc := NewTunnelClient(logr.Discard(), nil, "acc", tt.tunnelId, tt.tunnelName, tt.templateStr)
+			tc := NewTunnelClient(logr.Discard(), nil, "acc", tt.tunnelId, tt.tunnelName, tt.templateStr, nil)
 			got := tc.renderDNSComment(tt.hostname)
 
 			if tt.wantEmpty && got != "" {
