@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"time"
 
 	cloudflarecontroller "github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/cloudflare-controller"
 	"github.com/STRRL/cloudflare-tunnel-ingress-controller/pkg/controller"
@@ -68,7 +69,7 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 
 		err := controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, "missing-namespace", baseConfig())
 
-		Expect(err).To(MatchError(ContainSubstring("create or update tunnel token secret")))
+		Expect(err).To(MatchError(ContainSubstring("create tunnel token secret")))
 	})
 
 	It("should create a new cloudflared deployment", func() {
@@ -316,8 +317,9 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			Name:      "controlled-cloudflared-connector",
 		}, deployment)
 		Expect(err).NotTo(HaveOccurred())
-		initialSecretVersion := deployment.Spec.Template.Annotations["strrl.dev/cloudflare-tunnel-token-secret-version"]
-		Expect(initialSecretVersion).To(Equal(secret.ResourceVersion))
+		initialTokenHash := deployment.Spec.Template.Annotations["strrl.dev/cloudflare-tunnel-token-hash"]
+		Expect(initialTokenHash).NotTo(BeEmpty())
+		Expect(initialTokenHash).NotTo(ContainSubstring("initial-token"))
 
 		// Change token
 		currentToken = "updated-token"
@@ -339,8 +341,135 @@ var _ = Describe("CreateOrUpdateControlledCloudflared", func() {
 			Name:      "controlled-cloudflared-connector",
 		}, deployment)
 		Expect(err).NotTo(HaveOccurred())
-		updatedSecretVersion := deployment.Spec.Template.Annotations["strrl.dev/cloudflare-tunnel-token-secret-version"]
-		Expect(updatedSecretVersion).To(Equal(secret.ResourceVersion))
-		Expect(updatedSecretVersion).NotTo(Equal(initialSecretVersion))
+		updatedTokenHash := deployment.Spec.Template.Annotations["strrl.dev/cloudflare-tunnel-token-hash"]
+		Expect(updatedTokenHash).NotTo(BeEmpty())
+		Expect(updatedTokenHash).NotTo(Equal(initialTokenHash))
+	})
+
+	It("should not fetch the tunnel token again within the refresh interval", func() {
+		// Prepare
+		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
+		ns, err := namespaceFixtures.Start(ctx)
+		Expect(err).NotTo(HaveOccurred())
+
+		defer func() {
+			err := namespaceFixtures.Stop(ctx)
+			Expect(err).NotTo(HaveOccurred())
+		}()
+
+		fetchCount := 0
+		mockTunnelClient := &MockTunnelClient{
+			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
+				fetchCount++
+				return "mock-token", nil
+			},
+		}
+
+		config := baseConfig()
+		config.TokenRefreshInterval = time.Hour
+
+		// Act, the first reconcile has to read the token to create the secret
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, config)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(fetchCount).To(Equal(1))
+
+		// Assert, subsequent reconciles inside the interval reuse the stored token
+		for i := 0; i < 3; i++ {
+			err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, config)
+			Expect(err).NotTo(HaveOccurred())
+		}
+		Expect(fetchCount).To(Equal(1))
+
+		// The connector must not roll while the token is unchanged
+		deployment := &appsv1.Deployment{}
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-connector",
+		}, deployment)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(deployment.Generation).To(Equal(int64(1)))
+	})
+
+	It("should fetch the tunnel token on every reconcile when the refresh interval is zero", func() {
+		// Prepare
+		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
+		ns, err := namespaceFixtures.Start(ctx)
+		Expect(err).NotTo(HaveOccurred())
+
+		defer func() {
+			err := namespaceFixtures.Stop(ctx)
+			Expect(err).NotTo(HaveOccurred())
+		}()
+
+		fetchCount := 0
+		mockTunnelClient := &MockTunnelClient{
+			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
+				fetchCount++
+				return "mock-token", nil
+			},
+		}
+
+		config := baseConfig()
+		config.TokenRefreshInterval = 0
+
+		// Act
+		for i := 0; i < 3; i++ {
+			err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, config)
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		// Assert
+		Expect(fetchCount).To(Equal(3))
+	})
+
+	It("should keep reconciling with the stored token when the refresh fails", func() {
+		// Prepare
+		namespaceFixtures := fixtures.NewKubernetesNamespaceFixtures(testNamespace, kubeClient)
+		ns, err := namespaceFixtures.Start(ctx)
+		Expect(err).NotTo(HaveOccurred())
+
+		defer func() {
+			err := namespaceFixtures.Stop(ctx)
+			Expect(err).NotTo(HaveOccurred())
+		}()
+
+		fetchErr := error(nil)
+		mockTunnelClient := &MockTunnelClient{
+			FetchTunnelTokenFunc: func(ctx context.Context) (string, error) {
+				if fetchErr != nil {
+					return "", fetchErr
+				}
+				return "mock-token", nil
+			},
+		}
+
+		config := baseConfig()
+
+		// Seed the secret while Cloudflare is reachable
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, config)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Act, the token read now fails the way a rate limit does
+		fetchErr = errors.New("exceeded available rate limit retries")
+		config.Replicas = 5
+		err = controller.CreateOrUpdateControlledCloudflared(ctx, kubeClient, mockTunnelClient, ns, config)
+
+		// Assert, the reconcile still applies the rest of the desired state
+		Expect(err).NotTo(HaveOccurred())
+		deployment := &appsv1.Deployment{}
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-connector",
+		}, deployment)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(*deployment.Spec.Replicas).To(Equal(int32(5)))
+
+		secret := &v1.Secret{}
+		err = kubeClient.Get(ctx, types.NamespacedName{
+			Namespace: ns,
+			Name:      "controlled-cloudflared-token",
+		}, secret)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(secret.Data["tunnel-token"])).To(Equal("mock-token"))
 	})
 })
